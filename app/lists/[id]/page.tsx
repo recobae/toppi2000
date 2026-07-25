@@ -1,0 +1,106 @@
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import type { Metadata } from "next";
+import { createClient } from "@/lib/supabase/server";
+import { ListItemsGrid, type ListItem } from "@/components/lists/list-items-grid";
+import { getWatchProviders, type WatchProviderGroups } from "@/lib/tmdb";
+import { getListSocialTitle } from "@/lib/lists";
+import { getListWithAccess } from "./get-list-access";
+
+const EMPTY_WATCH_PROVIDERS: WatchProviderGroups = {
+  flatrate: [],
+  rent: [],
+  buy: [],
+};
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const access = await getListWithAccess(id);
+
+  if (!access) {
+    return { title: "Liste nicht gefunden" };
+  }
+
+  const title = getListSocialTitle(
+    access.list.category,
+    access.list.title,
+    access.username,
+  );
+
+  return {
+    title,
+    openGraph: { title },
+  };
+}
+
+export default async function ListDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const access = await getListWithAccess(id);
+
+  if (!access) {
+    notFound();
+  }
+
+  const { list, isOwner, username, profileUsername } = access;
+  const supabase = await createClient();
+
+  const { data: items, error: itemsError } = await supabase
+    .from("list_items")
+    .select("id, external_id, title, image_url, list_id, position, metadata")
+    .eq("list_id", id)
+    .order("position", { ascending: true });
+
+  if (itemsError) {
+    throw new Error(itemsError.message);
+  }
+
+  const apiKey = process.env.TMDB_API_KEY;
+
+  const itemsWithProviders: ListItem[] = await Promise.all(
+    (items ?? []).map(async (item) => {
+      const mediaType = item.metadata?.type;
+      const tmdbId = Number(item.external_id);
+      const watchProviders =
+        apiKey && mediaType && Number.isFinite(tmdbId)
+          ? await getWatchProviders(tmdbId, mediaType, apiKey)
+          : EMPTY_WATCH_PROVIDERS;
+
+      return { ...item, watchProviders } as ListItem;
+    }),
+  );
+
+  return (
+    <main className="min-h-screen flex flex-col items-center">
+      <div className="flex-1 w-full flex flex-col gap-6 max-w-5xl p-5">
+        <div className="flex flex-col gap-1 pt-8">
+          <Link
+            href="/search"
+            className="text-sm text-muted-foreground hover:underline w-fit"
+          >
+            ← Zurück zur Suche
+          </Link>
+          <h1 className="font-medium text-xl">{list.title}</h1>
+          <p className="text-sm text-muted-foreground">
+            Liste von{" "}
+            {profileUsername ? (
+              <Link href={`/u/${profileUsername}`} className="hover:underline">
+                {username}
+              </Link>
+            ) : (
+              username
+            )}
+          </p>
+        </div>
+        <ListItemsGrid initialItems={itemsWithProviders} isOwner={isOwner} />
+      </div>
+    </main>
+  );
+}

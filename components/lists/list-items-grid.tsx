@@ -1,0 +1,365 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { X, ThumbsUp, ThumbsDown, GripVertical } from "lucide-react";
+import type { User } from "@supabase/supabase-js";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  rectSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/client";
+import { WatchProviderBadges } from "@/components/watch-provider-badges";
+import type { WatchProviderGroups } from "@/lib/tmdb";
+
+export type ListItem = {
+  id: string;
+  external_id: number | string;
+  title: string;
+  image_url: string | null;
+  list_id: string;
+  position: number;
+  metadata: { year?: string | null; type?: "movie" | "tv" } | null;
+  watchProviders: WatchProviderGroups;
+};
+
+type VoteState = {
+  up: number;
+  down: number;
+  myVoteId: string | null;
+  myVote: boolean | null;
+};
+
+const EMPTY_VOTE_STATE: VoteState = {
+  up: 0,
+  down: 0,
+  myVoteId: null,
+  myVote: null,
+};
+
+function ListItemCard({
+  item,
+  isOwner,
+  isDragOverlay,
+  voteState,
+  isLoggedIn,
+  onVote,
+  onRemove,
+  isRemoving,
+}: {
+  item: ListItem;
+  isOwner: boolean;
+  isDragOverlay?: boolean;
+  voteState: VoteState;
+  isLoggedIn: boolean;
+  onVote: (itemId: string, voteValue: boolean) => void;
+  onRemove: (itemId: string) => void;
+  isRemoving: boolean;
+}) {
+  const sortable = useSortable({ id: item.id, disabled: !isOwner });
+  const style = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+  };
+
+  return (
+    <div
+      ref={sortable.setNodeRef}
+      style={style}
+      className={sortable.isDragging && !isDragOverlay ? "opacity-40" : ""}
+    >
+      <Card className="overflow-hidden flex flex-col">
+        <div className="relative aspect-[2/3] w-full bg-muted">
+          {isOwner && (
+            <button
+              type="button"
+              aria-label="Ziehen zum Sortieren"
+              className="absolute top-2 left-2 z-10 flex h-11 w-11 items-center justify-center rounded-md bg-background/80 backdrop-blur touch-none cursor-grab active:cursor-grabbing"
+              {...sortable.attributes}
+              {...sortable.listeners}
+            >
+              <GripVertical className="size-5" />
+            </button>
+          )}
+          {item.image_url ? (
+            <Image
+              src={item.image_url}
+              alt={item.title}
+              fill
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 20vw"
+              className="object-cover"
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-xs text-muted-foreground p-2 text-center">
+              Kein Poster
+            </div>
+          )}
+        </div>
+        <CardContent className="p-3 flex-1 flex flex-col gap-2">
+          <div>
+            <p className="text-sm font-medium leading-tight line-clamp-2">
+              {item.title}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {item.metadata?.year ?? "—"}
+            </p>
+          </div>
+          <WatchProviderBadges
+            providers={item.watchProviders}
+            title={item.title}
+          />
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1">
+                <Button
+                  variant={voteState.myVote === true ? "default" : "outline"}
+                  size="icon"
+                  className="h-7 w-7"
+                  disabled={!isLoggedIn}
+                  onClick={() => onVote(item.id, true)}
+                  aria-label="Daumen hoch"
+                >
+                  <ThumbsUp className="size-3.5" />
+                </Button>
+                <span className="text-xs text-muted-foreground w-4 text-center">
+                  {voteState.up}
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant={voteState.myVote === false ? "default" : "outline"}
+                  size="icon"
+                  className="h-7 w-7"
+                  disabled={!isLoggedIn}
+                  onClick={() => onVote(item.id, false)}
+                  aria-label="Daumen runter"
+                >
+                  <ThumbsDown className="size-3.5" />
+                </Button>
+                <span className="text-xs text-muted-foreground w-4 text-center">
+                  {voteState.down}
+                </span>
+              </div>
+            </div>
+            {!isLoggedIn && (
+              <p className="text-[11px] text-muted-foreground">
+                Zum Voten anmelden
+              </p>
+            )}
+          </div>
+          {isOwner && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-auto"
+              disabled={isRemoving}
+              onClick={() => onRemove(item.id)}
+            >
+              <X />
+              {isRemoving ? "Wird entfernt…" : "Entfernen"}
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export function ListItemsGrid({
+  initialItems,
+  isOwner,
+}: {
+  initialItems: ListItem[];
+  isOwner: boolean;
+}) {
+  const [items, setItems] = useState(initialItems);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [votes, setVotes] = useState<Record<string, VoteState>>({});
+  const router = useRouter();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 8 },
+    }),
+  );
+
+  useEffect(() => {
+    const supabase = createClient();
+
+    (async () => {
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser();
+      setUser(currentUser);
+
+      if (items.length === 0) return;
+
+      const itemIds = items.map((item) => item.id);
+      const { data, error } = await supabase
+        .from("item_votes")
+        .select("id, list_item_id, user_id, vote")
+        .in("list_item_id", itemIds);
+
+      if (error || !data) return;
+
+      const next: Record<string, VoteState> = {};
+      for (const item of items) {
+        next[item.id] = { ...EMPTY_VOTE_STATE };
+      }
+      for (const row of data) {
+        const state = next[row.list_item_id];
+        if (!state) continue;
+        if (row.vote) state.up += 1;
+        else state.down += 1;
+        if (currentUser && row.user_id === currentUser.id) {
+          state.myVoteId = row.id;
+          state.myVote = row.vote;
+        }
+      }
+      setVotes(next);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleRemove = async (itemId: string) => {
+    setRemovingId(itemId);
+    const supabase = createClient();
+
+    const { error } = await supabase
+      .from("list_items")
+      .delete()
+      .eq("id", itemId);
+
+    if (!error) {
+      setItems((prev) => prev.filter((item) => item.id !== itemId));
+      router.refresh();
+    }
+    setRemovingId(null);
+  };
+
+  const handleVote = async (itemId: string, voteValue: boolean) => {
+    if (!user) return;
+    const supabase = createClient();
+    const current = votes[itemId];
+
+    try {
+      if (current?.myVoteId) {
+        const { error } = await supabase
+          .from("item_votes")
+          .update({ vote: voteValue })
+          .eq("id", current.myVoteId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("item_votes").insert({
+          list_item_id: itemId,
+          user_id: user.id,
+          vote: voteValue,
+        });
+        if (error) throw error;
+      }
+
+      const { data, error: refetchError } = await supabase
+        .from("item_votes")
+        .select("id, user_id, vote")
+        .eq("list_item_id", itemId);
+
+      if (!refetchError && data) {
+        const next: VoteState = { ...EMPTY_VOTE_STATE };
+        for (const row of data) {
+          if (row.vote) next.up += 1;
+          else next.down += 1;
+          if (row.user_id === user.id) {
+            next.myVoteId = row.id;
+            next.myVote = row.vote;
+          }
+        }
+        setVotes((prev) => ({ ...prev, [itemId]: next }));
+      }
+    } catch {
+      // vote failed, leave state unchanged
+    }
+  };
+
+  const persistOrder = async (reordered: ListItem[]) => {
+    const supabase = createClient();
+    try {
+      await Promise.all(
+        reordered.map((item, index) =>
+          supabase
+            .from("list_items")
+            .update({ position: index + 1 })
+            .eq("id", item.id),
+        ),
+      );
+      router.refresh();
+    } catch {
+      // reorder failed to persist; local order stays as the optimistic result
+    }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!isOwner || !over || active.id === over.id) return;
+
+    setItems((prev) => {
+      const oldIndex = prev.findIndex((item) => item.id === active.id);
+      const newIndex = prev.findIndex((item) => item.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+
+      const reordered = arrayMove(prev, oldIndex, newIndex);
+      persistOrder(reordered);
+      return reordered;
+    });
+  };
+
+  if (items.length === 0) {
+    return (
+      <p className="w-full text-sm text-muted-foreground">
+        Diese Liste enthält noch keine Einträge.
+      </p>
+    );
+  }
+
+  return (
+    <DndContext
+      id="list-items-dnd-context"
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
+    >
+      <SortableContext items={items.map((item) => item.id)} strategy={rectSortingStrategy}>
+        <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+          {items.map((item) => (
+            <ListItemCard
+              key={item.id}
+              item={item}
+              isOwner={isOwner}
+              voteState={votes[item.id] ?? EMPTY_VOTE_STATE}
+              isLoggedIn={!!user}
+              onVote={handleVote}
+              onRemove={handleRemove}
+              isRemoving={removingId === item.id}
+            />
+          ))}
+        </div>
+      </SortableContext>
+    </DndContext>
+  );
+}
