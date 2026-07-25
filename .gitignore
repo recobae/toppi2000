@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -9,16 +10,23 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+!.yarn/sdks
 
 # testing
 /coverage
+coverage
+*.lcov
+.nyc_output
 
 # next.js
 /.next/
 /out/
+.next
+out
 
 # production
 /build
+build/Release
 
 # misc
 .DS_Store
@@ -29,10 +37,15 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+logs
+*.log
+lerna-debug.log*
 
 # env files (can opt-in for committing if needed)
 .env*.local
 .env
+.env.*
+!.env.example
 
 # vercel
 .vercel
@@ -43,3 +56,49 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# diagnostic reports
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# misc caches / package manager artifacts
+lib-cov
+.grunt
+bower_components
+.lock-wscript
+jspm_packages/
+web_modules/
+.npm
+.eslintcache
+.stylelintcache
+.node_repl_history
+*.tgz
+.yarn-integrity
+.cache
+.parcel-cache
+.pnpm-store
+
+# other framework build outputs (not used here, kept for safety)
+.nuxt
+dist
+.output
+.svelte-kit/
+**/.vitepress/dist
+**/.vitepress/cache
+.docusaurus
+.serverless/
+.fusebox/
+.dynamodb/
+.firebase/
+.tern-port
+.vscode-test
+
+# Vite files
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+.vite/
