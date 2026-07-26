@@ -6,6 +6,7 @@ import { Heart, Share2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { ListTile } from "@/components/profile/list-tile";
+import { CreateListTile } from "@/components/profile/create-list-tile";
 
 const STANDARD_LABELS: Record<string, string> = {
   movie: "Lieblingsfilme",
@@ -46,6 +47,11 @@ export default async function ProfilePage({
   if (!profile) {
     notFound();
   }
+
+  const {
+    data: { user: viewer },
+  } = await supabase.auth.getUser();
+  const isOwner = viewer?.id === profile.id;
 
   const { data: lists } = await supabase
     .from("lists")
@@ -173,6 +179,11 @@ export default async function ProfilePage({
               itemCount={statsByList.get(list.id)?.count ?? 0}
             />
           ))}
+          {isOwner && (
+            <CreateListTile
+              existingTitles={(lists ?? []).map((list) => list.title)}
+            />
+          )}
         </div>
 
         {publicLists.length === 0 && (
