@@ -10,6 +10,10 @@ import { LIKES_LIST_TITLE } from "@/lib/lists";
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 const HISTORY_SAMPLE_LIMIT = 20;
 const INFERRED_GENRE_LIMIT = 3;
+const TALK_SHOW_GENRE_ID = "10767";
+const SWIPED_RETENTION_DAYS = 60;
+const POOL_A_SHARE = 0.6;
+const TARGET_TOTAL = 30;
 
 const MOOD_GENRES: Record<string, string[]> = {
   lustig: ["35"],
@@ -20,20 +24,43 @@ const MOOD_GENRES: Record<string, string[]> = {
   episch: ["878", "14", "12"],
 };
 
+function fiveYearsAgoIso(): string {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() - 5);
+  return date.toISOString().slice(0, 10);
+}
+
+function shuffle<T>(items: T[]): T[] {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
 async function fetchDiscoverPage(
   mediaType: "movie" | "tv",
   genreIds: string[],
   page: number,
   apiKey: string,
+  extraParams: Record<string, string>,
 ): Promise<TmdbTitleLike[]> {
   const url = new URL(`${TMDB_BASE_URL}/discover/${mediaType}`);
   url.searchParams.set("api_key", apiKey);
-  url.searchParams.set("sort_by", "popularity.desc");
   url.searchParams.set("include_adult", "false");
   url.searchParams.set("page", String(page));
 
+  for (const [key, value] of Object.entries(extraParams)) {
+    url.searchParams.set(key, value);
+  }
+
   if (genreIds.length > 0) {
     url.searchParams.set("with_genres", genreIds.join("|"));
+  }
+
+  if (mediaType === "tv") {
+    url.searchParams.set("without_genres", TALK_SHOW_GENRE_ID);
   }
 
   try {
@@ -46,6 +73,28 @@ async function fetchDiscoverPage(
   } catch {
     return [];
   }
+}
+
+async function fetchPool(
+  mediaType: "movie" | "tv",
+  genreIds: string[],
+  page: number,
+  apiKey: string,
+  pool: "trending" | "classic",
+): Promise<TmdbTitleLike[]> {
+  if (pool === "trending") {
+    const dateField =
+      mediaType === "movie" ? "primary_release_date.gte" : "first_air_date.gte";
+    return fetchDiscoverPage(mediaType, genreIds, page, apiKey, {
+      sort_by: "popularity.desc",
+      [dateField]: fiveYearsAgoIso(),
+    });
+  }
+
+  return fetchDiscoverPage(mediaType, genreIds, page, apiKey, {
+    sort_by: "vote_average.desc",
+    "vote_count.gte": "1000",
+  });
 }
 
 async function getInferredGenreIds(
@@ -117,6 +166,36 @@ async function getInferredGenreIds(
     .map(([id]) => String(id));
 }
 
+async function getRecentlySwipedKeys(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<Set<string>> {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - SWIPED_RETENTION_DAYS);
+
+  const { data, error } = await supabase
+    .from("swiped_titles")
+    .select("tmdb_id, media_type")
+    .eq("user_id", userId)
+    .gte("swiped_at", cutoff.toISOString());
+
+  if (error || !data) return new Set();
+
+  return new Set(data.map((row) => `${row.media_type}-${row.tmdb_id}`));
+}
+
+function dedupeByKey(items: TmdbTitleLike[]): TmdbTitleLike[] {
+  const seen = new Set<string>();
+  const result: TmdbTitleLike[] = [];
+  for (const item of items) {
+    const key = `${item.media_type}-${item.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
+
 export async function GET(request: NextRequest) {
   const mood = request.nextUrl.searchParams.get("mood");
   const pageParam = request.nextUrl.searchParams.get("page");
@@ -137,20 +216,33 @@ export async function GET(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const inferredGenreIds = user
-    ? await getInferredGenreIds(supabase, user.id, apiKey)
-    : [];
+  const [inferredGenreIds, swipedKeys] = await Promise.all([
+    user ? getInferredGenreIds(supabase, user.id, apiKey) : Promise.resolve([]),
+    user ? getRecentlySwipedKeys(supabase, user.id) : Promise.resolve(new Set<string>()),
+  ]);
 
   const genreIds = Array.from(new Set([...moodGenreIds, ...inferredGenreIds]));
 
-  const [movieItems, tvItems] = await Promise.all([
-    fetchDiscoverPage("movie", genreIds, page, apiKey),
-    fetchDiscoverPage("tv", genreIds, page, apiKey),
+  const [poolAMovie, poolATv, poolBMovie, poolBTv] = await Promise.all([
+    fetchPool("movie", genreIds, page, apiKey, "trending"),
+    fetchPool("tv", genreIds, page, apiKey, "trending"),
+    fetchPool("movie", genreIds, page, apiKey, "classic"),
+    fetchPool("tv", genreIds, page, apiKey, "classic"),
   ]);
 
-  const merged = [...movieItems, ...tvItems].sort(
-    (a, b) => (b.popularity ?? 0) - (a.popularity ?? 0),
+  const poolA = dedupeByKey(shuffle([...poolAMovie, ...poolATv]));
+  const poolASeen = new Set(poolA.map((item) => `${item.media_type}-${item.id}`));
+  const poolB = dedupeByKey(shuffle([...poolBMovie, ...poolBTv])).filter(
+    (item) => !poolASeen.has(`${item.media_type}-${item.id}`),
   );
+
+  const targetACount = Math.min(poolA.length, Math.round(TARGET_TOTAL * POOL_A_SHARE));
+  const targetBCount = Math.min(poolB.length, TARGET_TOTAL - targetACount);
+
+  const merged = shuffle([
+    ...poolA.slice(0, targetACount),
+    ...poolB.slice(0, targetBCount),
+  ]).filter((item) => !swipedKeys.has(`${item.media_type}-${item.id}`));
 
   const results: SearchResult[] = await buildSearchResults(merged, apiKey);
 

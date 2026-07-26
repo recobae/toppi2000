@@ -75,6 +75,34 @@ export async function getWatchProviders(
   }
 }
 
+export async function getTrailerKey(
+  tmdbId: number,
+  mediaType: "movie" | "tv",
+  apiKey: string,
+): Promise<string | null> {
+  try {
+    const url = new URL(`${TMDB_BASE_URL}/${mediaType}/${tmdbId}/videos`);
+    url.searchParams.set("api_key", apiKey);
+
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return null;
+
+    const data: {
+      results?: { type: string; site: string; key: string }[];
+    } = await response.json();
+
+    const trailer = (data.results ?? []).find(
+      (video) => video.type === "Trailer" && video.site === "YouTube",
+    );
+
+    return trailer?.key ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export type SearchResult = {
   id: number;
   mediaType: "movie" | "tv";

@@ -176,16 +176,33 @@ export default function VorschlagPage() {
     setCards((prev) => prev.filter((card) => resultKey(card) !== resultKey(result)));
   }, []);
 
+  const logSwipe = useCallback(async (result: SearchResult) => {
+    try {
+      await fetch("/api/swipes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tmdbId: result.id,
+          mediaType: result.mediaType,
+        }),
+      });
+    } catch {
+      // best-effort logging; missing an entry just means the title can resurface sooner
+    }
+  }, []);
+
   const handleSwipeLeft = useCallback(
     (result: SearchResult) => {
       removeCard(result);
+      logSwipe(result);
     },
-    [removeCard],
+    [removeCard, logSwipe],
   );
 
   const handleSwipeRight = useCallback(
     async (result: SearchResult) => {
       removeCard(result);
+      logSwipe(result);
       const listId = await ensureLikesListId();
       if (!listId) {
         showToast("Liste konnte nicht erstellt werden");
@@ -193,12 +210,13 @@ export default function VorschlagPage() {
       }
       await addToList(result, listId, "Zu Gefällt mir hinzugefügt");
     },
-    [removeCard, ensureLikesListId, addToList, showToast],
+    [removeCard, logSwipe, ensureLikesListId, addToList, showToast],
   );
 
   const handleSwipeUp = useCallback(
     async (result: SearchResult) => {
       removeCard(result);
+      logSwipe(result);
       const listId =
         result.mediaType === "movie" ? myLists.movieListId : myLists.tvListId;
       if (!listId) {
@@ -213,18 +231,20 @@ export default function VorschlagPage() {
           : "Zu Lieblingsserien hinzugefügt",
       );
     },
-    [removeCard, myLists, addToList, showToast],
+    [removeCard, logSwipe, myLists, addToList, showToast],
   );
 
   const handleAddToWatchlist = useCallback(
     async (result: SearchResult) => {
+      removeCard(result);
+      logSwipe(result);
       if (!myLists.watchlistId) {
         showToast("Keine Watchlist gefunden");
         return;
       }
       await addToList(result, myLists.watchlistId, "Zur Watchlist hinzugefügt");
     },
-    [myLists.watchlistId, addToList, showToast],
+    [removeCard, logSwipe, myLists.watchlistId, addToList, showToast],
   );
 
   const visibleCards = cards.slice(0, VISIBLE_STACK_SIZE);
@@ -245,7 +265,7 @@ export default function VorschlagPage() {
       <div className="flex-1 w-full flex flex-col items-center gap-4 max-w-md p-5 pt-8">
         <h1 className="font-medium text-xl">Inspiration</h1>
 
-        <div className="w-full flex flex-wrap gap-2 justify-center">
+        <div className="w-full flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {MOOD_OPTIONS.map((option) => {
             const isActive = mood === option.key;
             return (
@@ -253,7 +273,7 @@ export default function VorschlagPage() {
                 key={option.key}
                 type="button"
                 onClick={() => setMood(isActive ? null : option.key)}
-                className={`min-h-9 px-3 rounded-full border text-xs font-medium transition-colors ${
+                className={`shrink-0 whitespace-nowrap h-6 px-2.5 rounded-full border text-[11px] font-medium transition-colors ${
                   isActive
                     ? "border-primary bg-primary/10 text-primary"
                     : "border-input hover:bg-accent"
