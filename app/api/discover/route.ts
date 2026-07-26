@@ -252,7 +252,14 @@ export async function GET(request: NextRequest) {
 
   const excludedKeys = new Set([...swipedKeys, ...savedListKeys]);
 
-  const genreIds = Array.from(new Set([...moodGenreIds, ...inferredGenreIds]));
+  // TMDB's with_genres joins IDs with OR semantics, so mixing an active mood
+  // filter with the user's unrelated inferred history genres would dilute
+  // the mood filter instead of narrowing it. A selected mood takes precedence
+  // and is used on its own; inferred genres only apply without a mood.
+  const genreIds =
+    moodGenreIds.length > 0
+      ? moodGenreIds
+      : Array.from(new Set(inferredGenreIds));
 
   const [poolAMovie, poolATv, poolBMovie, poolBTv] = await Promise.all([
     fetchPool("movie", genreIds, page, apiKey, "trending"),
