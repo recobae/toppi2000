@@ -102,7 +102,11 @@ export default async function ListDetailPage({
             )}
           </h1>
         </div>
-        <ListItemsGrid initialItems={itemsWithProviders} isOwner={isOwner} />
+        <ListItemsGrid
+          initialItems={itemsWithProviders}
+          isOwner={isOwner}
+          listId={id}
+        />
       </div>
     </main>
   );

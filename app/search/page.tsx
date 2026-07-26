@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
@@ -16,6 +17,9 @@ type Toast = { id: number; message: string };
 type AddingState = { resultKey: string; listId: string } | null;
 
 export default function SearchPage() {
+  const searchParams = useSearchParams();
+  const addToListId = searchParams.get("addToList");
+
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -259,6 +263,7 @@ export default function SearchPage() {
                       }
                       onAdd={(list) => handleAddToList(result, list)}
                       jobTags={result.jobs}
+                      preselectedListId={addToListId}
                     />
                   );
                 })}
@@ -288,6 +293,7 @@ export default function SearchPage() {
                       adding?.resultKey === resultKey ? adding.listId : null
                     }
                     onAdd={(list) => handleAddToList(result, list)}
+                    preselectedListId={addToListId}
                   />
                 );
               })}

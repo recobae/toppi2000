@@ -18,6 +18,7 @@ export function SearchResultCard({
   addingListId,
   onAdd,
   jobTags,
+  preselectedListId,
 }: {
   result: SearchResult;
   isLoggedIn: boolean;
@@ -26,6 +27,7 @@ export function SearchResultCard({
   addingListId: string | null;
   onAdd: (list: ListSummary) => void;
   jobTags?: string[];
+  preselectedListId?: string | null;
 }) {
   return (
     <Card className="overflow-hidden flex flex-col">
@@ -77,6 +79,7 @@ export function SearchResultCard({
           lists={filterListsForMediaType(lists, result.mediaType)}
           addingListId={addingListId}
           onAdd={onAdd}
+          preselectedListId={preselectedListId}
         />
       </CardFooter>
     </Card>

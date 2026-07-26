@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ListPlus } from "lucide-react";
+import { ListPlus, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -33,13 +33,23 @@ export function AddToListMenu({
   lists,
   addingListId,
   onAdd,
+  preselectedListId,
 }: {
   isLoggedIn: boolean;
   isLoadingLists: boolean;
   lists: ListSummary[];
   addingListId: string | null;
   onAdd: (list: ListSummary) => void;
+  preselectedListId?: string | null;
 }) {
+  const sortedLists = preselectedListId
+    ? [...lists].sort((a, b) => {
+        if (a.id === preselectedListId) return -1;
+        if (b.id === preselectedListId) return 1;
+        return 0;
+      })
+    : lists;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -61,15 +71,25 @@ export function AddToListMenu({
           <>
             <DropdownMenuLabel>Liste auswählen</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {lists.map((list) => (
-              <DropdownMenuItem
-                key={list.id}
-                disabled={addingListId === list.id}
-                onSelect={() => onAdd(list)}
-              >
-                {addingListId === list.id ? "Wird hinzugefügt…" : list.title}
-              </DropdownMenuItem>
-            ))}
+            {sortedLists.map((list) => {
+              const isPreselected = list.id === preselectedListId;
+              return (
+                <DropdownMenuItem
+                  key={list.id}
+                  disabled={addingListId === list.id}
+                  onSelect={() => onAdd(list)}
+                  className={isPreselected ? "font-semibold" : undefined}
+                >
+                  {isPreselected && <Star className="size-3.5 fill-current" />}
+                  {addingListId === list.id ? "Wird hinzugefügt…" : list.title}
+                  {isPreselected && (
+                    <span className="ml-auto text-[10px] font-normal text-muted-foreground">
+                      Empfohlen
+                    </span>
+                  )}
+                </DropdownMenuItem>
+              );
+            })}
           </>
         )}
       </DropdownMenuContent>

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { X, ThumbsUp, ThumbsDown, GripVertical } from "lucide-react";
+import { X, ThumbsUp, ThumbsDown, GripVertical, Plus } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import {
   DndContext,
@@ -180,12 +181,26 @@ function ListItemCard({
   );
 }
 
+function AddItemTile({ listId }: { listId: string }) {
+  return (
+    <Link
+      href={`/search?addToList=${listId}`}
+      className="flex flex-col items-center justify-center gap-2 aspect-[2/3] w-full rounded-lg border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+    >
+      <Plus className="size-8" />
+      <span className="text-xs font-medium">Hinzufügen</span>
+    </Link>
+  );
+}
+
 export function ListItemsGrid({
   initialItems,
   isOwner,
+  listId,
 }: {
   initialItems: ListItem[];
   isOwner: boolean;
+  listId: string;
 }) {
   const [items, setItems] = useState(initialItems);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -329,7 +344,7 @@ export function ListItemsGrid({
     });
   };
 
-  if (items.length === 0) {
+  if (items.length === 0 && !isOwner) {
     return (
       <p className="w-full text-sm text-muted-foreground">
         Diese Liste enthält noch keine Einträge.
@@ -338,28 +353,36 @@ export function ListItemsGrid({
   }
 
   return (
-    <DndContext
-      id="list-items-dnd-context"
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragEnd={handleDragEnd}
-    >
-      <SortableContext items={items.map((item) => item.id)} strategy={rectSortingStrategy}>
-        <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {items.map((item) => (
-            <ListItemCard
-              key={item.id}
-              item={item}
-              isOwner={isOwner}
-              voteState={votes[item.id] ?? EMPTY_VOTE_STATE}
-              isLoggedIn={!!user}
-              onVote={handleVote}
-              onRemove={handleRemove}
-              isRemoving={removingId === item.id}
-            />
-          ))}
-        </div>
-      </SortableContext>
-    </DndContext>
+    <div className="w-full flex flex-col gap-4">
+      {items.length === 0 && (
+        <p className="w-full text-sm text-muted-foreground">
+          Diese Liste enthält noch keine Einträge.
+        </p>
+      )}
+      <DndContext
+        id="list-items-dnd-context"
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={items.map((item) => item.id)} strategy={rectSortingStrategy}>
+          <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {items.map((item) => (
+              <ListItemCard
+                key={item.id}
+                item={item}
+                isOwner={isOwner}
+                voteState={votes[item.id] ?? EMPTY_VOTE_STATE}
+                isLoggedIn={!!user}
+                onVote={handleVote}
+                onRemove={handleRemove}
+                isRemoving={removingId === item.id}
+              />
+            ))}
+            {isOwner && <AddItemTile listId={listId} />}
+          </div>
+        </SortableContext>
+      </DndContext>
+    </div>
   );
 }
