@@ -46,6 +46,11 @@ type VoteState = {
   myVote: boolean | null;
 };
 
+type OthersVoteCount = {
+  up: number;
+  down: number;
+};
+
 const EMPTY_VOTE_STATE: VoteState = {
   up: 0,
   down: 0,
@@ -53,13 +58,65 @@ const EMPTY_VOTE_STATE: VoteState = {
   myVote: null,
 };
 
+const EMPTY_OTHERS_COUNT: OthersVoteCount = { up: 0, down: 0 };
+
+function GuestVotePromptModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = "";
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="w-full max-w-sm rounded-lg bg-background border p-5 flex flex-col gap-4"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className="text-sm">
+          Melde dich an, um Listen deiner Freunde zu bewerten, endlich deine
+          eigenen Listen zu ordnen und Inspirationen zu unentdeckten
+          Filmschätzen zu bekommen.
+        </p>
+        <div className="flex flex-col gap-2">
+          <Link
+            href="/auth/sign-up"
+            className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground text-sm font-medium px-4 py-2 hover:bg-primary/90 transition-colors min-h-11"
+          >
+            Jetzt registrieren
+          </Link>
+          <Link
+            href="/auth/login"
+            className="text-center text-xs text-muted-foreground hover:underline"
+          >
+            Bereits registriert? Anmelden
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ListItemCard({
   item,
   isOwner,
   isDragOverlay,
   voteState,
+  othersVoteCount,
   isLoggedIn,
   onVote,
+  onRequireLogin,
   onRemove,
   isRemoving,
 }: {
@@ -67,8 +124,10 @@ function ListItemCard({
   isOwner: boolean;
   isDragOverlay?: boolean;
   voteState: VoteState;
+  othersVoteCount: OthersVoteCount;
   isLoggedIn: boolean;
   onVote: (itemId: string, voteValue: boolean) => void;
+  onRequireLogin: () => void;
   onRemove: (itemId: string) => void;
   isRemoving: boolean;
 }) {
@@ -124,15 +183,21 @@ function ListItemCard({
             providers={item.watchProviders}
             title={item.title}
           />
-          <div className="flex flex-col gap-1">
+          {isOwner ? (
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span>👍 {othersVoteCount.up}</span>
+              <span>👎 {othersVoteCount.down}</span>
+            </div>
+          ) : (
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1">
                 <Button
                   variant={voteState.myVote === true ? "default" : "outline"}
                   size="icon"
                   className="h-7 w-7"
-                  disabled={!isLoggedIn}
-                  onClick={() => onVote(item.id, true)}
+                  onClick={() =>
+                    isLoggedIn ? onVote(item.id, true) : onRequireLogin()
+                  }
                   aria-label="Daumen hoch"
                 >
                   <ThumbsUp className="size-3.5" />
@@ -146,8 +211,9 @@ function ListItemCard({
                   variant={voteState.myVote === false ? "default" : "outline"}
                   size="icon"
                   className="h-7 w-7"
-                  disabled={!isLoggedIn}
-                  onClick={() => onVote(item.id, false)}
+                  onClick={() =>
+                    isLoggedIn ? onVote(item.id, false) : onRequireLogin()
+                  }
                   aria-label="Daumen runter"
                 >
                   <ThumbsDown className="size-3.5" />
@@ -157,12 +223,7 @@ function ListItemCard({
                 </span>
               </div>
             </div>
-            {!isLoggedIn && (
-              <p className="text-[11px] text-muted-foreground">
-                Zum Voten anmelden
-              </p>
-            )}
-          </div>
+          )}
           {isOwner && (
             <Button
               variant="outline"
@@ -206,6 +267,10 @@ export function ListItemsGrid({
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [votes, setVotes] = useState<Record<string, VoteState>>({});
+  const [othersVotes, setOthersVotes] = useState<
+    Record<string, OthersVoteCount>
+  >({});
+  const [showGuestPrompt, setShowGuestPrompt] = useState(false);
   const router = useRouter();
 
   const sensors = useSensors(
@@ -235,8 +300,10 @@ export function ListItemsGrid({
       if (error || !data) return;
 
       const next: Record<string, VoteState> = {};
+      const nextOthers: Record<string, OthersVoteCount> = {};
       for (const item of items) {
         next[item.id] = { ...EMPTY_VOTE_STATE };
+        nextOthers[item.id] = { ...EMPTY_OTHERS_COUNT };
       }
       for (const row of data) {
         const state = next[row.list_item_id];
@@ -246,9 +313,16 @@ export function ListItemsGrid({
         if (currentUser && row.user_id === currentUser.id) {
           state.myVoteId = row.id;
           state.myVote = row.vote;
+        } else {
+          const othersState = nextOthers[row.list_item_id];
+          if (othersState) {
+            if (row.vote) othersState.up += 1;
+            else othersState.down += 1;
+          }
         }
       }
       setVotes(next);
+      setOthersVotes(nextOthers);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -270,7 +344,10 @@ export function ListItemsGrid({
   };
 
   const handleVote = async (itemId: string, voteValue: boolean) => {
-    if (!user) return;
+    if (!user) {
+      setShowGuestPrompt(true);
+      return;
+    }
     const supabase = createClient();
     const current = votes[itemId];
 
@@ -373,8 +450,10 @@ export function ListItemsGrid({
                 item={item}
                 isOwner={isOwner}
                 voteState={votes[item.id] ?? EMPTY_VOTE_STATE}
+                othersVoteCount={othersVotes[item.id] ?? EMPTY_OTHERS_COUNT}
                 isLoggedIn={!!user}
                 onVote={handleVote}
+                onRequireLogin={() => setShowGuestPrompt(true)}
                 onRemove={handleRemove}
                 isRemoving={removingId === item.id}
               />
@@ -383,6 +462,9 @@ export function ListItemsGrid({
           </div>
         </SortableContext>
       </DndContext>
+      {showGuestPrompt && (
+        <GuestVotePromptModal onClose={() => setShowGuestPrompt(false)} />
+      )}
     </div>
   );
 }
