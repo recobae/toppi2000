@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
+import { X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import { type ListSummary } from "@/components/search/add-to-list-menu";
@@ -21,6 +22,7 @@ export default function SearchPage() {
   const addToListId = searchParams.get("addToList");
 
   const [query, setQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -205,13 +207,30 @@ export default function SearchPage() {
       <div className="flex-1 w-full flex flex-col gap-6 items-center max-w-5xl p-5">
         <div className="w-full flex flex-col gap-2 pt-8">
           <h1 className="font-medium text-xl">Filme & Serien durchsuchen</h1>
-          <Input
-            type="search"
-            placeholder="Titel eingeben…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            autoFocus
-          />
+          <div className="relative w-full">
+            <Input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Titel eingeben…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              autoFocus
+              className={query ? "pr-8" : undefined}
+            />
+            {query && (
+              <button
+                type="button"
+                aria-label="Suche zurücksetzen"
+                className="absolute right-2 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => {
+                  setQuery("");
+                  searchInputRef.current?.focus();
+                }}
+              >
+                <X className="size-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         {isLoading && (
