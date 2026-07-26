@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { ListTile } from "@/components/profile/list-tile";
 import { CreateListTile } from "@/components/profile/create-list-tile";
+import { GuestProfileCta } from "@/components/profile/guest-profile-cta";
 
 const STANDARD_LABELS: Record<string, string> = {
   movie: "Lieblingsfilme",
@@ -52,6 +53,7 @@ export default async function ProfilePage({
     data: { user: viewer },
   } = await supabase.auth.getUser();
   const isOwner = viewer?.id === profile.id;
+  const isGuest = !viewer;
 
   const { data: lists } = await supabase
     .from("lists")
@@ -193,6 +195,7 @@ export default async function ProfilePage({
             Profil teilen
           </a>
         )}
+        {isGuest && <GuestProfileCta variant="button" />}
 
         <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-3">
           {standardOrder.map(({ list, category }) =>
@@ -220,6 +223,7 @@ export default async function ProfilePage({
               existingTitles={(lists ?? []).map((list) => list.title)}
             />
           )}
+          {isGuest && <GuestProfileCta variant="tile" />}
         </div>
 
         {publicLists.length === 0 && (
