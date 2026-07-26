@@ -184,6 +184,34 @@ async function getRecentlySwipedKeys(
   return new Set(data.map((row) => `${row.media_type}-${row.tmdb_id}`));
 }
 
+async function getSavedListKeys(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<Set<string>> {
+  const { data: lists } = await supabase
+    .from("lists")
+    .select("id")
+    .eq("user_id", userId);
+
+  const listIds = (lists ?? []).map((list) => list.id);
+  if (listIds.length === 0) return new Set();
+
+  const { data: items, error } = await supabase
+    .from("list_items")
+    .select("external_id, metadata")
+    .in("list_id", listIds);
+
+  if (error || !items) return new Set();
+
+  const keys = new Set<string>();
+  for (const item of items) {
+    const mediaType = item.metadata?.type;
+    if (mediaType !== "movie" && mediaType !== "tv") continue;
+    keys.add(`${mediaType}-${item.external_id}`);
+  }
+  return keys;
+}
+
 function dedupeByKey(items: TmdbTitleLike[]): TmdbTitleLike[] {
   const seen = new Set<string>();
   const result: TmdbTitleLike[] = [];
@@ -216,10 +244,13 @@ export async function GET(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [inferredGenreIds, swipedKeys] = await Promise.all([
+  const [inferredGenreIds, swipedKeys, savedListKeys] = await Promise.all([
     user ? getInferredGenreIds(supabase, user.id, apiKey) : Promise.resolve([]),
     user ? getRecentlySwipedKeys(supabase, user.id) : Promise.resolve(new Set<string>()),
+    user ? getSavedListKeys(supabase, user.id) : Promise.resolve(new Set<string>()),
   ]);
+
+  const excludedKeys = new Set([...swipedKeys, ...savedListKeys]);
 
   const genreIds = Array.from(new Set([...moodGenreIds, ...inferredGenreIds]));
 
@@ -230,11 +261,16 @@ export async function GET(request: NextRequest) {
     fetchPool("tv", genreIds, page, apiKey, "classic"),
   ]);
 
-  const poolA = dedupeByKey(shuffle([...poolAMovie, ...poolATv]));
-  const poolASeen = new Set(poolA.map((item) => `${item.media_type}-${item.id}`));
-  const poolB = dedupeByKey(shuffle([...poolBMovie, ...poolBTv])).filter(
-    (item) => !poolASeen.has(`${item.media_type}-${item.id}`),
+  const notExcluded = (item: TmdbTitleLike) =>
+    !excludedKeys.has(`${item.media_type}-${item.id}`);
+
+  const poolA = dedupeByKey(shuffle([...poolAMovie, ...poolATv])).filter(
+    notExcluded,
   );
+  const poolASeen = new Set(poolA.map((item) => `${item.media_type}-${item.id}`));
+  const poolB = dedupeByKey(shuffle([...poolBMovie, ...poolBTv]))
+    .filter(notExcluded)
+    .filter((item) => !poolASeen.has(`${item.media_type}-${item.id}`));
 
   const targetACount = Math.min(poolA.length, Math.round(TARGET_TOTAL * POOL_A_SHARE));
   const targetBCount = Math.min(poolB.length, TARGET_TOTAL - targetACount);
@@ -242,7 +278,7 @@ export async function GET(request: NextRequest) {
   const merged = shuffle([
     ...poolA.slice(0, targetACount),
     ...poolB.slice(0, targetBCount),
-  ]).filter((item) => !swipedKeys.has(`${item.media_type}-${item.id}`));
+  ]);
 
   const results: SearchResult[] = await buildSearchResults(merged, apiKey);
 
