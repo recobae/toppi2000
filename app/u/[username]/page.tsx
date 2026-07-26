@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Share2 } from "lucide-react";
+import { Heart, Share2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { ListTile } from "@/components/profile/list-tile";
@@ -59,10 +59,22 @@ export default async function ProfilePage({
     listIds.length > 0
       ? await supabase
           .from("list_items")
-          .select("list_id, position, image_url")
+          .select("id, list_id, position, image_url")
           .in("list_id", listIds)
           .order("position", { ascending: true })
       : { data: [] };
+
+  const itemIds = (items ?? []).map((item) => item.id);
+
+  const { count: likesCount } =
+    itemIds.length > 0
+      ? await supabase
+          .from("item_votes")
+          .select("id", { count: "exact", head: true })
+          .eq("vote", true)
+          .neq("user_id", profile.id)
+          .in("list_item_id", itemIds)
+      : { count: 0 };
 
   const statsByList = new Map<
     string,
@@ -124,6 +136,11 @@ export default async function ProfilePage({
           {movieCount} Filme · {tvCount} Serien · {watchlistCount} auf der
           Watchlist
         </p>
+
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Heart className="size-4 fill-current text-red-500" />
+          <span>{likesCount ?? 0} erhaltene Likes</span>
+        </div>
 
         <a
           href={whatsappHref}
