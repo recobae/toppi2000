@@ -85,16 +85,21 @@ export default async function ProfilePage({
 
   const statsByList = new Map<
     string,
-    { count: number; posterUrl: string | null }
+    { count: number; posterUrls: string[]; topItemsSeen: number }
   >();
   for (const item of items ?? []) {
     const existing = statsByList.get(item.list_id);
     if (existing) {
       existing.count += 1;
+      if (existing.topItemsSeen < 4) {
+        existing.topItemsSeen += 1;
+        if (item.image_url) existing.posterUrls.push(item.image_url);
+      }
     } else {
       statsByList.set(item.list_id, {
         count: 1,
-        posterUrl: item.image_url,
+        posterUrls: item.image_url ? [item.image_url] : [],
+        topItemsSeen: 1,
       });
     }
   }
@@ -122,7 +127,7 @@ export default async function ProfilePage({
     : 0;
 
   const avatarUrl = movieList
-    ? (statsByList.get(movieList.id)?.posterUrl ?? null)
+    ? (statsByList.get(movieList.id)?.posterUrls[0] ?? null)
     : null;
 
   const profileUrl = await getProfileUrl(profile.username);
@@ -183,7 +188,7 @@ export default async function ProfilePage({
                 key={list.id}
                 listId={list.id}
                 label={STANDARD_LABELS[category]}
-                posterUrl={statsByList.get(list.id)?.posterUrl ?? null}
+                posterUrls={statsByList.get(list.id)?.posterUrls ?? []}
                 itemCount={statsByList.get(list.id)?.count ?? 0}
               />
             ) : null,
@@ -193,7 +198,7 @@ export default async function ProfilePage({
               key={list.id}
               listId={list.id}
               label={list.title}
-              posterUrl={statsByList.get(list.id)?.posterUrl ?? null}
+              posterUrls={statsByList.get(list.id)?.posterUrls ?? []}
               itemCount={statsByList.get(list.id)?.count ?? 0}
             />
           ))}
