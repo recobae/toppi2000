@@ -97,6 +97,9 @@ export default function SettingsPage() {
     } else {
       setCurrentUsername(username);
       setUsernameMessage("Username gespeichert!");
+      // Re-run server components (e.g. the profile icon in the root layout)
+      // so they pick up the new username instead of the stale cached one.
+      router.refresh();
     }
     setIsSavingUsername(false);
   };

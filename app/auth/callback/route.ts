@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { resolvePostAuthPath, DEFAULT_POST_AUTH_PATH } from "@/lib/auth-redirect";
+import { resolveSignupRedirectPath, DEFAULT_POST_AUTH_PATH } from "@/lib/auth-redirect";
 import { redirect } from "next/navigation";
 import { type NextRequest } from "next/server";
 
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     const { error, data } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error && data.user) {
-      const redirectPath = await resolvePostAuthPath(supabase, data.user.id, next);
+      const redirectPath = await resolveSignupRedirectPath(supabase, data.user.id, next);
       redirect(redirectPath);
     }
   }

@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { resolvePostAuthPath, DEFAULT_POST_AUTH_PATH } from "@/lib/auth-redirect";
+import { resolveSignupRedirectPath, DEFAULT_POST_AUTH_PATH } from "@/lib/auth-redirect";
 import { type EmailOtpType } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import { type NextRequest } from "next/server";
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
         data: { user },
       } = await supabase.auth.getUser();
       const redirectPath = user
-        ? await resolvePostAuthPath(supabase, user.id, next)
+        ? await resolveSignupRedirectPath(supabase, user.id, next)
         : next;
       redirect(redirectPath);
     } else {

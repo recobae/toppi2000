@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { ensureUsername } from "@/lib/auth-redirect";
 import { Button } from "@/components/ui/button";
 
 export default async function Home() {
@@ -9,16 +10,8 @@ export default async function Home() {
   const userId = data?.user?.id;
 
   if (userId) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("username")
-      .eq("id", userId)
-      .single();
-
-    if (profile?.username) {
-      redirect(`/u/${profile.username}`);
-    }
-    redirect("/onboarding");
+    const username = await ensureUsername(supabase, userId);
+    redirect(`/u/${username}`);
   }
 
   return (
