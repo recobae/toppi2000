@@ -84,10 +84,10 @@ export default async function ListDetailPage({
         <div className="flex flex-col gap-1 pt-8">
           <div className="flex items-center justify-between gap-2">
             <Link
-              href="/search"
+              href={profileUsername ? `/u/${profileUsername}` : "/search"}
               className="text-sm text-muted-foreground hover:underline w-fit"
             >
-              ← Zurück zur Suche
+              ← Zum Profil
             </Link>
             <ShareListButton shareTitle={`${list.title} von ${username}`} />
           </div>
