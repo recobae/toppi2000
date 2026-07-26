@@ -1,13 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import type { User } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/client";
 import { SwipeCard } from "@/components/vorschlag/swipe-card";
+import { GuestSignupModal } from "@/components/guest-signup-modal";
 import type { SearchResult } from "@/lib/tmdb";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
 const LIKES_LIST_TITLE = "Gefällt mir";
 const PRELOAD_THRESHOLD = 3;
 const VISIBLE_STACK_SIZE = 3;
+const GUEST_SWIPE_LIMIT = 3;
+const GUEST_LIMIT_MESSAGE = "Für mehr Inspiration melde dich kurz an.";
+const GUEST_SAVE_MESSAGE =
+  "Melde dich an, um diesen Film zu deinen Listen hinzuzufügen.";
 
 const MOOD_OPTIONS: { key: string; label: string }[] = [
   { key: "lustig", label: "Lustig & leicht" },
@@ -44,10 +52,18 @@ export default function VorschlagPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [myLists, setMyLists] = useState<MyLists>(EMPTY_MY_LISTS);
+  const [user, setUser] = useState<User | null>(null);
+  const [guestSwipeCount, setGuestSwipeCount] = useState(0);
+  const [guestModalMessage, setGuestModalMessage] = useState<string | null>(
+    null,
+  );
 
   const pageRef = useRef(1);
   const seenKeys = useRef<Set<string>>(new Set());
   const isFetchingRef = useRef(false);
+
+  const isLoggedIn = !!user;
+  const guestLimitReached = !isLoggedIn && guestSwipeCount >= GUEST_SWIPE_LIMIT;
 
   const showToast = useCallback((message: string) => {
     const id = Date.now() + Math.random();
@@ -55,6 +71,26 @@ export default function VorschlagPage() {
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 3000);
+  }, []);
+
+  const incrementGuestSwipes = useCallback(() => {
+    setGuestSwipeCount((prev) => {
+      const next = prev + 1;
+      if (next >= GUEST_SWIPE_LIMIT) {
+        setGuestModalMessage(GUEST_LIMIT_MESSAGE);
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    const supabase = createClient();
+    (async () => {
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser();
+      setUser(currentUser);
+    })();
   }, []);
 
   const loadMyLists = useCallback(async () => {
@@ -194,14 +230,25 @@ export default function VorschlagPage() {
   const handleSwipeLeft = useCallback(
     (result: SearchResult) => {
       removeCard(result);
-      logSwipe(result);
+      if (isLoggedIn) {
+        logSwipe(result);
+      } else {
+        incrementGuestSwipes();
+      }
     },
-    [removeCard, logSwipe],
+    [removeCard, logSwipe, isLoggedIn, incrementGuestSwipes],
   );
 
   const handleSwipeRight = useCallback(
     async (result: SearchResult) => {
       removeCard(result);
+
+      if (!isLoggedIn) {
+        incrementGuestSwipes();
+        setGuestModalMessage(GUEST_SAVE_MESSAGE);
+        return;
+      }
+
       logSwipe(result);
       const listId = await ensureLikesListId();
       if (!listId) {
@@ -210,12 +257,19 @@ export default function VorschlagPage() {
       }
       await addToList(result, listId, "Zu Gefällt mir hinzugefügt");
     },
-    [removeCard, logSwipe, ensureLikesListId, addToList, showToast],
+    [removeCard, logSwipe, isLoggedIn, incrementGuestSwipes, ensureLikesListId, addToList, showToast],
   );
 
   const handleSwipeUp = useCallback(
     async (result: SearchResult) => {
       removeCard(result);
+
+      if (!isLoggedIn) {
+        incrementGuestSwipes();
+        setGuestModalMessage(GUEST_SAVE_MESSAGE);
+        return;
+      }
+
       logSwipe(result);
       const listId =
         result.mediaType === "movie" ? myLists.movieListId : myLists.tvListId;
@@ -231,11 +285,16 @@ export default function VorschlagPage() {
           : "Zu Lieblingsserien hinzugefügt",
       );
     },
-    [removeCard, logSwipe, myLists, addToList, showToast],
+    [removeCard, logSwipe, isLoggedIn, incrementGuestSwipes, myLists, addToList, showToast],
   );
 
   const handleAddToWatchlist = useCallback(
     async (result: SearchResult) => {
+      if (!isLoggedIn) {
+        setGuestModalMessage(GUEST_SAVE_MESSAGE);
+        return;
+      }
+
       removeCard(result);
       logSwipe(result);
       if (!myLists.watchlistId) {
@@ -244,10 +303,10 @@ export default function VorschlagPage() {
       }
       await addToList(result, myLists.watchlistId, "Zur Watchlist hinzugefügt");
     },
-    [removeCard, logSwipe, myLists.watchlistId, addToList, showToast],
+    [removeCard, logSwipe, isLoggedIn, myLists.watchlistId, addToList, showToast],
   );
 
-  const visibleCards = cards.slice(0, VISIBLE_STACK_SIZE);
+  const visibleCards = guestLimitReached ? [] : cards.slice(0, VISIBLE_STACK_SIZE);
 
   return (
     <main className="min-h-screen flex flex-col items-center">
@@ -290,6 +349,18 @@ export default function VorschlagPage() {
             <p className="text-sm text-muted-foreground text-center pt-20">
               Lade Vorschläge…
             </p>
+          ) : guestLimitReached ? (
+            <div className="flex flex-col items-center gap-3 pt-16 text-center px-4">
+              <p className="text-sm text-muted-foreground">
+                {GUEST_LIMIT_MESSAGE}
+              </p>
+              <Link
+                href={`/auth/sign-up?next=${encodeURIComponent("/vorschlag")}`}
+                className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground text-sm font-medium px-4 py-2 hover:bg-primary/90 transition-colors min-h-11"
+              >
+                Jetzt registrieren
+              </Link>
+            </div>
           ) : visibleCards.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center pt-20">
               Keine weiteren Vorschläge gefunden.
@@ -320,6 +391,14 @@ export default function VorschlagPage() {
           wischen = Lieblingsliste
         </p>
       </div>
+
+      {guestModalMessage && (
+        <GuestSignupModal
+          message={guestModalMessage}
+          next="/vorschlag"
+          onClose={() => setGuestModalMessage(null)}
+        />
+      )}
     </main>
   );
 }

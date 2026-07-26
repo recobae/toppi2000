@@ -26,6 +26,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { WatchProviderBadges } from "@/components/watch-provider-badges";
+import { GuestSignupModal } from "@/components/guest-signup-modal";
 import type { WatchProviderGroups } from "@/lib/tmdb";
 
 export type ListItem = {
@@ -59,64 +60,6 @@ const EMPTY_VOTE_STATE: VoteState = {
 };
 
 const EMPTY_OTHERS_COUNT: OthersVoteCount = { up: 0, down: 0 };
-
-function GuestVotePromptModal({
-  ownerUsername,
-  listId,
-  onClose,
-}: {
-  ownerUsername: string;
-  listId: string;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    document.body.style.overflow = "hidden";
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.body.style.overflow = "";
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [onClose]);
-
-  const next = encodeURIComponent(`/lists/${listId}`);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-    >
-      <div
-        className="w-full max-w-sm rounded-lg bg-background border p-5 flex flex-col gap-4"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <p className="text-sm">
-          Melde dich an, um {ownerUsername}s Liste zu bewerten, eigene Listen
-          zu erstellen, direkt zu sehen wo Filme gerade laufen, und
-          Film-Inspirationen für heute Abend zu entdecken.
-        </p>
-        <div className="flex flex-col gap-2">
-          <Link
-            href={`/auth/sign-up?next=${next}`}
-            className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground text-sm font-medium px-4 py-2 hover:bg-primary/90 transition-colors min-h-11"
-          >
-            Jetzt registrieren
-          </Link>
-          <Link
-            href={`/auth/login?next=${next}`}
-            className="text-center text-xs text-muted-foreground hover:underline"
-          >
-            Bereits registriert? Anmelden
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function ListItemCard({
   item,
@@ -475,9 +418,9 @@ export function ListItemsGrid({
         </SortableContext>
       </DndContext>
       {showGuestPrompt && (
-        <GuestVotePromptModal
-          ownerUsername={ownerUsername}
-          listId={listId}
+        <GuestSignupModal
+          message={`Melde dich an, um ${ownerUsername}s Liste zu bewerten, eigene Listen zu erstellen, direkt zu sehen wo Filme gerade laufen, und Film-Inspirationen für heute Abend zu entdecken.`}
+          next={`/lists/${listId}`}
           onClose={() => setShowGuestPrompt(false)}
         />
       )}

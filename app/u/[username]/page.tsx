@@ -182,15 +182,17 @@ export default async function ProfilePage({
           <span>{likesCount ?? 0} erhaltene Likes</span>
         </div>
 
-        <a
-          href={whatsappHref}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground text-sm font-medium px-4 py-2 hover:bg-primary/90 transition-colors min-h-11"
-        >
-          <Share2 className="size-4" />
-          Profil teilen
-        </a>
+        {isOwner && (
+          <a
+            href={whatsappHref}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground text-sm font-medium px-4 py-2 hover:bg-primary/90 transition-colors min-h-11"
+          >
+            <Share2 className="size-4" />
+            Profil teilen
+          </a>
+        )}
 
         <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-3">
           {standardOrder.map(({ list, category }) =>
