@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Film } from "lucide-react";
+import { ShareListButton } from "@/components/lists/share-list-button";
 
 const SIZES = "(max-width: 640px) 33vw, 20vw";
 
@@ -18,10 +19,7 @@ export function ListTile({
   const posters = posterUrls.slice(0, 4);
 
   return (
-    <Link
-      href={`/lists/${listId}`}
-      className="flex flex-col gap-2 rounded-lg border p-2 hover:bg-accent transition-colors"
-    >
+    <div className="relative flex flex-col gap-2 rounded-lg border p-2 hover:bg-accent transition-colors">
       <div className="relative aspect-[2/3] w-full bg-muted rounded-md overflow-hidden">
         {posters.length === 0 ? (
           <div className="flex h-full items-center justify-center">
@@ -57,11 +55,25 @@ export function ListTile({
         )}
       </div>
       <div>
-        <p className="text-sm font-medium leading-tight line-clamp-1">
-          {label}
-        </p>
+        <div className="flex items-center gap-1">
+          <p className="text-sm font-medium leading-tight line-clamp-1">
+            {label}
+          </p>
+          <span className="relative z-10">
+            <ShareListButton
+              shareTitle={label}
+              url={`/lists/${listId}`}
+              iconOnly
+            />
+          </span>
+        </div>
         <p className="text-xs text-muted-foreground">{itemCount} Titel</p>
       </div>
-    </Link>
+      <Link
+        href={`/lists/${listId}`}
+        aria-label={label}
+        className="absolute inset-0 z-0 rounded-lg"
+      />
+    </div>
   );
 }
