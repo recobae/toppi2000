@@ -18,7 +18,7 @@ export default async function Home() {
     if (profile?.username) {
       redirect(`/u/${profile.username}`);
     }
-    redirect("/search");
+    redirect("/onboarding");
   }
 
   return (

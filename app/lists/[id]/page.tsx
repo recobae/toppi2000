@@ -106,6 +106,7 @@ export default async function ListDetailPage({
           initialItems={itemsWithProviders}
           isOwner={isOwner}
           listId={id}
+          ownerUsername={username}
         />
       </div>
     </main>

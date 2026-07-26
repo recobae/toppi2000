@@ -60,7 +60,15 @@ const EMPTY_VOTE_STATE: VoteState = {
 
 const EMPTY_OTHERS_COUNT: OthersVoteCount = { up: 0, down: 0 };
 
-function GuestVotePromptModal({ onClose }: { onClose: () => void }) {
+function GuestVotePromptModal({
+  ownerUsername,
+  listId,
+  onClose,
+}: {
+  ownerUsername: string;
+  listId: string;
+  onClose: () => void;
+}) {
   useEffect(() => {
     document.body.style.overflow = "hidden";
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -72,6 +80,8 @@ function GuestVotePromptModal({ onClose }: { onClose: () => void }) {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [onClose]);
+
+  const next = encodeURIComponent(`/lists/${listId}`);
 
   return (
     <div
@@ -85,19 +95,19 @@ function GuestVotePromptModal({ onClose }: { onClose: () => void }) {
         onClick={(event) => event.stopPropagation()}
       >
         <p className="text-sm">
-          Melde dich an, um Listen deiner Freunde zu bewerten, endlich deine
-          eigenen Listen zu ordnen und Inspirationen zu unentdeckten
-          Filmschätzen zu bekommen.
+          Melde dich an, um {ownerUsername}s Liste zu bewerten, eigene Listen
+          zu erstellen, direkt zu sehen wo Filme gerade laufen, und
+          Film-Inspirationen für heute Abend zu entdecken.
         </p>
         <div className="flex flex-col gap-2">
           <Link
-            href="/auth/sign-up"
+            href={`/auth/sign-up?next=${next}`}
             className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground text-sm font-medium px-4 py-2 hover:bg-primary/90 transition-colors min-h-11"
           >
             Jetzt registrieren
           </Link>
           <Link
-            href="/auth/login"
+            href={`/auth/login?next=${next}`}
             className="text-center text-xs text-muted-foreground hover:underline"
           >
             Bereits registriert? Anmelden
@@ -258,10 +268,12 @@ export function ListItemsGrid({
   initialItems,
   isOwner,
   listId,
+  ownerUsername,
 }: {
   initialItems: ListItem[];
   isOwner: boolean;
   listId: string;
+  ownerUsername: string;
 }) {
   const [items, setItems] = useState(initialItems);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -463,7 +475,11 @@ export function ListItemsGrid({
         </SortableContext>
       </DndContext>
       {showGuestPrompt && (
-        <GuestVotePromptModal onClose={() => setShowGuestPrompt(false)} />
+        <GuestVotePromptModal
+          ownerUsername={ownerUsername}
+          listId={listId}
+          onClose={() => setShowGuestPrompt(false)}
+        />
       )}
     </div>
   );

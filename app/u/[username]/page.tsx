@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Heart, Share2 } from "lucide-react";
+import { Heart, Share2, Settings } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { ListTile } from "@/components/profile/list-tile";
@@ -157,9 +157,20 @@ export default async function ProfilePage({
           <ProfileAvatar username={profile.username} imageUrl={avatarUrl} />
         )}
 
-        <h1 className="text-xl font-semibold text-center">
-          {profile.username}
-        </h1>
+        <div className="flex items-center gap-1.5">
+          <h1 className="text-xl font-semibold text-center">
+            {profile.username}
+          </h1>
+          {isOwner && (
+            <Link
+              href="/settings"
+              aria-label="Einstellungen"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Settings className="size-4" />
+            </Link>
+          )}
+        </div>
 
         <p className="text-sm text-muted-foreground text-center">
           {movieCount} Filme · {tvCount} Serien · {watchlistCount} auf der
