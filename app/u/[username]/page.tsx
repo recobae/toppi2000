@@ -56,7 +56,8 @@ export default async function ProfilePage({
   const { data: lists } = await supabase
     .from("lists")
     .select("id, title, category, is_public")
-    .eq("user_id", profile.id);
+    .eq("user_id", profile.id)
+    .order("created_at", { ascending: true });
 
   const publicLists = (lists ?? []).filter((list) => list.is_public);
   const listIds = publicLists.map((list) => list.id);
@@ -103,8 +104,13 @@ export default async function ProfilePage({
   const watchlistList = publicLists.find(
     (list) => list.category === "watchlist",
   );
+  const standardListIds = new Set(
+    [movieList, tvList, watchlistList]
+      .filter((list): list is NonNullable<typeof list> => !!list)
+      .map((list) => list.id),
+  );
   const customLists = publicLists.filter(
-    (list) => !["movie", "tv", "watchlist"].includes(list.category),
+    (list) => !standardListIds.has(list.id),
   );
 
   const movieCount = movieList
