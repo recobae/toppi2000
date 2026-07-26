@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GoogleIcon } from "@/components/google-icon";
+import { GOOGLE_LOGIN_ENABLED } from "@/lib/feature-flags";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -86,22 +87,26 @@ export function SignUpForm({
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-4">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              disabled={isGoogleLoading}
-              onClick={handleGoogleSignUp}
-            >
-              <GoogleIcon className="size-4" />
-              {isGoogleLoading ? "Wird weitergeleitet…" : "Mit Google registrieren"}
-            </Button>
+            {GOOGLE_LOGIN_ENABLED && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={isGoogleLoading}
+                  onClick={handleGoogleSignUp}
+                >
+                  <GoogleIcon className="size-4" />
+                  {isGoogleLoading ? "Wird weitergeleitet…" : "Mit Google registrieren"}
+                </Button>
 
-            <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-border" />
-              <span className="text-xs text-muted-foreground">oder</span>
-              <div className="h-px flex-1 bg-border" />
-            </div>
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-border" />
+                  <span className="text-xs text-muted-foreground">oder</span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+              </>
+            )}
 
             <form onSubmit={handleSignUp}>
               <div className="flex flex-col gap-6">
