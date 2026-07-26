@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 
 export default async function Home() {
   const supabase = await createClient();
-  const { data } = await supabase.auth.getClaims();
-  const userId = data?.claims?.sub;
+  const { data } = await supabase.auth.getUser();
+  const userId = data?.user?.id;
 
   if (userId) {
     const { data: profile } = await supabase
