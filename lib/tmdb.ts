@@ -100,6 +100,7 @@ export type TmdbTitleLike = {
   first_air_date?: string;
   poster_path: string | null;
   overview?: string;
+  popularity?: number;
 };
 
 export async function buildSearchResults(

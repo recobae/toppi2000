@@ -1,20 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import type { User } from "@supabase/supabase-js";
-import { Shuffle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
-import { type ListSummary } from "@/components/search/add-to-list-menu";
-import { OptionTile } from "@/components/vorschlag/option-tile";
-import { SuggestionCard } from "@/components/vorschlag/suggestion-card";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { SwipeCard } from "@/components/vorschlag/swipe-card";
 import type { SearchResult } from "@/lib/tmdb";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
-
-type Toast = { id: number; message: string };
-type Step = 1 | 2 | 3;
-type MediaType = "movie" | "tv";
+const LIKES_LIST_TITLE = "Gefällt mir";
+const PRELOAD_THRESHOLD = 3;
+const VISIBLE_STACK_SIZE = 3;
 
 const MOOD_OPTIONS: { key: string; label: string }[] = [
   { key: "lustig", label: "Lustig & leicht" },
@@ -25,39 +18,36 @@ const MOOD_OPTIONS: { key: string; label: string }[] = [
   { key: "episch", label: "Episch & großartig" },
 ];
 
-const AUDIENCE_OPTIONS: { key: string; label: string }[] = [
-  { key: "allein", label: "Allein" },
-  { key: "partner", label: "Partner/in" },
-  { key: "familie", label: "Familie mit Kindern" },
-  { key: "freunde", label: "Freunde" },
-];
+type Toast = { id: number; message: string };
 
-const PROVIDER_OPTIONS: { id: number; label: string }[] = [
-  { id: 8, label: "Netflix" },
-  { id: 9, label: "Prime Video" },
-  { id: 337, label: "Disney+" },
-  { id: 350, label: "Apple TV+" },
-  { id: 29, label: "Sky" },
-];
+type MyLists = {
+  movieListId: string | null;
+  tvListId: string | null;
+  watchlistId: string | null;
+  likesListId: string | null;
+};
+
+const EMPTY_MY_LISTS: MyLists = {
+  movieListId: null,
+  tvListId: null,
+  watchlistId: null,
+  likesListId: null,
+};
+
+function resultKey(result: SearchResult) {
+  return `${result.mediaType}-${result.id}`;
+}
 
 export default function VorschlagPage() {
-  const [step, setStep] = useState<Step>(1);
   const [mood, setMood] = useState<string | null>(null);
-  const [audience, setAudience] = useState<string | null>(null);
-  const [mediaType, setMediaType] = useState<MediaType>("movie");
-  const [providerIds, setProviderIds] = useState<number[]>([]);
-
-  const [isLoadingResults, setIsLoadingResults] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [candidates, setCandidates] = useState<SearchResult[]>([]);
-  const [currentIndex, setCurrentIndex] = useState<number | null>(null);
-
-  const [user, setUser] = useState<User | null>(null);
-  const [lists, setLists] = useState<ListSummary[]>([]);
-  const [isLoadingLists, setIsLoadingLists] = useState(true);
-  const [addingListId, setAddingListId] = useState<string | null>(null);
+  const [cards, setCards] = useState<SearchResult[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [myLists, setMyLists] = useState<MyLists>(EMPTY_MY_LISTS);
+
+  const pageRef = useRef(1);
+  const seenKeys = useRef<Set<string>>(new Set());
+  const isFetchingRef = useRef(false);
 
   const showToast = useCallback((message: string) => {
     const id = Date.now() + Math.random();
@@ -67,100 +57,71 @@ export default function VorschlagPage() {
     }, 3000);
   }, []);
 
-  useEffect(() => {
-    const supabase = createClient();
-
-    (async () => {
-      const {
-        data: { user: currentUser },
-      } = await supabase.auth.getUser();
-      setUser(currentUser);
-
-      if (!currentUser) {
-        setIsLoadingLists(false);
-        return;
-      }
-
-      const { data, error: listsError } = await supabase
-        .from("lists")
-        .select("id, title, category")
-        .eq("user_id", currentUser.id)
-        .order("created_at", { ascending: true });
-
-      if (!listsError && data) {
-        setLists(data);
-      }
-      setIsLoadingLists(false);
-    })();
+  const loadMyLists = useCallback(async () => {
+    try {
+      const response = await fetch("/api/my-lists");
+      if (!response.ok) return;
+      const data: MyLists = await response.json();
+      setMyLists(data);
+    } catch {
+      // keep defaults; individual actions will surface errors via toast
+    }
   }, []);
 
-  const toggleProvider = (id: number) => {
-    setProviderIds((prev) =>
-      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id],
-    );
-  };
+  useEffect(() => {
+    loadMyLists();
+  }, [loadMyLists]);
 
-  const handleFindSuggestion = async () => {
-    if (!mood || !audience) return;
+  const fetchCards = useCallback(
+    async (targetPage: number, replace: boolean, activeMood: string | null) => {
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
+      if (replace) setIsLoading(true);
 
-    setIsLoadingResults(true);
-    setHasSearched(true);
-    setError(null);
-    setCandidates([]);
-    setCurrentIndex(null);
+      try {
+        const params = new URLSearchParams({ page: String(targetPage) });
+        if (activeMood) params.set("mood", activeMood);
 
-    try {
-      const params = new URLSearchParams({
-        mediaType,
-        mood,
-        audience,
-      });
-      if (providerIds.length > 0) {
-        params.set("providers", providerIds.join(","));
+        const response = await fetch(`/api/discover?${params.toString()}`);
+        if (!response.ok) throw new Error("Discover request failed");
+
+        const data: { results: SearchResult[] } = await response.json();
+        const fresh = data.results.filter((result) => {
+          const key = resultKey(result);
+          if (seenKeys.current.has(key)) return false;
+          seenKeys.current.add(key);
+          return true;
+        });
+
+        setCards((prev) => (replace ? fresh : [...prev, ...fresh]));
+      } catch {
+        // leave the stack as-is; the user can still act on remaining cards
+      } finally {
+        isFetchingRef.current = false;
+        if (replace) setIsLoading(false);
       }
+    },
+    [],
+  );
 
-      const response = await fetch(`/api/discover?${params.toString()}`);
-      if (!response.ok) throw new Error("Discover request failed");
+  useEffect(() => {
+    seenKeys.current = new Set();
+    pageRef.current = 1;
+    setCards([]);
+    fetchCards(1, true, mood);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mood]);
 
-      const data: { results: SearchResult[] } = await response.json();
-      setCandidates(data.results);
-      if (data.results.length > 0) {
-        setCurrentIndex(Math.floor(Math.random() * data.results.length));
-      }
-    } catch {
-      setError("Vorschlag konnte nicht geladen werden.");
-    } finally {
-      setIsLoadingResults(false);
+  useEffect(() => {
+    if (!isLoading && cards.length > 0 && cards.length <= PRELOAD_THRESHOLD) {
+      pageRef.current += 1;
+      fetchCards(pageRef.current, false, mood);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cards.length, isLoading]);
 
-  const handleReroll = () => {
-    if (candidates.length <= 1) return;
-    setCurrentIndex((prevIndex) => {
-      let nextIndex = Math.floor(Math.random() * candidates.length);
-      while (nextIndex === prevIndex && candidates.length > 1) {
-        nextIndex = Math.floor(Math.random() * candidates.length);
-      }
-      return nextIndex;
-    });
-  };
-
-  const handleRestart = () => {
-    setStep(1);
-    setMood(null);
-    setAudience(null);
-    setMediaType("movie");
-    setProviderIds([]);
-    setCandidates([]);
-    setCurrentIndex(null);
-    setHasSearched(false);
-    setError(null);
-  };
-
-  const handleAddToList = useCallback(
-    async (result: SearchResult, list: ListSummary) => {
-      setAddingListId(list.id);
-
+  const addToList = useCallback(
+    async (result: SearchResult, listId: string, successMessage: string) => {
       try {
         const imageUrl = result.posterPath
           ? `${POSTER_BASE_URL}${result.posterPath}`
@@ -170,7 +131,7 @@ export default function VorschlagPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            listId: list.id,
+            listId,
             externalId: result.id,
             title: result.title,
             imageUrl,
@@ -178,26 +139,95 @@ export default function VorschlagPage() {
             year: result.year,
           }),
         });
-
         const data: { error?: string } = await response.json();
 
         if (!response.ok) {
-          showToast(data.error ?? "Hinzufügen fehlgeschlagen");
+          showToast(data.error ?? "Aktion fehlgeschlagen");
           return;
         }
-
-        showToast(`Zu ${list.title} hinzugefügt`);
+        showToast(successMessage);
       } catch {
-        showToast("Hinzufügen fehlgeschlagen");
-      } finally {
-        setAddingListId(null);
+        showToast("Aktion fehlgeschlagen");
       }
     },
     [showToast],
   );
 
-  const currentResult =
-    currentIndex !== null ? candidates[currentIndex] : null;
+  const ensureLikesListId = useCallback(async (): Promise<string | null> => {
+    if (myLists.likesListId) return myLists.likesListId;
+
+    try {
+      const response = await fetch("/api/lists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: LIKES_LIST_TITLE }),
+      });
+      const data: { id?: string; error?: string } = await response.json();
+      if (!response.ok || !data.id) return null;
+
+      setMyLists((prev) => ({ ...prev, likesListId: data.id ?? null }));
+      return data.id;
+    } catch {
+      return null;
+    }
+  }, [myLists.likesListId]);
+
+  const removeCard = useCallback((result: SearchResult) => {
+    setCards((prev) => prev.filter((card) => resultKey(card) !== resultKey(result)));
+  }, []);
+
+  const handleSwipeLeft = useCallback(
+    (result: SearchResult) => {
+      removeCard(result);
+    },
+    [removeCard],
+  );
+
+  const handleSwipeRight = useCallback(
+    async (result: SearchResult) => {
+      removeCard(result);
+      const listId = await ensureLikesListId();
+      if (!listId) {
+        showToast("Liste konnte nicht erstellt werden");
+        return;
+      }
+      await addToList(result, listId, "Zu Gefällt mir hinzugefügt");
+    },
+    [removeCard, ensureLikesListId, addToList, showToast],
+  );
+
+  const handleSwipeUp = useCallback(
+    async (result: SearchResult) => {
+      removeCard(result);
+      const listId =
+        result.mediaType === "movie" ? myLists.movieListId : myLists.tvListId;
+      if (!listId) {
+        showToast("Keine passende Liste gefunden");
+        return;
+      }
+      await addToList(
+        result,
+        listId,
+        result.mediaType === "movie"
+          ? "Zu Lieblingsfilme hinzugefügt"
+          : "Zu Lieblingsserien hinzugefügt",
+      );
+    },
+    [removeCard, myLists, addToList, showToast],
+  );
+
+  const handleAddToWatchlist = useCallback(
+    async (result: SearchResult) => {
+      if (!myLists.watchlistId) {
+        showToast("Keine Watchlist gefunden");
+        return;
+      }
+      await addToList(result, myLists.watchlistId, "Zur Watchlist hinzugefügt");
+    },
+    [myLists.watchlistId, addToList, showToast],
+  );
+
+  const visibleCards = cards.slice(0, VISIBLE_STACK_SIZE);
 
   return (
     <main className="min-h-screen flex flex-col items-center">
@@ -212,169 +242,63 @@ export default function VorschlagPage() {
         ))}
       </div>
 
-      <div className="flex-1 w-full flex flex-col gap-6 items-center max-w-2xl p-5">
-        <div className="w-full flex flex-col gap-1 pt-8">
-          <h1 className="font-medium text-xl">Was soll ich schauen?</h1>
-          <p className="text-sm text-muted-foreground">
-            Beantworte drei kurze Fragen und erhalte einen Vorschlag.
-          </p>
+      <div className="flex-1 w-full flex flex-col items-center gap-4 max-w-md p-5 pt-8">
+        <h1 className="font-medium text-xl">Inspiration</h1>
+
+        <div className="w-full flex flex-wrap gap-2 justify-center">
+          {MOOD_OPTIONS.map((option) => {
+            const isActive = mood === option.key;
+            return (
+              <button
+                key={option.key}
+                type="button"
+                onClick={() => setMood(isActive ? null : option.key)}
+                className={`min-h-9 px-3 rounded-full border text-xs font-medium transition-colors ${
+                  isActive
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-input hover:bg-accent"
+                }`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
         </div>
 
-        {step === 1 && (
-          <div className="w-full flex flex-col gap-3">
-            <h2 className="text-sm font-medium">Wonach ist dir?</h2>
-            <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {MOOD_OPTIONS.map((option) => (
-                <OptionTile
-                  key={option.key}
-                  label={option.label}
-                  selected={mood === option.key}
-                  onClick={() => {
-                    setMood(option.key);
-                    setStep(2);
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="w-full flex flex-col gap-3">
-            <button
-              type="button"
-              onClick={() => setStep(1)}
-              className="text-xs text-muted-foreground hover:underline w-fit"
-            >
-              ← Zurück
-            </button>
-            <h2 className="text-sm font-medium">Mit wem schaust du?</h2>
-            <div className="w-full grid grid-cols-2 gap-3">
-              {AUDIENCE_OPTIONS.map((option) => (
-                <OptionTile
-                  key={option.key}
-                  label={option.label}
-                  selected={audience === option.key}
-                  onClick={() => {
-                    setAudience(option.key);
-                    setStep(3);
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {step === 3 && (
-          <div className="w-full flex flex-col gap-5">
-            <button
-              type="button"
-              onClick={() => setStep(2)}
-              className="text-xs text-muted-foreground hover:underline w-fit"
-            >
-              ← Zurück
-            </button>
-
-            <div className="flex flex-col gap-2">
-              <h2 className="text-sm font-medium">Film oder Serie?</h2>
-              <div className="inline-flex w-fit rounded-lg border p-1 gap-1">
-                <button
-                  type="button"
-                  onClick={() => setMediaType("movie")}
-                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    mediaType === "movie"
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-accent"
-                  }`}
-                >
-                  Film
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMediaType("tv")}
-                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    mediaType === "tv"
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-accent"
-                  }`}
-                >
-                  Serie
-                </button>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <h2 className="text-sm font-medium">
-                Welche Streaming-Dienste hast du?
-              </h2>
-              <div className="flex flex-wrap gap-2">
-                {PROVIDER_OPTIONS.map((provider) => {
-                  const isSelected = providerIds.includes(provider.id);
-                  return (
-                    <button
-                      key={provider.id}
-                      type="button"
-                      onClick={() => toggleProvider(provider.id)}
-                      className={`min-h-[40px] px-3 rounded-full border text-sm font-medium transition-colors ${
-                        isSelected
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-input hover:bg-accent"
-                      }`}
-                    >
-                      {provider.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <Button onClick={handleFindSuggestion} disabled={isLoadingResults}>
-              {isLoadingResults ? "Suche läuft…" : "Vorschlag finden"}
-            </Button>
-          </div>
-        )}
-
-        {error && <p className="w-full text-sm text-destructive">{error}</p>}
-
-        {step === 3 &&
-          hasSearched &&
-          !isLoadingResults &&
-          !error &&
-          candidates.length === 0 && (
-            <p className="w-full text-sm text-muted-foreground">
-              Keine Vorschläge gefunden. Versuche andere Streaming-Dienste.
+        <div className="relative w-full aspect-[2/3] max-w-sm mt-2">
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground text-center pt-20">
+              Lade Vorschläge…
             </p>
+          ) : visibleCards.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center pt-20">
+              Keine weiteren Vorschläge gefunden.
+            </p>
+          ) : (
+            [...visibleCards].reverse().map((result) => {
+              const stackIndex = visibleCards.findIndex(
+                (card) => resultKey(card) === resultKey(result),
+              );
+              return (
+                <SwipeCard
+                  key={resultKey(result)}
+                  result={result}
+                  stackIndex={stackIndex}
+                  isTop={stackIndex === 0}
+                  onSwipeLeft={() => handleSwipeLeft(result)}
+                  onSwipeRight={() => handleSwipeRight(result)}
+                  onSwipeUp={() => handleSwipeUp(result)}
+                  onAddToWatchlist={() => handleAddToWatchlist(result)}
+                />
+              );
+            })
           )}
+        </div>
 
-        {currentResult && (
-          <div className="w-full flex flex-col items-center gap-4">
-            <SuggestionCard
-              result={currentResult}
-              isLoggedIn={!!user}
-              isLoadingLists={isLoadingLists}
-              lists={lists}
-              addingListId={addingListId}
-              onAdd={(list) => handleAddToList(currentResult, list)}
-            />
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              <Button
-                variant="secondary"
-                onClick={handleReroll}
-                disabled={candidates.length <= 1}
-              >
-                <Shuffle />
-                Nochmal vorschlagen
-              </Button>
-              <button
-                type="button"
-                onClick={handleRestart}
-                className="text-xs text-muted-foreground hover:underline"
-              >
-                Neue Suche starten
-              </button>
-            </div>
-          </div>
-        )}
+        <p className="text-xs text-muted-foreground text-center">
+          Rechts wischen = Gefällt mir · Links wischen = Kein Interesse · Hoch
+          wischen = Lieblingsliste
+        </p>
       </div>
     </main>
   );

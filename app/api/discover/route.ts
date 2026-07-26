@@ -4,13 +4,12 @@ import {
   type SearchResult,
   type TmdbTitleLike,
 } from "@/lib/tmdb";
+import { createClient } from "@/lib/supabase/server";
+import { LIKES_LIST_TITLE } from "@/lib/lists";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
-const PAGES_TO_FETCH = 3;
-const RESULT_LIMIT = 60;
-const MIN_RESULTS_BEFORE_FALLBACK = 10;
-const KIDS_AUDIENCE = "familie";
-const KIDS_CERTIFICATION = "12";
+const HISTORY_SAMPLE_LIMIT = 20;
+const INFERRED_GENRE_LIMIT = 3;
 
 const MOOD_GENRES: Record<string, string[]> = {
   lustig: ["35"],
@@ -21,84 +20,107 @@ const MOOD_GENRES: Record<string, string[]> = {
   episch: ["878", "14", "12"],
 };
 
-type DiscoverAttempt = {
-  mediaType: "movie" | "tv";
-  genreIds: string[];
-  providers: string | null;
-  applyCertification: boolean;
-};
-
-function buildDiscoverUrl(
-  attempt: DiscoverAttempt,
-  apiKey: string,
+async function fetchDiscoverPage(
+  mediaType: "movie" | "tv",
+  genreIds: string[],
   page: number,
-): URL {
-  const url = new URL(`${TMDB_BASE_URL}/discover/${attempt.mediaType}`);
+  apiKey: string,
+): Promise<TmdbTitleLike[]> {
+  const url = new URL(`${TMDB_BASE_URL}/discover/${mediaType}`);
   url.searchParams.set("api_key", apiKey);
-  url.searchParams.set("with_genres", attempt.genreIds.join("|"));
   url.searchParams.set("sort_by", "popularity.desc");
-  url.searchParams.set("watch_region", "DE");
   url.searchParams.set("include_adult", "false");
   url.searchParams.set("page", String(page));
 
-  if (attempt.providers) {
-    url.searchParams.set("with_watch_providers", attempt.providers);
+  if (genreIds.length > 0) {
+    url.searchParams.set("with_genres", genreIds.join("|"));
   }
 
-  if (attempt.applyCertification && attempt.mediaType === "movie") {
-    url.searchParams.set("certification_country", "DE");
-    url.searchParams.set("certification.lte", KIDS_CERTIFICATION);
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return [];
+    const data: { results: TmdbTitleLike[] } = await response.json();
+    return data.results.map((item) => ({ ...item, media_type: mediaType }));
+  } catch {
+    return [];
   }
-
-  return url;
 }
 
-async function fetchDiscoverPool(
-  attempt: DiscoverAttempt,
+async function getInferredGenreIds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
   apiKey: string,
-): Promise<TmdbTitleLike[]> {
-  const pageNumbers = Array.from({ length: PAGES_TO_FETCH }, (_, i) => i + 1);
+): Promise<string[]> {
+  const [{ data: categoryLists }, { data: likesLists }] = await Promise.all([
+    supabase
+      .from("lists")
+      .select("id")
+      .eq("user_id", userId)
+      .in("category", ["movie", "tv"]),
+    supabase
+      .from("lists")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("title", LIKES_LIST_TITLE),
+  ]);
 
-  const pages = await Promise.all(
-    pageNumbers.map(async (page) => {
-      const response = await fetch(buildDiscoverUrl(attempt, apiKey, page), {
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) return [];
-      const data: { results: TmdbTitleLike[] } = await response.json();
-      return data.results;
+  const listIds = [
+    ...(categoryLists ?? []).map((list) => list.id),
+    ...(likesLists ?? []).map((list) => list.id),
+  ];
+
+  if (listIds.length === 0) return [];
+
+  const { data: items } = await supabase
+    .from("list_items")
+    .select("external_id, metadata")
+    .in("list_id", listIds);
+
+  const sample = (items ?? []).slice(0, HISTORY_SAMPLE_LIMIT);
+  if (sample.length === 0) return [];
+
+  const genreCounts = new Map<number, number>();
+
+  await Promise.all(
+    sample.map(async (item) => {
+      const mediaType = item.metadata?.type;
+      const tmdbId = Number(item.external_id);
+      if (
+        (mediaType !== "movie" && mediaType !== "tv") ||
+        !Number.isFinite(tmdbId)
+      ) {
+        return;
+      }
+
+      try {
+        const url = new URL(`${TMDB_BASE_URL}/${mediaType}/${tmdbId}`);
+        url.searchParams.set("api_key", apiKey);
+        const response = await fetch(url, {
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) return;
+        const data: { genres?: { id: number }[] } = await response.json();
+        for (const genre of data.genres ?? []) {
+          genreCounts.set(genre.id, (genreCounts.get(genre.id) ?? 0) + 1);
+        }
+      } catch {
+        // ignore individual lookup failures
+      }
     }),
   );
 
-  const seen = new Set<number>();
-  const combined: TmdbTitleLike[] = [];
-  for (const item of pages.flat()) {
-    if (seen.has(item.id) || combined.length >= RESULT_LIMIT) continue;
-    seen.add(item.id);
-    combined.push({ ...item, media_type: attempt.mediaType });
-  }
-
-  return combined;
+  return Array.from(genreCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, INFERRED_GENRE_LIMIT)
+    .map(([id]) => String(id));
 }
 
 export async function GET(request: NextRequest) {
-  const mediaTypeParam = request.nextUrl.searchParams.get("mediaType");
   const mood = request.nextUrl.searchParams.get("mood");
-  const audience = request.nextUrl.searchParams.get("audience");
-  const providers = request.nextUrl.searchParams.get("providers");
-
-  if (mediaTypeParam !== "movie" && mediaTypeParam !== "tv") {
-    return NextResponse.json(
-      { error: "mediaType must be 'movie' or 'tv'" },
-      { status: 400 },
-    );
-  }
-  const mediaType: "movie" | "tv" = mediaTypeParam;
-
-  const genreIds = mood ? MOOD_GENRES[mood] : undefined;
-  if (!genreIds) {
-    return NextResponse.json({ error: "Unknown mood" }, { status: 400 });
-  }
+  const pageParam = request.nextUrl.searchParams.get("page");
+  const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
 
   const apiKey = process.env.TMDB_API_KEY;
   if (!apiKey) {
@@ -108,36 +130,29 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const isKidsAudience = audience === KIDS_AUDIENCE;
+  const moodGenreIds = mood && MOOD_GENRES[mood] ? MOOD_GENRES[mood] : [];
 
-  // Attempt 1: full filters (genres + providers + certification for kids).
-  let pool = await fetchDiscoverPool(
-    { mediaType, genreIds, providers, applyCertification: isKidsAudience },
-    apiKey,
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const inferredGenreIds = user
+    ? await getInferredGenreIds(supabase, user.id, apiKey)
+    : [];
+
+  const genreIds = Array.from(new Set([...moodGenreIds, ...inferredGenreIds]));
+
+  const [movieItems, tvItems] = await Promise.all([
+    fetchDiscoverPage("movie", genreIds, page, apiKey),
+    fetchDiscoverPage("tv", genreIds, page, apiKey),
+  ]);
+
+  const merged = [...movieItems, ...tvItems].sort(
+    (a, b) => (b.popularity ?? 0) - (a.popularity ?? 0),
   );
 
-  // Attempt 2: too few results — drop the streaming-provider requirement.
-  if (pool.length < MIN_RESULTS_BEFORE_FALLBACK && providers) {
-    pool = await fetchDiscoverPool(
-      {
-        mediaType,
-        genreIds,
-        providers: null,
-        applyCertification: isKidsAudience,
-      },
-      apiKey,
-    );
-  }
-
-  // Attempt 3: still too few for a kids audience — also drop the certification cap.
-  if (pool.length < MIN_RESULTS_BEFORE_FALLBACK && isKidsAudience) {
-    pool = await fetchDiscoverPool(
-      { mediaType, genreIds, providers: null, applyCertification: false },
-      apiKey,
-    );
-  }
-
-  const results: SearchResult[] = await buildSearchResults(pool, apiKey);
+  const results: SearchResult[] = await buildSearchResults(merged, apiKey);
 
   return NextResponse.json({ results });
 }

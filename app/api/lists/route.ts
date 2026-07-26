@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { PREDEFINED_LIST_OPTIONS } from "@/lib/lists";
+import {
+  LIKES_LIST_CATEGORY,
+  LIKES_LIST_TITLE,
+  PREDEFINED_LIST_OPTIONS,
+} from "@/lib/lists";
+
+const CREATABLE_LISTS = [
+  ...PREDEFINED_LIST_OPTIONS,
+  { title: LIKES_LIST_TITLE, category: LIKES_LIST_CATEGORY },
+];
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -14,7 +23,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body: { title?: string } = await request.json();
-  const option = PREDEFINED_LIST_OPTIONS.find(
+  const option = CREATABLE_LISTS.find(
     (candidate) => candidate.title === body.title,
   );
 

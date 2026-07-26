@@ -138,7 +138,19 @@ export default async function ProfilePage({
   return (
     <main className="min-h-screen flex flex-col items-center">
       <div className="flex-1 w-full flex flex-col items-center gap-6 max-w-2xl p-5 pt-10">
-        <ProfileAvatar username={profile.username} imageUrl={avatarUrl} />
+        {isOwner ? (
+          <Link
+            href="/vorschlag"
+            aria-label="Zur Inspiration"
+            className="rounded-full p-[3px] bg-[conic-gradient(from_0deg,#f97316,#ec4899,#8b5cf6,#3b82f6,#10b981,#f97316)]"
+          >
+            <span className="block rounded-full bg-background p-[3px]">
+              <ProfileAvatar username={profile.username} imageUrl={avatarUrl} />
+            </span>
+          </Link>
+        ) : (
+          <ProfileAvatar username={profile.username} imageUrl={avatarUrl} />
+        )}
 
         <h1 className="text-xl font-semibold text-center">
           {profile.username}
