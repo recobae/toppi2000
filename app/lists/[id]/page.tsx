@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { ListItemsGrid, type ListItem } from "@/components/lists/list-items-grid";
+import { ShareListButton } from "@/components/lists/share-list-button";
 import { getWatchProviders, type WatchProviderGroups } from "@/lib/tmdb";
 import { getListSocialTitle } from "@/lib/lists";
 import { getListWithAccess } from "./get-list-access";
@@ -81,15 +82,17 @@ export default async function ListDetailPage({
     <main className="min-h-screen flex flex-col items-center">
       <div className="flex-1 w-full flex flex-col gap-6 max-w-5xl p-5">
         <div className="flex flex-col gap-1 pt-8">
-          <Link
-            href="/search"
-            className="text-sm text-muted-foreground hover:underline w-fit"
-          >
-            ← Zurück zur Suche
-          </Link>
-          <h1 className="font-medium text-xl">{list.title}</h1>
-          <p className="text-sm text-muted-foreground">
-            Liste von{" "}
+          <div className="flex items-center justify-between gap-2">
+            <Link
+              href="/search"
+              className="text-sm text-muted-foreground hover:underline w-fit"
+            >
+              ← Zurück zur Suche
+            </Link>
+            <ShareListButton shareTitle={`${list.title} von ${username}`} />
+          </div>
+          <h1 className="font-medium text-xl">
+            {list.title} von{" "}
             {profileUsername ? (
               <Link href={`/u/${profileUsername}`} className="hover:underline">
                 {username}
@@ -97,7 +100,7 @@ export default async function ListDetailPage({
             ) : (
               username
             )}
-          </p>
+          </h1>
         </div>
         <ListItemsGrid initialItems={itemsWithProviders} isOwner={isOwner} />
       </div>
