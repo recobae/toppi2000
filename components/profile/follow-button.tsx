@@ -29,7 +29,7 @@ export function FollowButton({
       if (!user) return;
 
       const { data } = await supabase
-        .from("follows")
+        .from("user_follows")
         .select("id")
         .eq("follower_id", user.id)
         .eq("followed_id", targetUserId)
@@ -54,7 +54,7 @@ export function FollowButton({
         } = await supabase.auth.getUser();
         if (user) {
           await supabase
-            .from("follows")
+            .from("user_follows")
             .delete()
             .eq("follower_id", user.id)
             .eq("followed_id", targetUserId);

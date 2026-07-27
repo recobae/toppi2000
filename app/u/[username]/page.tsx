@@ -78,7 +78,7 @@ export default async function ProfilePage({
   const likesCount = profile.total_likes_received ?? 0;
 
   const { count: followerCount } = await supabase
-    .from("follows")
+    .from("user_follows")
     .select("id", { count: "exact", head: true })
     .eq("followed_id", profile.id);
 
@@ -91,7 +91,7 @@ export default async function ProfilePage({
   let followingProfiles: FollowingProfile[] = [];
   if (isOwner) {
     const { data: followRows } = await supabase
-      .from("follows")
+      .from("user_follows")
       .select("followed_id")
       .eq("follower_id", profile.id);
     const followedIds = (followRows ?? []).map((row) => row.followed_id);

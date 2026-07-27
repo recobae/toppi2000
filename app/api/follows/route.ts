@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { error: insertError } = await supabase.from("follows").insert({
+  const { error: insertError } = await supabase.from("user_follows").insert({
     follower_id: user.id,
     followed_id: followedId,
   });
