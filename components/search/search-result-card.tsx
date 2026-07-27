@@ -104,6 +104,8 @@ export function SearchResultCard({
           posterUrl={posterUrl}
           year={result.year}
           details={result.movieDetails}
+          tmdbId={result.id}
+          mediaType={result.mediaType}
           onClose={() => setShowDetails(false)}
         />
       )}

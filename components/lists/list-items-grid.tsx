@@ -185,6 +185,8 @@ function OwnerListItemCard({
           posterUrl={item.image_url}
           year={item.metadata?.year ?? null}
           details={item.movieDetails}
+          tmdbId={Number(item.external_id)}
+          mediaType={item.metadata?.type ?? "movie"}
           onClose={() => setShowDetails(false)}
         />
       )}

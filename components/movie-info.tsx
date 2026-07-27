@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
-import { Star, User, X } from "lucide-react";
+import { Play, Star, User, X } from "lucide-react";
 import type { MovieDetails } from "@/lib/tmdb";
 
 const PROFILE_BASE_URL = "https://image.tmdb.org/t/p/w185";
@@ -47,14 +47,41 @@ export function MovieDetailModal({
   posterUrl,
   year,
   details,
+  tmdbId,
+  mediaType,
   onClose,
 }: {
   title: string;
   posterUrl: string | null;
   year: string | null;
   details: MovieDetails;
+  tmdbId: number;
+  mediaType: "movie" | "tv";
   onClose: () => void;
 }) {
+  const [trailerKey, setTrailerKey] = useState<string | null>(null);
+  const [trailerChecked, setTrailerChecked] = useState(false);
+  const [isLoadingTrailer, setIsLoadingTrailer] = useState(false);
+
+  const handleShowTrailer = async () => {
+    if (trailerChecked || isLoadingTrailer) return;
+    setIsLoadingTrailer(true);
+    try {
+      const response = await fetch(
+        `/api/trailer?id=${tmdbId}&mediaType=${mediaType}`,
+      );
+      if (response.ok) {
+        const data: { key: string | null } = await response.json();
+        setTrailerKey(data.key);
+      }
+    } catch {
+      // no trailer available; keep showing just the poster
+    } finally {
+      setTrailerChecked(true);
+      setIsLoadingTrailer(false);
+    }
+  };
+
   useEffect(() => {
     document.body.style.overflow = "hidden";
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -103,6 +130,15 @@ export function MovieDetailModal({
                 Kein Poster
               </div>
             )}
+            <button
+              type="button"
+              aria-label="Trailer abspielen"
+              disabled={isLoadingTrailer}
+              onClick={handleShowTrailer}
+              className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors disabled:opacity-50"
+            >
+              <Play className="size-3 fill-current" />
+            </button>
           </div>
           <div className="flex flex-col gap-1.5 min-w-0">
             <p className="text-sm font-semibold leading-tight">{title}</p>
@@ -117,6 +153,18 @@ export function MovieDetailModal({
             )}
           </div>
         </div>
+
+        {trailerKey && (
+          <div className="relative w-full aspect-video rounded-md overflow-hidden bg-muted">
+            <iframe
+              className="h-full w-full"
+              src={`https://www.youtube.com/embed/${trailerKey}`}
+              title="Trailer"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        )}
 
         <p className="text-sm text-muted-foreground">
           {details.overview || "Keine Beschreibung verfügbar."}

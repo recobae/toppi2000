@@ -10,6 +10,9 @@ import { type ListSummary } from "@/components/search/add-to-list-menu";
 import { SearchResultCard } from "@/components/search/search-result-card";
 import { PersonSelector } from "@/components/search/person-selector";
 import { BackToProfileLink } from "@/components/profile/back-to-profile-link";
+import { GuestSignupModal } from "@/components/guest-signup-modal";
+import { Button } from "@/components/ui/button";
+import { SORT_FILTERS, GENRE_FILTERS } from "@/lib/movie-genres";
 import type { PersonSummary, SearchResult } from "@/lib/tmdb";
 import type { PersonCreditResult } from "@/app/api/person-credits/route";
 
@@ -42,6 +45,25 @@ export default function SearchPage() {
   const [isLoadingLists, setIsLoadingLists] = useState(true);
   const [adding, setAdding] = useState<AddingState>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [showGuestModal, setShowGuestModal] = useState(false);
+
+  const [sortFilter, setSortFilter] = useState<string | null>(null);
+  const [genreFilter, setGenreFilter] = useState<string | null>(null);
+  const [browseItems, setBrowseItems] = useState<SearchResult[]>([]);
+  const [browsePage, setBrowsePage] = useState(1);
+  const [isMobile, setIsMobile] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 639px)").matches,
+  );
+  const [visibleCount, setVisibleCount] = useState(() =>
+    typeof window !== "undefined" &&
+    window.matchMedia("(max-width: 639px)").matches
+      ? 6
+      : 12,
+  );
+  const [isLoadingBrowse, setIsLoadingBrowse] = useState(true);
+  const hasActiveFilter = sortFilter !== null || genreFilter !== null;
 
   const showToast = useCallback((message: string) => {
     const id = Date.now() + Math.random();
@@ -50,6 +72,64 @@ export default function SearchPage() {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 3000);
   }, []);
+
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 639px)");
+    const update = (matches: boolean) => {
+      setIsMobile(matches);
+      setVisibleCount(matches ? 6 : 12);
+    };
+    const handleChange = (event: MediaQueryListEvent) => update(event.matches);
+    mql.addEventListener("change", handleChange);
+    return () => mql.removeEventListener("change", handleChange);
+  }, []);
+
+  const fetchBrowsePage = useCallback(
+    async (targetPage: number, replace: boolean) => {
+      if (replace) setIsLoadingBrowse(true);
+      try {
+        const params = new URLSearchParams({ page: String(targetPage) });
+        let url: string;
+        if (hasActiveFilter) {
+          params.set("sort", sortFilter ?? "popular");
+          if (genreFilter) params.set("genre", genreFilter);
+          url = `/api/discover-movies?${params.toString()}`;
+        } else {
+          url = `/api/trending?${params.toString()}`;
+        }
+
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("Browse request failed");
+        const data: { results: SearchResult[] } = await response.json();
+        setBrowseItems((prev) =>
+          replace ? data.results : [...prev, ...data.results],
+        );
+      } catch {
+        // leave whatever is already loaded in place
+      } finally {
+        if (replace) setIsLoadingBrowse(false);
+      }
+    },
+    [hasActiveFilter, sortFilter, genreFilter],
+  );
+
+  useEffect(() => {
+    setBrowsePage(1);
+    setVisibleCount(isMobile ? 6 : 12);
+    fetchBrowsePage(1, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortFilter, genreFilter]);
+
+  const handleLoadMoreBrowse = () => {
+    const step = isMobile ? 6 : 12;
+    const nextVisible = visibleCount + step;
+    if (nextVisible > browseItems.length) {
+      const nextPage = browsePage + 1;
+      setBrowsePage(nextPage);
+      fetchBrowsePage(nextPage, false);
+    }
+    setVisibleCount(nextVisible);
+  };
 
   useEffect(() => {
     const supabase = createClient();
@@ -235,6 +315,98 @@ export default function SearchPage() {
           </div>
         </div>
 
+        {!query.trim() && (
+          <div className="w-full flex flex-col gap-3">
+            <div className="w-full flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {SORT_FILTERS.map((option) => {
+                const isActive = sortFilter === option.key;
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() =>
+                      setSortFilter(isActive ? null : option.key)
+                    }
+                    className={`shrink-0 whitespace-nowrap h-7 px-3 rounded-full border text-xs font-medium transition-colors ${
+                      isActive
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-input hover:bg-accent"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+              <div className="w-px shrink-0 self-stretch bg-border" />
+              {GENRE_FILTERS.map((genre) => {
+                const isActive = genreFilter === genre.id;
+                return (
+                  <button
+                    key={genre.id}
+                    type="button"
+                    onClick={() =>
+                      setGenreFilter(isActive ? null : genre.id)
+                    }
+                    className={`shrink-0 whitespace-nowrap h-7 px-3 rounded-full border text-xs font-medium transition-colors ${
+                      isActive
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-input hover:bg-accent"
+                    }`}
+                  >
+                    {genre.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <h2 className="text-sm font-medium text-muted-foreground">
+              {hasActiveFilter ? "Filme entdecken" : "Trending diese Woche"}
+            </h2>
+
+            {isLoadingBrowse && browseItems.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Lädt…</p>
+            ) : browseItems.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Keine Titel gefunden.
+              </p>
+            ) : (
+              <>
+                <div className="w-full grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 sm:gap-4">
+                  {browseItems.slice(0, visibleCount).map((result) => {
+                    const resultKey = `${result.mediaType}-${result.id}`;
+                    return (
+                      <SearchResultCard
+                        key={resultKey}
+                        result={result}
+                        isLoggedIn={!!user}
+                        isLoadingLists={isLoadingLists}
+                        lists={lists}
+                        addingListId={
+                          adding?.resultKey === resultKey
+                            ? adding.listId
+                            : null
+                        }
+                        onAdd={(list) => handleAddToList(result, list)}
+                        onGuestClick={() => setShowGuestModal(true)}
+                      />
+                    );
+                  })}
+                </div>
+                <div className="w-full flex justify-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleLoadMoreBrowse}
+                    disabled={isLoadingBrowse}
+                  >
+                    {isLoadingBrowse ? "Lädt…" : "Mehr laden"}
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {isLoading && (
           <p className="w-full text-sm text-muted-foreground">Suche läuft…</p>
         )}
@@ -322,6 +494,14 @@ export default function SearchPage() {
           </div>
         )}
       </div>
+
+      {showGuestModal && (
+        <GuestSignupModal
+          message="Melde dich an, um Filme zu deinen eigenen Listen hinzuzufügen."
+          next="/search"
+          onClose={() => setShowGuestModal(false)}
+        />
+      )}
     </main>
   );
 }

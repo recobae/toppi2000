@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   motion,
   useMotionValue,
@@ -9,7 +9,7 @@ import {
   animate,
   type PanInfo,
 } from "framer-motion";
-import { Bookmark, Crown, Info, Play, X } from "lucide-react";
+import { Bookmark, Crown, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { WatchProviderBadges } from "@/components/watch-provider-badges";
 import { MovieMetaBadges, MovieDetailModal } from "@/components/movie-info";
@@ -21,56 +21,6 @@ const VELOCITY_THRESHOLD = 500;
 const EXIT_DELAY_MS = 220;
 
 type SwipeDirection = "left" | "right" | "up";
-
-function TrailerModal({
-  videoKey,
-  onClose,
-}: {
-  videoKey: string;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    document.body.style.overflow = "hidden";
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.body.style.overflow = "";
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-    >
-      <div
-        className="relative w-full max-w-2xl aspect-video"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <button
-          type="button"
-          aria-label="Schließen"
-          className="absolute -top-10 right-0 text-white/80 hover:text-white"
-          onClick={onClose}
-        >
-          <X className="size-6" />
-        </button>
-        <iframe
-          className="h-full w-full rounded-lg"
-          src={`https://www.youtube.com/embed/${videoKey}?autoplay=1`}
-          title="Trailer"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-        />
-      </div>
-    </div>
-  );
-}
 
 export function SwipeCard({
   result,
@@ -96,9 +46,6 @@ export function SwipeCard({
   const nopeOpacity = useTransform(x, [-120, -20], [1, 0]);
   const upOpacity = useTransform(y, [-120, -20], [1, 0]);
   const [isExiting, setIsExiting] = useState(false);
-  const [trailerKey, setTrailerKey] = useState<string | null>(null);
-  const [isLoadingTrailer, setIsLoadingTrailer] = useState(false);
-  const [showTrailer, setShowTrailer] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
   const exit = (direction: SwipeDirection, callback: () => void) => {
@@ -135,29 +82,6 @@ export function SwipeCard({
     } else {
       animate(x, 0, { type: "spring", stiffness: 300, damping: 30 });
       animate(y, 0, { type: "spring", stiffness: 300, damping: 30 });
-    }
-  };
-
-  const handlePlayTrailer = async () => {
-    if (trailerKey) {
-      setShowTrailer(true);
-      return;
-    }
-    setIsLoadingTrailer(true);
-    try {
-      const response = await fetch(
-        `/api/trailer?id=${result.id}&mediaType=${result.mediaType}`,
-      );
-      if (!response.ok) return;
-      const data: { key: string | null } = await response.json();
-      if (data.key) {
-        setTrailerKey(data.key);
-        setShowTrailer(true);
-      }
-    } catch {
-      // no trailer available; keep showing just the poster
-    } finally {
-      setIsLoadingTrailer(false);
     }
   };
 
@@ -199,27 +123,13 @@ export function SwipeCard({
 
             <button
               type="button"
-              aria-label="Trailer abspielen"
-              disabled={isLoadingTrailer}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.stopPropagation();
-                handlePlayTrailer();
-              }}
-              className="absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors disabled:opacity-50"
-            >
-              <Play className="size-5 fill-current" />
-            </button>
-
-            <button
-              type="button"
               aria-label="Details anzeigen"
               onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation();
                 setShowDetails(true);
               }}
-              className="absolute bottom-3 right-16 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
+              className="absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
             >
               <Info className="size-5" />
             </button>
@@ -277,13 +187,6 @@ export function SwipeCard({
         </div>
       </motion.div>
 
-      {showTrailer && trailerKey && (
-        <TrailerModal
-          videoKey={trailerKey}
-          onClose={() => setShowTrailer(false)}
-        />
-      )}
-
       {showDetails && (
         <MovieDetailModal
           title={result.title}
@@ -292,6 +195,8 @@ export function SwipeCard({
           }
           year={result.year}
           details={result.movieDetails}
+          tmdbId={result.id}
+          mediaType={result.mediaType}
           onClose={() => setShowDetails(false)}
         />
       )}
