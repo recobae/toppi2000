@@ -1,29 +1,62 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CircleUser } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { usePathname } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { ProfileAvatar } from "@/components/profile/profile-avatar";
 
-export async function SiteHeader() {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getUser();
-  const user = data?.user;
+export function SiteHeader() {
+  const pathname = usePathname();
+  const [username, setUsername] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
-  if (!user) return null;
+  useEffect(() => {
+    const supabase = createClient();
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("username")
-    .eq("id", user.id)
-    .single();
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
 
-  if (!profile?.username) return null;
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (!profile?.username) return;
+      setUsername(profile.username);
+
+      const { data: movieList } = await supabase
+        .from("lists")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("category", "movie")
+        .maybeSingle();
+      if (!movieList) return;
+
+      const { data: firstItem } = await supabase
+        .from("list_items")
+        .select("image_url")
+        .eq("list_id", movieList.id)
+        .order("position", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      setAvatarUrl(firstItem?.image_url ?? null);
+    })();
+  }, []);
+
+  if (!username) return null;
+  if (pathname === `/u/${username}`) return null;
 
   return (
     <Link
-      href={`/u/${profile.username}`}
+      href={`/u/${username}`}
       aria-label="Zu meinem Profil"
-      className="fixed top-4 right-4 z-50 flex h-10 w-10 items-center justify-center rounded-full border bg-background shadow-sm hover:bg-accent transition-colors"
+      className="fixed top-4 right-4 z-50 rounded-full shadow-sm hover:opacity-90 transition-opacity"
     >
-      <CircleUser className="size-5" />
+      <ProfileAvatar username={username} imageUrl={avatarUrl} size="sm" />
     </Link>
   );
 }
