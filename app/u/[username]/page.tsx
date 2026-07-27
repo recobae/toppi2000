@@ -2,12 +2,13 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Heart, Share2, Settings } from "lucide-react";
+import { Heart, Share2, Settings, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { ListTile } from "@/components/profile/list-tile";
 import { CreateListTile } from "@/components/profile/create-list-tile";
 import { GuestProfileCta } from "@/components/profile/guest-profile-cta";
+import { TrackLastVisitedProfile } from "@/components/profile/track-last-visited";
 
 const STANDARD_LABELS: Record<string, string> = {
   movie: "Lieblingsfilme",
@@ -144,6 +145,7 @@ export default async function ProfilePage({
 
   return (
     <main className="min-h-screen flex flex-col items-center">
+      <TrackLastVisitedProfile username={profile.username} />
       <div className="flex-1 w-full flex flex-col items-center gap-6 max-w-2xl p-5 pt-10">
         <Link
           href="/vorschlag"
@@ -180,18 +182,30 @@ export default async function ProfilePage({
           <span>{likesCount ?? 0} erhaltene Likes</span>
         </div>
 
-        {isOwner && (
-          <a
-            href={whatsappHref}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground text-sm font-medium px-4 py-2 hover:bg-primary/90 transition-colors min-h-11"
+        <div className="w-full flex items-center gap-3">
+          <Link
+            href="/search"
+            aria-label="Suche"
+            className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-input px-3 py-2 text-sm font-medium hover:bg-accent transition-colors min-h-11"
           >
-            <Share2 className="size-4" />
-            Profil teilen
-          </a>
-        )}
-        {isGuest && <GuestProfileCta variant="button" />}
+            <Search className="size-4" />
+            Suche
+          </Link>
+          <div className="flex-1 flex justify-center">
+            {isOwner && (
+              <a
+                href={whatsappHref}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground text-sm font-medium px-4 py-2 hover:bg-primary/90 transition-colors min-h-11"
+              >
+                <Share2 className="size-4" />
+                Profil teilen
+              </a>
+            )}
+            {isGuest && <GuestProfileCta variant="button" />}
+          </div>
+        </div>
 
         <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-3">
           {standardOrder.map(({ list, category }) =>
@@ -227,13 +241,6 @@ export default async function ProfilePage({
             {profile.username} hat noch keine öffentlichen Listen.
           </p>
         )}
-
-        <Link
-          href="/search"
-          className="text-xs text-muted-foreground hover:underline"
-        >
-          ← Zur Suche
-        </Link>
       </div>
     </main>
   );
