@@ -2,13 +2,14 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Heart, Share2, Settings, Search } from "lucide-react";
+import { Heart, Share2, Settings, Search, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { ListTile } from "@/components/profile/list-tile";
 import { CreateListTile } from "@/components/profile/create-list-tile";
 import { GuestProfileCta } from "@/components/profile/guest-profile-cta";
 import { TrackLastVisitedProfile } from "@/components/profile/track-last-visited";
+import { FollowButton } from "@/components/profile/follow-button";
 
 const STANDARD_LABELS: Record<string, string> = {
   movie: "Lieblingsfilme",
@@ -75,6 +76,66 @@ export default async function ProfilePage({
       : { data: [] };
 
   const likesCount = profile.total_likes_received ?? 0;
+
+  const { count: followerCount } = await supabase
+    .from("follows")
+    .select("id", { count: "exact", head: true })
+    .eq("followed_id", profile.id);
+
+  type FollowingProfile = {
+    id: string;
+    username: string;
+    avatarUrl: string | null;
+  };
+
+  let followingProfiles: FollowingProfile[] = [];
+  if (isOwner) {
+    const { data: followRows } = await supabase
+      .from("follows")
+      .select("followed_id")
+      .eq("follower_id", profile.id);
+    const followedIds = (followRows ?? []).map((row) => row.followed_id);
+
+    if (followedIds.length > 0) {
+      const [{ data: friendProfiles }, { data: friendMovieLists }] =
+        await Promise.all([
+          supabase.from("profiles").select("id, username").in("id", followedIds),
+          supabase
+            .from("lists")
+            .select("id, user_id")
+            .in("user_id", followedIds)
+            .eq("category", "movie"),
+        ]);
+
+      const ownerByListId = new Map(
+        (friendMovieLists ?? []).map((list) => [list.id, list.user_id]),
+      );
+      const movieListIds = (friendMovieLists ?? []).map((list) => list.id);
+
+      const { data: firstItems } =
+        movieListIds.length > 0
+          ? await supabase
+              .from("list_items")
+              .select("list_id, image_url")
+              .in("list_id", movieListIds)
+              .order("position", { ascending: true })
+          : { data: [] };
+
+      const avatarByUserId = new Map<string, string>();
+      for (const item of firstItems ?? []) {
+        const userId = ownerByListId.get(item.list_id);
+        if (userId && item.image_url && !avatarByUserId.has(userId)) {
+          avatarByUserId.set(userId, item.image_url);
+        }
+      }
+
+      followingProfiles = (friendProfiles ?? []).map((friend) => ({
+        id: friend.id,
+        username: friend.username,
+        avatarUrl: avatarByUserId.get(friend.id) ?? null,
+      }));
+    }
+  }
 
   const statsByList = new Map<
     string,
@@ -167,9 +228,15 @@ export default async function ProfilePage({
           Watchlist
         </p>
 
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Heart className="size-4 fill-current text-red-500" />
-          <span>{likesCount} erhaltene Likes</span>
+        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-1.5">
+            <Heart className="size-4 fill-current text-red-500" />
+            <span>{likesCount} erhaltene Likes</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Users className="size-4" />
+            <span>{followerCount ?? 0} Follower</span>
+          </div>
         </div>
 
         <div className="w-full flex items-center gap-3">
@@ -181,7 +248,7 @@ export default async function ProfilePage({
             <Search className="size-4" />
             Suche
           </Link>
-          <div className="flex-1 flex justify-center">
+          <div className="flex-1 flex flex-wrap items-center justify-center gap-2">
             {isOwner && (
               <a
                 href={whatsappHref}
@@ -193,7 +260,21 @@ export default async function ProfilePage({
                 Profil teilen
               </a>
             )}
-            {isGuest && <GuestProfileCta variant="button" />}
+            {!isOwner && !isGuest && (
+              <FollowButton
+                targetUserId={profile.id}
+                targetUsername={profile.username}
+              />
+            )}
+            {isGuest && (
+              <>
+                <GuestProfileCta variant="button" />
+                <FollowButton
+                  targetUserId={profile.id}
+                  targetUsername={profile.username}
+                />
+              </>
+            )}
           </div>
         </div>
 
@@ -230,6 +311,42 @@ export default async function ProfilePage({
           <p className="text-sm text-muted-foreground">
             {profile.username} hat noch keine öffentlichen Listen.
           </p>
+        )}
+
+        {isOwner && (
+          <div className="w-full flex flex-col gap-3">
+            <h2 className="text-sm font-medium text-muted-foreground">
+              Ich folge
+            </h2>
+            {followingProfiles.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Du folgst noch niemandem.
+              </p>
+            ) : (
+              <div className="w-full flex flex-wrap gap-4">
+                {followingProfiles.map((friend) => (
+                  <Link
+                    key={friend.id}
+                    href={`/u/${friend.username}`}
+                    className="flex flex-col items-center gap-1.5 w-16"
+                  >
+                    <span className="rounded-full p-[3px] bg-[conic-gradient(from_0deg,#f97316,#ec4899,#8b5cf6,#3b82f6,#10b981,#f97316)]">
+                      <span className="block rounded-full bg-background p-[3px]">
+                        <ProfileAvatar
+                          username={friend.username}
+                          imageUrl={friend.avatarUrl}
+                          size="sm"
+                        />
+                      </span>
+                    </span>
+                    <span className="text-[11px] text-center line-clamp-1 w-full">
+                      {friend.username}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </main>
