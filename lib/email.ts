@@ -9,6 +9,10 @@ export async function sendFollowerNotificationEmail({
   followerUsername: string;
   followerProfileUrl: string;
 }): Promise<boolean> {
+  // TODO: E-Mail-Versand pausiert, bis RESEND_API_KEY gesetzt ist.
+  // Ohne Key wird hier bewusst nichts verschickt (kein Fehler, kein Crash) —
+  // sobald der Key als Umgebungsvariable hinterlegt ist, greift der Versand
+  // automatisch wieder, ohne dass an dieser Stelle etwas geändert werden muss.
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return false;
 

@@ -49,33 +49,39 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Best-effort email notification; a delivery failure must not undo the
-  // follow relationship that was already created above.
-  try {
-    const [{ data: followerProfile }, { data: followedEmail }] =
-      await Promise.all([
-        supabase
-          .from("profiles")
-          .select("username")
-          .eq("id", user.id)
-          .maybeSingle(),
-        supabase.rpc("get_user_email", { target_user_id: followedId }),
-      ]);
+  // TODO: E-Mail-Versand pausiert, bis RESEND_API_KEY gesetzt ist.
+  // Der Follow-Eintrag oben ist zu diesem Zeitpunkt bereits erfolgreich
+  // angelegt; die Benachrichtigung ist rein optional (best effort) und ohne
+  // Key wird dieser gesamte Block übersprungen, statt unnötig Profil- und
+  // E-Mail-Lookups auszuführen. Sobald der Key gesetzt ist, greift der
+  // Versand automatisch wieder, ohne dass hier etwas geändert werden muss.
+  if (process.env.RESEND_API_KEY) {
+    try {
+      const [{ data: followerProfile }, { data: followedEmail }] =
+        await Promise.all([
+          supabase
+            .from("profiles")
+            .select("username")
+            .eq("id", user.id)
+            .maybeSingle(),
+          supabase.rpc("get_user_email", { target_user_id: followedId }),
+        ]);
 
-    if (followerProfile?.username && typeof followedEmail === "string") {
-      const headersList = await headers();
-      const host = headersList.get("host") ?? "localhost:3000";
-      const protocol = host.startsWith("localhost") ? "http" : "https";
-      const followerProfileUrl = `${protocol}://${host}/u/${followerProfile.username}`;
+      if (followerProfile?.username && typeof followedEmail === "string") {
+        const headersList = await headers();
+        const host = headersList.get("host") ?? "localhost:3000";
+        const protocol = host.startsWith("localhost") ? "http" : "https";
+        const followerProfileUrl = `${protocol}://${host}/u/${followerProfile.username}`;
 
-      await sendFollowerNotificationEmail({
-        to: followedEmail,
-        followerUsername: followerProfile.username,
-        followerProfileUrl,
-      });
+        await sendFollowerNotificationEmail({
+          to: followedEmail,
+          followerUsername: followerProfile.username,
+          followerProfileUrl,
+        });
+      }
+    } catch {
+      // ignore notification failures; the follow itself already succeeded
     }
-  } catch {
-    // ignore notification failures; the follow itself already succeeded
   }
 
   return NextResponse.json({ success: true });
