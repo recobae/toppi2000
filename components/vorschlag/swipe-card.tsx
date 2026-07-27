@@ -9,9 +9,10 @@ import {
   animate,
   type PanInfo,
 } from "framer-motion";
-import { Bookmark, Crown, Play, X } from "lucide-react";
+import { Bookmark, Crown, Info, Play, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { WatchProviderBadges } from "@/components/watch-provider-badges";
+import { MovieMetaBadges, MovieDetailModal } from "@/components/movie-info";
 import type { SearchResult } from "@/lib/tmdb";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w500";
@@ -98,6 +99,7 @@ export function SwipeCard({
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
   const [isLoadingTrailer, setIsLoadingTrailer] = useState(false);
   const [showTrailer, setShowTrailer] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   const exit = (direction: SwipeDirection, callback: () => void) => {
     setIsExiting(true);
@@ -209,6 +211,19 @@ export function SwipeCard({
               <Play className="size-5 fill-current" />
             </button>
 
+            <button
+              type="button"
+              aria-label="Details anzeigen"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                setShowDetails(true);
+              }}
+              className="absolute bottom-3 right-16 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
+            >
+              <Info className="size-5" />
+            </button>
+
             {isTop && (
               <>
                 <motion.div
@@ -239,10 +254,7 @@ export function SwipeCard({
               <p className="text-sm font-semibold leading-tight line-clamp-1">
                 {result.title}
               </p>
-              <p className="text-xs text-muted-foreground">
-                {result.year ?? "—"} ·{" "}
-                {result.mediaType === "movie" ? "Film" : "Serie"}
-              </p>
+              <MovieMetaBadges details={result.movieDetails} year={result.year} />
             </div>
             <WatchProviderBadges
               providers={result.watchProviders}
@@ -269,6 +281,18 @@ export function SwipeCard({
         <TrailerModal
           videoKey={trailerKey}
           onClose={() => setShowTrailer(false)}
+        />
+      )}
+
+      {showDetails && (
+        <MovieDetailModal
+          title={result.title}
+          posterUrl={
+            result.posterPath ? `${POSTER_BASE_URL}${result.posterPath}` : null
+          }
+          year={result.year}
+          details={result.movieDetails}
+          onClose={() => setShowDetails(false)}
         />
       )}
     </motion.div>

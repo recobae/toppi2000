@@ -4,7 +4,12 @@ import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { ListItemsGrid, type ListItem } from "@/components/lists/list-items-grid";
 import { ShareListButton } from "@/components/lists/share-list-button";
-import { getWatchProviders, type WatchProviderGroups } from "@/lib/tmdb";
+import {
+  getWatchProviders,
+  getMovieDetails,
+  type WatchProviderGroups,
+  type MovieDetails,
+} from "@/lib/tmdb";
 import { getListSocialTitle } from "@/lib/lists";
 import { getListWithAccess } from "./get-list-access";
 
@@ -12,6 +17,16 @@ const EMPTY_WATCH_PROVIDERS: WatchProviderGroups = {
   flatrate: [],
   rent: [],
   buy: [],
+};
+
+const EMPTY_MOVIE_DETAILS: MovieDetails = {
+  voteAverage: null,
+  genres: [],
+  runtimeMinutes: null,
+  overview: "",
+  cast: [],
+  director: null,
+  ageRating: null,
 };
 
 export async function generateMetadata({
@@ -69,12 +84,18 @@ export default async function ListDetailPage({
     (items ?? []).map(async (item) => {
       const mediaType = item.metadata?.type;
       const tmdbId = Number(item.external_id);
-      const watchProviders =
-        apiKey && mediaType && Number.isFinite(tmdbId)
-          ? await getWatchProviders(tmdbId, mediaType, apiKey)
-          : EMPTY_WATCH_PROVIDERS;
+      const canFetch = apiKey && mediaType && Number.isFinite(tmdbId);
 
-      return { ...item, watchProviders } as ListItem;
+      const [watchProviders, movieDetails] = await Promise.all([
+        canFetch
+          ? getWatchProviders(tmdbId, mediaType, apiKey)
+          : Promise.resolve(EMPTY_WATCH_PROVIDERS),
+        canFetch
+          ? getMovieDetails(tmdbId, mediaType, apiKey)
+          : Promise.resolve(EMPTY_MOVIE_DETAILS),
+      ]);
+
+      return { ...item, watchProviders, movieDetails } as ListItem;
     }),
   );
 

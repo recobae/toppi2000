@@ -103,6 +103,132 @@ export async function getTrailerKey(
   }
 }
 
+export type CastMember = {
+  name: string;
+  profilePath: string | null;
+};
+
+export type MovieDetails = {
+  voteAverage: number | null;
+  genres: string[];
+  runtimeMinutes: number | null;
+  overview: string;
+  cast: CastMember[];
+  director: string | null;
+  ageRating: string | null;
+};
+
+const EMPTY_MOVIE_DETAILS: MovieDetails = {
+  voteAverage: null,
+  genres: [],
+  runtimeMinutes: null,
+  overview: "",
+  cast: [],
+  director: null,
+  ageRating: null,
+};
+
+const AGE_RATING_REGIONS = ["DE", "US"];
+
+type TmdbGenre = { id: number; name: string };
+type TmdbCastMember = { name: string; profile_path: string | null };
+type TmdbCrewMember = { name: string; job: string };
+
+type TmdbMovieDetailsResponse = {
+  vote_average?: number;
+  runtime?: number | null;
+  episode_run_time?: number[];
+  overview?: string;
+  genres?: TmdbGenre[];
+  credits?: { cast?: TmdbCastMember[]; crew?: TmdbCrewMember[] };
+  created_by?: { name: string }[];
+  release_dates?: {
+    results?: {
+      iso_3166_1: string;
+      release_dates: { certification: string }[];
+    }[];
+  };
+  content_ratings?: {
+    results?: { iso_3166_1: string; rating: string }[];
+  };
+};
+
+export async function getMovieDetails(
+  tmdbId: number,
+  mediaType: "movie" | "tv",
+  apiKey: string,
+): Promise<MovieDetails> {
+  try {
+    const url = new URL(`${TMDB_BASE_URL}/${mediaType}/${tmdbId}`);
+    url.searchParams.set("api_key", apiKey);
+    url.searchParams.set(
+      "append_to_response",
+      mediaType === "movie" ? "credits,release_dates" : "credits,content_ratings",
+    );
+
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return EMPTY_MOVIE_DETAILS;
+
+    const data: TmdbMovieDetailsResponse = await response.json();
+
+    const genres = (data.genres ?? []).slice(0, 2).map((genre) => genre.name);
+
+    const runtimeMinutes =
+      mediaType === "movie"
+        ? (data.runtime ?? null)
+        : (data.episode_run_time?.[0] ?? null);
+
+    const cast = (data.credits?.cast ?? []).slice(0, 3).map((member) => ({
+      name: member.name,
+      profilePath: member.profile_path,
+    }));
+
+    const director =
+      (data.credits?.crew ?? []).find((member) => member.job === "Director")
+        ?.name ??
+      data.created_by?.[0]?.name ??
+      null;
+
+    let ageRating: string | null = null;
+    if (mediaType === "movie") {
+      const results = data.release_dates?.results ?? [];
+      for (const region of AGE_RATING_REGIONS) {
+        const match = results.find((entry) => entry.iso_3166_1 === region);
+        const certification = match?.release_dates.find(
+          (release) => release.certification,
+        )?.certification;
+        if (certification) {
+          ageRating = certification;
+          break;
+        }
+      }
+    } else {
+      const results = data.content_ratings?.results ?? [];
+      for (const region of AGE_RATING_REGIONS) {
+        const match = results.find((entry) => entry.iso_3166_1 === region);
+        if (match?.rating) {
+          ageRating = match.rating;
+          break;
+        }
+      }
+    }
+
+    return {
+      voteAverage: data.vote_average ?? null,
+      genres,
+      runtimeMinutes,
+      overview: data.overview ?? "",
+      cast,
+      director,
+      ageRating,
+    };
+  } catch {
+    return EMPTY_MOVIE_DETAILS;
+  }
+}
+
 export type SearchResult = {
   id: number;
   mediaType: "movie" | "tv";
@@ -111,6 +237,7 @@ export type SearchResult = {
   posterPath: string | null;
   overview: string;
   watchProviders: WatchProviderGroups;
+  movieDetails: MovieDetails;
 };
 
 export type PersonSummary = {
@@ -144,11 +271,10 @@ export async function buildSearchResults(
       const isMovie = item.media_type === "movie";
       const date = isMovie ? item.release_date : item.first_air_date;
       const mediaType = item.media_type as "movie" | "tv";
-      const watchProviders = await getWatchProviders(
-        item.id,
-        mediaType,
-        apiKey,
-      );
+      const [watchProviders, movieDetails] = await Promise.all([
+        getWatchProviders(item.id, mediaType, apiKey),
+        getMovieDetails(item.id, mediaType, apiKey),
+      ]);
       return {
         id: item.id,
         mediaType,
@@ -157,6 +283,7 @@ export async function buildSearchResults(
         posterPath: item.poster_path,
         overview: item.overview ?? "",
         watchProviders,
+        movieDetails,
       };
     }),
   );

@@ -1,6 +1,10 @@
+"use client";
+
+import { useState } from "react";
 import Image from "next/image";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { WatchProviderBadges } from "@/components/watch-provider-badges";
+import { MovieMetaBadges, MovieDetailModal } from "@/components/movie-info";
 import {
   AddToListMenu,
   filterListsForMediaType,
@@ -29,12 +33,22 @@ export function SearchResultCard({
   jobTags?: string[];
   preselectedListId?: string | null;
 }) {
+  const [showDetails, setShowDetails] = useState(false);
+  const posterUrl = result.posterPath
+    ? `${POSTER_BASE_URL}${result.posterPath}`
+    : null;
+
   return (
     <Card className="overflow-hidden flex flex-col">
-      <div className="relative aspect-[2/3] w-full bg-muted">
-        {result.posterPath ? (
+      <button
+        type="button"
+        onClick={() => setShowDetails(true)}
+        className="relative aspect-[2/3] w-full bg-muted text-left"
+        aria-label={`Details zu ${result.title} anzeigen`}
+      >
+        {posterUrl ? (
           <Image
-            src={`${POSTER_BASE_URL}${result.posterPath}`}
+            src={posterUrl}
             alt={result.title}
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 20vw"
@@ -45,15 +59,13 @@ export function SearchResultCard({
             Kein Poster
           </div>
         )}
-      </div>
+      </button>
       <CardContent className="p-3 flex-1 flex flex-col gap-2">
         <div>
           <p className="text-sm font-medium leading-tight line-clamp-2">
             {result.title}
           </p>
-          <p className="text-xs text-muted-foreground">
-            {result.year ?? "—"}
-          </p>
+          <MovieMetaBadges details={result.movieDetails} year={result.year} />
           {jobTags && jobTags.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1">
               {jobTags.map((job) => (
@@ -82,6 +94,16 @@ export function SearchResultCard({
           preselectedListId={preselectedListId}
         />
       </CardFooter>
+
+      {showDetails && (
+        <MovieDetailModal
+          title={result.title}
+          posterUrl={posterUrl}
+          year={result.year}
+          details={result.movieDetails}
+          onClose={() => setShowDetails(false)}
+        />
+      )}
     </Card>
   );
 }

@@ -27,7 +27,8 @@ import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { WatchProviderBadges } from "@/components/watch-provider-badges";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
-import type { WatchProviderGroups } from "@/lib/tmdb";
+import { MovieMetaBadges, MovieDetailModal } from "@/components/movie-info";
+import type { WatchProviderGroups, MovieDetails } from "@/lib/tmdb";
 
 export type ListItem = {
   id: string;
@@ -38,6 +39,7 @@ export type ListItem = {
   position: number;
   metadata: { year?: string | null; type?: "movie" | "tv" } | null;
   watchProviders: WatchProviderGroups;
+  movieDetails: MovieDetails;
 };
 
 type VoteState = {
@@ -89,6 +91,7 @@ function ListItemCard({
     transform: CSS.Transform.toString(sortable.transform),
     transition: sortable.transition,
   };
+  const [showDetails, setShowDetails] = useState(false);
 
   return (
     <div
@@ -109,28 +112,36 @@ function ListItemCard({
               <GripVertical className="size-5" />
             </button>
           )}
-          {item.image_url ? (
-            <Image
-              src={item.image_url}
-              alt={item.title}
-              fill
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 20vw"
-              className="object-cover"
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-xs text-muted-foreground p-2 text-center">
-              Kein Poster
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={() => setShowDetails(true)}
+            aria-label={`Details zu ${item.title} anzeigen`}
+            className="absolute inset-0"
+          >
+            {item.image_url ? (
+              <Image
+                src={item.image_url}
+                alt={item.title}
+                fill
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 20vw"
+                className="object-cover"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-xs text-muted-foreground p-2 text-center">
+                Kein Poster
+              </div>
+            )}
+          </button>
         </div>
         <CardContent className="p-3 flex-1 flex flex-col gap-2">
           <div>
             <p className="text-sm font-medium leading-tight line-clamp-2">
               {item.title}
             </p>
-            <p className="text-xs text-muted-foreground">
-              {item.metadata?.year ?? "—"}
-            </p>
+            <MovieMetaBadges
+              details={item.movieDetails}
+              year={item.metadata?.year ?? null}
+            />
           </div>
           <WatchProviderBadges
             providers={item.watchProviders}
@@ -191,6 +202,16 @@ function ListItemCard({
           )}
         </CardContent>
       </Card>
+
+      {showDetails && (
+        <MovieDetailModal
+          title={item.title}
+          posterUrl={item.image_url}
+          year={item.metadata?.year ?? null}
+          details={item.movieDetails}
+          onClose={() => setShowDetails(false)}
+        />
+      )}
     </div>
   );
 }
