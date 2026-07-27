@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { X } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -10,7 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { type ListSummary } from "@/components/search/add-to-list-menu";
 import { SearchResultCard } from "@/components/search/search-result-card";
 import { PersonSelector } from "@/components/search/person-selector";
-import { LAST_VISITED_PROFILE_KEY } from "@/components/profile/track-last-visited";
+import { BackToProfileLink } from "@/components/profile/back-to-profile-link";
 import type { PersonSummary, SearchResult } from "@/lib/tmdb";
 import type { PersonCreditResult } from "@/app/api/person-credits/route";
 
@@ -43,7 +42,6 @@ export default function SearchPage() {
   const [isLoadingLists, setIsLoadingLists] = useState(true);
   const [adding, setAdding] = useState<AddingState>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [profileBackHref, setProfileBackHref] = useState<string | null>(null);
 
   const showToast = useCallback((message: string) => {
     const id = Date.now() + Math.random();
@@ -61,26 +59,6 @@ export default function SearchPage() {
         data: { user: currentUser },
       } = await supabase.auth.getUser();
       setUser(currentUser);
-
-      let lastVisitedUsername: string | null = null;
-      try {
-        lastVisitedUsername = localStorage.getItem(LAST_VISITED_PROFILE_KEY);
-      } catch {
-        // localStorage unavailable; fall back to the own-profile lookup below
-      }
-
-      if (lastVisitedUsername) {
-        setProfileBackHref(`/u/${lastVisitedUsername}`);
-      } else if (currentUser) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("username")
-          .eq("id", currentUser.id)
-          .maybeSingle();
-        if (profile?.username) {
-          setProfileBackHref(`/u/${profile.username}`);
-        }
-      }
 
       if (!currentUser) {
         setIsLoadingLists(false);
@@ -229,14 +207,7 @@ export default function SearchPage() {
 
       <div className="flex-1 w-full flex flex-col gap-6 items-center max-w-5xl p-5">
         <div className="w-full flex flex-col gap-2 pt-8">
-          {profileBackHref && (
-            <Link
-              href={profileBackHref}
-              className="text-sm text-muted-foreground hover:underline w-fit"
-            >
-              ← Zum Profil
-            </Link>
-          )}
+          <BackToProfileLink />
           <h1 className="font-medium text-xl">Filme & Serien durchsuchen</h1>
           <div className="relative w-full">
             <Input

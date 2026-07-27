@@ -6,6 +6,7 @@ import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { SwipeCard } from "@/components/vorschlag/swipe-card";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
+import { BackToProfileLink } from "@/components/profile/back-to-profile-link";
 import type { SearchResult } from "@/lib/tmdb";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
@@ -322,7 +323,10 @@ export default function VorschlagPage() {
       </div>
 
       <div className="flex-1 w-full flex flex-col items-center gap-4 max-w-md p-5 pt-8">
-        <h1 className="font-medium text-xl">Inspiration</h1>
+        <div className="w-full flex flex-col gap-2">
+          <BackToProfileLink />
+          <h1 className="font-medium text-xl">Inspiration</h1>
+        </div>
 
         <div className="w-full flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {MOOD_OPTIONS.map((option) => {

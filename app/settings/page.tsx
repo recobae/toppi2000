@@ -17,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { BackToProfileLink } from "@/components/profile/back-to-profile-link";
 
 const UNIQUE_VIOLATION_CODE = "23505";
 
@@ -160,7 +161,10 @@ export default function SettingsPage() {
   return (
     <main className="min-h-screen flex flex-col items-center">
       <div className="flex-1 w-full flex flex-col gap-6 max-w-lg p-5 pt-10">
-        <h1 className="font-medium text-xl">Einstellungen</h1>
+        <div className="w-full flex flex-col gap-2">
+          <BackToProfileLink />
+          <h1 className="font-medium text-xl">Einstellungen</h1>
+        </div>
 
         <Card>
           <CardHeader>
