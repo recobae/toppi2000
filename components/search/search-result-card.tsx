@@ -23,6 +23,7 @@ export function SearchResultCard({
   onAdd,
   jobTags,
   preselectedListId,
+  onGuestClick,
 }: {
   result: SearchResult;
   isLoggedIn: boolean;
@@ -32,6 +33,7 @@ export function SearchResultCard({
   onAdd: (list: ListSummary) => void;
   jobTags?: string[];
   preselectedListId?: string | null;
+  onGuestClick?: () => void;
 }) {
   const [showDetails, setShowDetails] = useState(false);
   const posterUrl = result.posterPath
@@ -92,6 +94,7 @@ export function SearchResultCard({
           addingListId={addingListId}
           onAdd={onAdd}
           preselectedListId={preselectedListId}
+          onGuestClick={onGuestClick}
         />
       </CardFooter>
 

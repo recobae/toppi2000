@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { X, ThumbsUp, ThumbsDown, GripVertical, Plus } from "lucide-react";
+import { X, GripVertical, Plus } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import {
   DndContext,
@@ -28,7 +28,11 @@ import { createClient } from "@/lib/supabase/client";
 import { WatchProviderBadges } from "@/components/watch-provider-badges";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { MovieMetaBadges, MovieDetailModal } from "@/components/movie-info";
-import type { WatchProviderGroups, MovieDetails } from "@/lib/tmdb";
+import { SearchResultCard } from "@/components/search/search-result-card";
+import { type ListSummary } from "@/components/search/add-to-list-menu";
+import type { WatchProviderGroups, MovieDetails, SearchResult } from "@/lib/tmdb";
+
+const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
 
 export type ListItem = {
   id: string;
@@ -42,51 +46,64 @@ export type ListItem = {
   movieDetails: MovieDetails;
 };
 
-type VoteState = {
-  up: number;
-  down: number;
-  myVoteId: string | null;
-  myVote: boolean | null;
-};
-
 type OthersVoteCount = {
   up: number;
   down: number;
 };
 
-const EMPTY_VOTE_STATE: VoteState = {
-  up: 0,
-  down: 0,
-  myVoteId: null,
-  myVote: null,
-};
-
 const EMPTY_OTHERS_COUNT: OthersVoteCount = { up: 0, down: 0 };
 
-function ListItemCard({
+type Toast = { id: number; message: string };
+type AddingState = { resultKey: string; listId: string } | null;
+
+function itemToSearchResult(item: ListItem): SearchResult {
+  const mediaType = item.metadata?.type ?? "movie";
+  const posterPath = item.image_url?.startsWith(POSTER_BASE_URL)
+    ? item.image_url.slice(POSTER_BASE_URL.length)
+    : null;
+
+  return {
+    id: Number(item.external_id),
+    mediaType,
+    title: item.title,
+    year: item.metadata?.year ?? null,
+    posterPath,
+    overview: item.movieDetails.overview,
+    watchProviders: item.watchProviders,
+    movieDetails: item.movieDetails,
+  };
+}
+
+function ToastStack({ toasts }: { toasts: Toast[] }) {
+  if (toasts.length === 0) return null;
+  return (
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+      {toasts.map((toast) => (
+        <div
+          key={toast.id}
+          className="rounded-md bg-foreground text-background px-4 py-2 text-sm shadow-lg"
+        >
+          {toast.message}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OwnerListItemCard({
   item,
-  isOwner,
-  isDragOverlay,
-  voteState,
   othersVoteCount,
-  isLoggedIn,
-  onVote,
-  onRequireLogin,
   onRemove,
   isRemoving,
+  isDragOverlay,
 }: {
   item: ListItem;
-  isOwner: boolean;
-  isDragOverlay?: boolean;
-  voteState: VoteState;
   othersVoteCount: OthersVoteCount;
-  isLoggedIn: boolean;
-  onVote: (itemId: string, voteValue: boolean) => void;
-  onRequireLogin: () => void;
   onRemove: (itemId: string) => void;
   isRemoving: boolean;
+  isDragOverlay?: boolean;
 }) {
-  const sortable = useSortable({ id: item.id, disabled: !isOwner });
+  const sortable = useSortable({ id: item.id });
   const style = {
     transform: CSS.Transform.toString(sortable.transform),
     transition: sortable.transition,
@@ -101,17 +118,15 @@ function ListItemCard({
     >
       <Card className="overflow-hidden flex flex-col">
         <div className="relative aspect-[2/3] w-full bg-muted">
-          {isOwner && (
-            <button
-              type="button"
-              aria-label="Ziehen zum Sortieren"
-              className="absolute top-2 left-2 z-10 flex h-11 w-11 items-center justify-center rounded-md bg-background/80 backdrop-blur touch-none cursor-grab active:cursor-grabbing"
-              {...sortable.attributes}
-              {...sortable.listeners}
-            >
-              <GripVertical className="size-5" />
-            </button>
-          )}
+          <button
+            type="button"
+            aria-label="Ziehen zum Sortieren"
+            className="absolute top-2 left-2 z-10 flex h-11 w-11 items-center justify-center rounded-md bg-background/80 backdrop-blur touch-none cursor-grab active:cursor-grabbing"
+            {...sortable.attributes}
+            {...sortable.listeners}
+          >
+            <GripVertical className="size-5" />
+          </button>
           <button
             type="button"
             onClick={() => setShowDetails(true)}
@@ -147,59 +162,20 @@ function ListItemCard({
             providers={item.watchProviders}
             title={item.title}
           />
-          {isOwner ? (
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span>👍 {othersVoteCount.up}</span>
-              <span>👎 {othersVoteCount.down}</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1">
-                <Button
-                  variant={voteState.myVote === true ? "default" : "outline"}
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() =>
-                    isLoggedIn ? onVote(item.id, true) : onRequireLogin()
-                  }
-                  aria-label="Daumen hoch"
-                >
-                  <ThumbsUp className="size-3.5" />
-                </Button>
-                <span className="text-xs text-muted-foreground w-4 text-center">
-                  {voteState.up}
-                </span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant={voteState.myVote === false ? "default" : "outline"}
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() =>
-                    isLoggedIn ? onVote(item.id, false) : onRequireLogin()
-                  }
-                  aria-label="Daumen runter"
-                >
-                  <ThumbsDown className="size-3.5" />
-                </Button>
-                <span className="text-xs text-muted-foreground w-4 text-center">
-                  {voteState.down}
-                </span>
-              </div>
-            </div>
-          )}
-          {isOwner && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-auto"
-              disabled={isRemoving}
-              onClick={() => onRemove(item.id)}
-            >
-              <X />
-              {isRemoving ? "Wird entfernt…" : "Entfernen"}
-            </Button>
-          )}
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span>👍 {othersVoteCount.up}</span>
+            <span>👎 {othersVoteCount.down}</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-auto"
+            disabled={isRemoving}
+            onClick={() => onRemove(item.id)}
+          >
+            <X />
+            {isRemoving ? "Wird entfernt…" : "Entfernen"}
+          </Button>
         </CardContent>
       </Card>
 
@@ -228,25 +204,18 @@ function AddItemTile({ listId }: { listId: string }) {
   );
 }
 
-export function ListItemsGrid({
+function OwnerListGrid({
   initialItems,
-  isOwner,
   listId,
-  ownerUsername,
 }: {
   initialItems: ListItem[];
-  isOwner: boolean;
   listId: string;
-  ownerUsername: string;
 }) {
   const [items, setItems] = useState(initialItems);
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [user, setUser] = useState<User | null>(null);
-  const [votes, setVotes] = useState<Record<string, VoteState>>({});
   const [othersVotes, setOthersVotes] = useState<
     Record<string, OthersVoteCount>
   >({});
-  const [showGuestPrompt, setShowGuestPrompt] = useState(false);
   const router = useRouter();
 
   const sensors = useSensors(
@@ -257,15 +226,13 @@ export function ListItemsGrid({
   );
 
   useEffect(() => {
-    const supabase = createClient();
+    if (items.length === 0) return;
 
+    const supabase = createClient();
     (async () => {
       const {
         data: { user: currentUser },
       } = await supabase.auth.getUser();
-      setUser(currentUser);
-
-      if (items.length === 0) return;
 
       const itemIds = items.map((item) => item.id);
       const { data, error } = await supabase
@@ -275,29 +242,17 @@ export function ListItemsGrid({
 
       if (error || !data) return;
 
-      const next: Record<string, VoteState> = {};
       const nextOthers: Record<string, OthersVoteCount> = {};
       for (const item of items) {
-        next[item.id] = { ...EMPTY_VOTE_STATE };
         nextOthers[item.id] = { ...EMPTY_OTHERS_COUNT };
       }
       for (const row of data) {
-        const state = next[row.list_item_id];
-        if (!state) continue;
-        if (row.vote) state.up += 1;
-        else state.down += 1;
-        if (currentUser && row.user_id === currentUser.id) {
-          state.myVoteId = row.id;
-          state.myVote = row.vote;
-        } else {
-          const othersState = nextOthers[row.list_item_id];
-          if (othersState) {
-            if (row.vote) othersState.up += 1;
-            else othersState.down += 1;
-          }
-        }
+        if (currentUser && row.user_id === currentUser.id) continue;
+        const othersState = nextOthers[row.list_item_id];
+        if (!othersState) continue;
+        if (row.vote) othersState.up += 1;
+        else othersState.down += 1;
       }
-      setVotes(next);
       setOthersVotes(nextOthers);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -319,52 +274,6 @@ export function ListItemsGrid({
     setRemovingId(null);
   };
 
-  const handleVote = async (itemId: string, voteValue: boolean) => {
-    if (!user) {
-      setShowGuestPrompt(true);
-      return;
-    }
-    const supabase = createClient();
-    const current = votes[itemId];
-
-    try {
-      if (current?.myVoteId) {
-        const { error } = await supabase
-          .from("item_votes")
-          .update({ vote: voteValue })
-          .eq("id", current.myVoteId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("item_votes").insert({
-          list_item_id: itemId,
-          user_id: user.id,
-          vote: voteValue,
-        });
-        if (error) throw error;
-      }
-
-      const { data, error: refetchError } = await supabase
-        .from("item_votes")
-        .select("id, user_id, vote")
-        .eq("list_item_id", itemId);
-
-      if (!refetchError && data) {
-        const next: VoteState = { ...EMPTY_VOTE_STATE };
-        for (const row of data) {
-          if (row.vote) next.up += 1;
-          else next.down += 1;
-          if (row.user_id === user.id) {
-            next.myVoteId = row.id;
-            next.myVote = row.vote;
-          }
-        }
-        setVotes((prev) => ({ ...prev, [itemId]: next }));
-      }
-    } catch {
-      // vote failed, leave state unchanged
-    }
-  };
-
   const persistOrder = async (reordered: ListItem[]) => {
     const supabase = createClient();
     try {
@@ -384,7 +293,7 @@ export function ListItemsGrid({
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    if (!isOwner || !over || active.id === over.id) return;
+    if (!over || active.id === over.id) return;
 
     setItems((prev) => {
       const oldIndex = prev.findIndex((item) => item.id === active.id);
@@ -396,14 +305,6 @@ export function ListItemsGrid({
       return reordered;
     });
   };
-
-  if (items.length === 0 && !isOwner) {
-    return (
-      <p className="w-full text-sm text-muted-foreground">
-        Diese Liste enthält noch keine Einträge.
-      </p>
-    );
-  }
 
   return (
     <div className="w-full flex flex-col gap-4">
@@ -421,30 +322,167 @@ export function ListItemsGrid({
         <SortableContext items={items.map((item) => item.id)} strategy={rectSortingStrategy}>
           <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {items.map((item) => (
-              <ListItemCard
+              <OwnerListItemCard
                 key={item.id}
                 item={item}
-                isOwner={isOwner}
-                voteState={votes[item.id] ?? EMPTY_VOTE_STATE}
                 othersVoteCount={othersVotes[item.id] ?? EMPTY_OTHERS_COUNT}
-                isLoggedIn={!!user}
-                onVote={handleVote}
-                onRequireLogin={() => setShowGuestPrompt(true)}
                 onRemove={handleRemove}
                 isRemoving={removingId === item.id}
               />
             ))}
-            {isOwner && <AddItemTile listId={listId} />}
+            <AddItemTile listId={listId} />
           </div>
         </SortableContext>
       </DndContext>
+    </div>
+  );
+}
+
+function VisitorListGrid({
+  initialItems,
+  listId,
+  ownerUsername,
+}: {
+  initialItems: ListItem[];
+  listId: string;
+  ownerUsername: string;
+}) {
+  const items = initialItems;
+  const [user, setUser] = useState<User | null>(null);
+  const [myLists, setMyLists] = useState<ListSummary[]>([]);
+  const [isLoadingLists, setIsLoadingLists] = useState(true);
+  const [adding, setAdding] = useState<AddingState>(null);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [showGuestPrompt, setShowGuestPrompt] = useState(false);
+
+  const showToast = useCallback((message: string) => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, message }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 3000);
+  }, []);
+
+  useEffect(() => {
+    const supabase = createClient();
+
+    (async () => {
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser();
+      setUser(currentUser);
+
+      if (!currentUser) {
+        setIsLoadingLists(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("lists")
+        .select("id, title, category")
+        .eq("user_id", currentUser.id)
+        .order("created_at", { ascending: true });
+
+      if (!error && data) setMyLists(data);
+      setIsLoadingLists(false);
+    })();
+  }, []);
+
+  const handleAddToList = useCallback(
+    async (item: ListItem, targetList: ListSummary) => {
+      const resultKey = `${item.metadata?.type ?? "movie"}-${item.external_id}`;
+      setAdding({ resultKey, listId: targetList.id });
+
+      try {
+        const response = await fetch("/api/list-items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            listId: targetList.id,
+            externalId: item.external_id,
+            title: item.title,
+            imageUrl: item.image_url,
+            mediaType: item.metadata?.type ?? "movie",
+            year: item.metadata?.year ?? null,
+          }),
+        });
+        const data: { error?: string } = await response.json();
+
+        if (!response.ok) {
+          showToast(data.error ?? "Hinzufügen fehlgeschlagen");
+          return;
+        }
+        showToast(`Zu ${targetList.title} hinzugefügt`);
+      } catch {
+        showToast("Hinzufügen fehlgeschlagen");
+      } finally {
+        setAdding(null);
+      }
+    },
+    [showToast],
+  );
+
+  if (items.length === 0) {
+    return (
+      <p className="w-full text-sm text-muted-foreground">
+        Diese Liste enthält noch keine Einträge.
+      </p>
+    );
+  }
+
+  return (
+    <div className="w-full flex flex-col gap-4">
+      <ToastStack toasts={toasts} />
+      <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        {items.map((item) => {
+          const result = itemToSearchResult(item);
+          const resultKey = `${result.mediaType}-${result.id}`;
+          return (
+            <SearchResultCard
+              key={item.id}
+              result={result}
+              isLoggedIn={!!user}
+              isLoadingLists={isLoadingLists}
+              lists={myLists}
+              addingListId={adding?.resultKey === resultKey ? adding.listId : null}
+              onAdd={(list) => handleAddToList(item, list)}
+              onGuestClick={() => setShowGuestPrompt(true)}
+            />
+          );
+        })}
+      </div>
+
       {showGuestPrompt && (
         <GuestSignupModal
-          message={`Melde dich an, um ${ownerUsername}s Liste zu bewerten, eigene Listen zu erstellen, direkt zu sehen wo Filme gerade laufen, und Film-Inspirationen für heute Abend zu entdecken.`}
+          message={`Melde dich an, um Filme zu deinen eigenen Listen hinzuzufügen, ${ownerUsername}s Liste zu entdecken, direkt zu sehen wo Filme gerade laufen, und Film-Inspirationen für heute Abend zu entdecken.`}
           next={`/lists/${listId}`}
           onClose={() => setShowGuestPrompt(false)}
         />
       )}
     </div>
+  );
+}
+
+export function ListItemsGrid({
+  initialItems,
+  isOwner,
+  listId,
+  ownerUsername,
+}: {
+  initialItems: ListItem[];
+  isOwner: boolean;
+  listId: string;
+  ownerUsername: string;
+}) {
+  if (isOwner) {
+    return <OwnerListGrid initialItems={initialItems} listId={listId} />;
+  }
+
+  return (
+    <VisitorListGrid
+      initialItems={initialItems}
+      listId={listId}
+      ownerUsername={ownerUsername}
+    />
   );
 }

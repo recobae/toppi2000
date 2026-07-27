@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { ListPlus, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ export function AddToListMenu({
   addingListId,
   onAdd,
   preselectedListId,
+  onGuestClick,
 }: {
   isLoggedIn: boolean;
   isLoadingLists: boolean;
@@ -41,7 +43,10 @@ export function AddToListMenu({
   addingListId: string | null;
   onAdd: (list: ListSummary) => void;
   preselectedListId?: string | null;
+  onGuestClick?: () => void;
 }) {
+  const [open, setOpen] = useState(false);
+
   const sortedLists = preselectedListId
     ? [...lists].sort((a, b) => {
         if (a.id === preselectedListId) return -1;
@@ -51,7 +56,16 @@ export function AddToListMenu({
     : lists;
 
   return (
-    <DropdownMenu>
+    <DropdownMenu
+      open={open}
+      onOpenChange={(next) => {
+        if (next && !isLoggedIn && onGuestClick) {
+          onGuestClick();
+          return;
+        }
+        setOpen(next);
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <Button variant="secondary" size="sm" className="w-full">
           <ListPlus />
