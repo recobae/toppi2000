@@ -42,7 +42,7 @@ export default async function ProfilePage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, username")
+    .select("id, username, total_likes_received")
     .eq("username", username)
     .single();
 
@@ -74,17 +74,7 @@ export default async function ProfilePage({
           .order("position", { ascending: true })
       : { data: [] };
 
-  const itemIds = (items ?? []).map((item) => item.id);
-
-  const { count: likesCount } =
-    itemIds.length > 0
-      ? await supabase
-          .from("item_votes")
-          .select("id", { count: "exact", head: true })
-          .eq("vote", true)
-          .neq("user_id", profile.id)
-          .in("list_item_id", itemIds)
-      : { count: 0 };
+  const likesCount = profile.total_likes_received ?? 0;
 
   const statsByList = new Map<
     string,
@@ -179,7 +169,7 @@ export default async function ProfilePage({
 
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Heart className="size-4 fill-current text-red-500" />
-          <span>{likesCount ?? 0} erhaltene Likes</span>
+          <span>{likesCount} erhaltene Likes</span>
         </div>
 
         <div className="w-full flex items-center gap-3">
