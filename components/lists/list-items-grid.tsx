@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { X, GripVertical, Plus } from "lucide-react";
+import { ThumbsDown, ThumbsUp, GripVertical, Plus, X } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import {
   DndContext,
@@ -29,49 +28,33 @@ import { WatchProviderBadges } from "@/components/watch-provider-badges";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { MovieMetaBadges, MovieDetailModal } from "@/components/movie-info";
 import { SearchResultCard } from "@/components/search/search-result-card";
-import { type ListSummary } from "@/components/search/add-to-list-menu";
-import {
-  useSocialProof,
-  getSocialProofEntry,
-} from "@/lib/hooks/use-social-proof";
+import { removeFromCategory } from "@/lib/saved-items";
+import { CATEGORY_LABELS, type SavedCategory } from "@/lib/categories";
+import { useSavedState, getSavedState } from "@/lib/hooks/use-saved-state";
+import { useSocialProof, getSocialProofBreakdown } from "@/lib/hooks/use-social-proof";
+import { getItemRatings, rateItem } from "@/lib/item-ratings";
 import type { WatchProviderGroups, MovieDetails, SearchResult } from "@/lib/tmdb";
 
-const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
-
-export type ListItem = {
+export type CategoryListItem = {
   id: string;
-  external_id: number | string;
+  itemId: number;
+  mediaType: "movie" | "tv";
   title: string;
-  image_url: string | null;
-  list_id: string;
-  position: number;
-  metadata: { year?: string | null; type?: "movie" | "tv" } | null;
+  imageUrl: string | null;
+  year: string | null;
   watchProviders: WatchProviderGroups;
   movieDetails: MovieDetails;
 };
 
-type OthersVoteCount = {
-  up: number;
-  down: number;
-};
-
-const EMPTY_OTHERS_COUNT: OthersVoteCount = { up: 0, down: 0 };
-
 type Toast = { id: number; message: string };
-type AddingState = { resultKey: string; listId: string } | null;
 
-function itemToSearchResult(item: ListItem): SearchResult {
-  const mediaType = item.metadata?.type ?? "movie";
-  const posterPath = item.image_url?.startsWith(POSTER_BASE_URL)
-    ? item.image_url.slice(POSTER_BASE_URL.length)
-    : null;
-
+function itemToSearchResult(item: CategoryListItem): SearchResult {
   return {
-    id: Number(item.external_id),
-    mediaType,
+    id: item.itemId,
+    mediaType: item.mediaType,
     title: item.title,
-    year: item.metadata?.year ?? null,
-    posterPath,
+    year: item.year,
+    posterPath: null,
     overview: item.movieDetails.overview,
     watchProviders: item.watchProviders,
     movieDetails: item.movieDetails,
@@ -96,16 +79,12 @@ function ToastStack({ toasts }: { toasts: Toast[] }) {
 
 function OwnerListItemCard({
   item,
-  othersVoteCount,
   onRemove,
   isRemoving,
-  isDragOverlay,
 }: {
-  item: ListItem;
-  othersVoteCount: OthersVoteCount;
-  onRemove: (itemId: string) => void;
+  item: CategoryListItem;
+  onRemove: (item: CategoryListItem) => void;
   isRemoving: boolean;
-  isDragOverlay?: boolean;
 }) {
   const sortable = useSortable({ id: item.id });
   const style = {
@@ -118,7 +97,7 @@ function OwnerListItemCard({
     <div
       ref={sortable.setNodeRef}
       style={style}
-      className={sortable.isDragging && !isDragOverlay ? "opacity-40" : ""}
+      className={sortable.isDragging ? "opacity-40" : ""}
     >
       <Card className="overflow-hidden flex flex-col">
         <div className="relative aspect-[2/3] w-full bg-muted">
@@ -137,9 +116,9 @@ function OwnerListItemCard({
             aria-label={`Details zu ${item.title} anzeigen`}
             className="absolute inset-0"
           >
-            {item.image_url ? (
+            {item.imageUrl ? (
               <Image
-                src={item.image_url}
+                src={item.imageUrl}
                 alt={item.title}
                 fill
                 sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 20vw"
@@ -157,25 +136,18 @@ function OwnerListItemCard({
             <p className="text-sm font-medium leading-tight line-clamp-2">
               {item.title}
             </p>
-            <MovieMetaBadges
-              details={item.movieDetails}
-              year={item.metadata?.year ?? null}
-            />
+            <MovieMetaBadges details={item.movieDetails} year={item.year} />
           </div>
           <WatchProviderBadges
             providers={item.watchProviders}
             title={item.title}
           />
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span>👍 {othersVoteCount.up}</span>
-            <span>👎 {othersVoteCount.down}</span>
-          </div>
           <Button
             variant="outline"
             size="sm"
             className="mt-auto"
             disabled={isRemoving}
-            onClick={() => onRemove(item.id)}
+            onClick={() => onRemove(item)}
           >
             <X />
             {isRemoving ? "Wird entfernt…" : "Entfernen"}
@@ -186,11 +158,11 @@ function OwnerListItemCard({
       {showDetails && (
         <MovieDetailModal
           title={item.title}
-          posterUrl={item.image_url}
-          year={item.metadata?.year ?? null}
+          posterUrl={item.imageUrl}
+          year={item.year}
           details={item.movieDetails}
-          tmdbId={Number(item.external_id)}
-          mediaType={item.metadata?.type ?? "movie"}
+          tmdbId={item.itemId}
+          mediaType={item.mediaType}
           onClose={() => setShowDetails(false)}
         />
       )}
@@ -198,10 +170,10 @@ function OwnerListItemCard({
   );
 }
 
-function AddItemTile({ listId }: { listId: string }) {
+function AddItemTile({ category }: { category: SavedCategory }) {
   return (
     <Link
-      href={`/search?addToList=${listId}`}
+      href={`/search?addTo=${category}`}
       className="flex flex-col items-center justify-center gap-2 aspect-[2/3] w-full rounded-lg border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
     >
       <Plus className="size-8" />
@@ -210,19 +182,17 @@ function AddItemTile({ listId }: { listId: string }) {
   );
 }
 
-function OwnerListGrid({
+function OwnerCategoryGrid({
   initialItems,
-  listId,
+  category,
+  userId,
 }: {
-  initialItems: ListItem[];
-  listId: string;
+  initialItems: CategoryListItem[];
+  category: SavedCategory;
+  userId: string;
 }) {
   const [items, setItems] = useState(initialItems);
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [othersVotes, setOthersVotes] = useState<
-    Record<string, OthersVoteCount>
-  >({});
-  const router = useRouter();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -231,67 +201,31 @@ function OwnerListGrid({
     }),
   );
 
-  useEffect(() => {
-    if (items.length === 0) return;
-
+  const handleRemove = async (item: CategoryListItem) => {
+    setRemovingId(item.id);
     const supabase = createClient();
-    (async () => {
-      const {
-        data: { user: currentUser },
-      } = await supabase.auth.getUser();
-
-      const itemIds = items.map((item) => item.id);
-      const { data, error } = await supabase
-        .from("item_votes")
-        .select("id, list_item_id, user_id, vote")
-        .in("list_item_id", itemIds);
-
-      if (error || !data) return;
-
-      const nextOthers: Record<string, OthersVoteCount> = {};
-      for (const item of items) {
-        nextOthers[item.id] = { ...EMPTY_OTHERS_COUNT };
-      }
-      for (const row of data) {
-        if (currentUser && row.user_id === currentUser.id) continue;
-        const othersState = nextOthers[row.list_item_id];
-        if (!othersState) continue;
-        if (row.vote) othersState.up += 1;
-        else othersState.down += 1;
-      }
-      setOthersVotes(nextOthers);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const handleRemove = async (itemId: string) => {
-    setRemovingId(itemId);
-    const supabase = createClient();
-
-    const { error } = await supabase
-      .from("list_items")
-      .delete()
-      .eq("id", itemId);
+    const { error } = await removeFromCategory(
+      supabase,
+      category,
+      userId,
+      item.itemId,
+      item.mediaType,
+    );
 
     if (!error) {
-      setItems((prev) => prev.filter((item) => item.id !== itemId));
-      router.refresh();
+      setItems((prev) => prev.filter((existing) => existing.id !== item.id));
     }
     setRemovingId(null);
   };
 
-  const persistOrder = async (reordered: ListItem[]) => {
+  const persistOrder = async (reordered: CategoryListItem[]) => {
     const supabase = createClient();
     try {
       await Promise.all(
         reordered.map((item, index) =>
-          supabase
-            .from("list_items")
-            .update({ position: index + 1 })
-            .eq("id", item.id),
+          supabase.from(category).update({ position: index }).eq("id", item.id),
         ),
       );
-      router.refresh();
     } catch {
       // reorder failed to persist; local order stays as the optimistic result
     }
@@ -316,11 +250,11 @@ function OwnerListGrid({
     <div className="w-full flex flex-col gap-4">
       {items.length === 0 && (
         <p className="w-full text-sm text-muted-foreground">
-          Diese Liste enthält noch keine Einträge.
+          {CATEGORY_LABELS[category]} enthält noch keine Einträge.
         </p>
       )}
       <DndContext
-        id="list-items-dnd-context"
+        id="category-items-dnd-context"
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
@@ -331,12 +265,11 @@ function OwnerListGrid({
               <OwnerListItemCard
                 key={item.id}
                 item={item}
-                othersVoteCount={othersVotes[item.id] ?? EMPTY_OTHERS_COUNT}
                 onRemove={handleRemove}
                 isRemoving={removingId === item.id}
               />
             ))}
-            <AddItemTile listId={listId} />
+            <AddItemTile category={category} />
           </div>
         </SortableContext>
       </DndContext>
@@ -344,22 +277,86 @@ function OwnerListGrid({
   );
 }
 
-function VisitorListGrid({
+function RatingButtons({
+  ownerId,
+  viewerId,
+  itemId,
+  mediaType,
+  counts,
+  onVoted,
+}: {
+  ownerId: string;
+  viewerId: string | null;
+  itemId: number;
+  mediaType: "movie" | "tv";
+  counts: { up: number; down: number; myVote: boolean | null };
+  onVoted: (vote: boolean) => void;
+}) {
+  const [pending, setPending] = useState(false);
+
+  const handleVote = async (vote: boolean) => {
+    if (!viewerId || pending) return;
+    setPending(true);
+    try {
+      const supabase = createClient();
+      const { error } = await rateItem(
+        supabase,
+        ownerId,
+        viewerId,
+        itemId,
+        mediaType,
+        vote,
+      );
+      if (!error) onVoted(vote);
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => handleVote(true)}
+        className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors ${
+          counts.myVote === true ? "text-green-600 font-medium" : "hover:text-foreground"
+        }`}
+      >
+        <ThumbsUp className="size-3.5" />
+        {counts.up}
+      </button>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => handleVote(false)}
+        className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors ${
+          counts.myVote === false ? "text-destructive font-medium" : "hover:text-foreground"
+        }`}
+      >
+        <ThumbsDown className="size-3.5" />
+        {counts.down}
+      </button>
+    </div>
+  );
+}
+
+function VisitorCategoryGrid({
   initialItems,
-  listId,
+  ownerId,
   ownerUsername,
 }: {
-  initialItems: ListItem[];
-  listId: string;
+  initialItems: CategoryListItem[];
+  ownerId: string;
   ownerUsername: string;
 }) {
   const items = initialItems;
   const [user, setUser] = useState<User | null>(null);
-  const [myLists, setMyLists] = useState<ListSummary[]>([]);
-  const [isLoadingLists, setIsLoadingLists] = useState(true);
-  const [adding, setAdding] = useState<AddingState>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
+  const [ratings, setRatings] = useState<
+    Record<string, { up: number; down: number; myVote: boolean | null }>
+  >({});
 
   const showToast = useCallback((message: string) => {
     const id = Date.now() + Math.random();
@@ -378,61 +375,22 @@ function VisitorListGrid({
       } = await supabase.auth.getUser();
       setUser(currentUser);
 
-      if (!currentUser) {
-        setIsLoadingLists(false);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("lists")
-        .select("id, title, category")
-        .eq("user_id", currentUser.id)
-        .order("created_at", { ascending: true });
-
-      if (!error && data) setMyLists(data);
-      setIsLoadingLists(false);
+      const ratingsMap = await getItemRatings(
+        supabase,
+        ownerId,
+        currentUser?.id ?? null,
+        items.map((item) => ({ itemId: item.itemId, mediaType: item.mediaType })),
+      );
+      setRatings(ratingsMap);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleAddToList = useCallback(
-    async (item: ListItem, targetList: ListSummary) => {
-      const resultKey = `${item.metadata?.type ?? "movie"}-${item.external_id}`;
-      setAdding({ resultKey, listId: targetList.id });
-
-      try {
-        const response = await fetch("/api/list-items", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            listId: targetList.id,
-            externalId: item.external_id,
-            title: item.title,
-            imageUrl: item.image_url,
-            mediaType: item.metadata?.type ?? "movie",
-            year: item.metadata?.year ?? null,
-          }),
-        });
-        const data: { error?: string } = await response.json();
-
-        if (!response.ok) {
-          showToast(data.error ?? "Hinzufügen fehlgeschlagen");
-          return;
-        }
-        showToast(`Zu ${targetList.title} hinzugefügt`);
-      } catch {
-        showToast("Hinzufügen fehlgeschlagen");
-      } finally {
-        setAdding(null);
-      }
-    },
-    [showToast],
+  const { stateMap, markSaved } = useSavedState(
+    items.map((item) => ({ id: item.itemId, mediaType: item.mediaType })),
   );
-
   const socialProofMap = useSocialProof(
-    items.map((item) => ({
-      id: Number(item.external_id),
-      mediaType: item.metadata?.type ?? "movie",
-    })),
+    items.map((item) => ({ id: item.itemId, mediaType: item.mediaType })),
   );
 
   if (items.length === 0) {
@@ -449,22 +407,62 @@ function VisitorListGrid({
       <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
         {items.map((item) => {
           const result = itemToSearchResult(item);
-          const resultKey = `${result.mediaType}-${result.id}`;
+          const counts = ratings[`${item.mediaType}-${item.itemId}`] ?? {
+            up: 0,
+            down: 0,
+            myVote: null,
+          };
           return (
             <SearchResultCard
               key={item.id}
               result={result}
               isLoggedIn={!!user}
-              isLoadingLists={isLoadingLists}
-              lists={myLists}
-              addingListId={adding?.resultKey === resultKey ? adding.listId : null}
-              onAdd={(list) => handleAddToList(item, list)}
+              userId={user?.id}
+              savedState={getSavedState(stateMap, item.itemId, item.mediaType)}
+              onSavedChange={(category, value) => {
+                markSaved(item.itemId, item.mediaType, category, value);
+                showToast(
+                  value
+                    ? `Zu ${CATEGORY_LABELS[category]} hinzugefügt`
+                    : `Aus ${CATEGORY_LABELS[category]} entfernt`,
+                );
+              }}
               onGuestClick={() => setShowGuestPrompt(true)}
-              socialProof={getSocialProofEntry(
+              socialProof={getSocialProofBreakdown(
                 socialProofMap,
-                result.id,
-                result.mediaType,
+                item.itemId,
+                item.mediaType,
               )}
+              extraFooter={
+                user ? (
+                  <RatingButtons
+                    ownerId={ownerId}
+                    viewerId={user.id}
+                    itemId={item.itemId}
+                    mediaType={item.mediaType}
+                    counts={counts}
+                    onVoted={(vote) => {
+                      setRatings((prev) => {
+                        const key = `${item.mediaType}-${item.itemId}`;
+                        const prevCounts = prev[key] ?? {
+                          up: 0,
+                          down: 0,
+                          myVote: null,
+                        };
+                        const next = { ...prevCounts };
+                        if (prevCounts.myVote !== null) {
+                          if (prevCounts.myVote) next.up -= 1;
+                          else next.down -= 1;
+                        }
+                        if (vote) next.up += 1;
+                        else next.down += 1;
+                        next.myVote = vote;
+                        return { ...prev, [key]: next };
+                      });
+                    }}
+                  />
+                ) : undefined
+              }
             />
           );
         })}
@@ -472,8 +470,8 @@ function VisitorListGrid({
 
       {showGuestPrompt && (
         <GuestSignupModal
-          message={`Melde dich an, um Filme zu deinen eigenen Listen hinzuzufügen, ${ownerUsername}s Liste zu entdecken, direkt zu sehen wo Filme gerade laufen, und Film-Inspirationen für heute Abend zu entdecken.`}
-          next={`/lists/${listId}`}
+          message={`Melde dich an, um Titel zu deinen eigenen Listen hinzuzufügen, ${ownerUsername}s Liste zu entdecken, direkt zu sehen wo Titel gerade laufen, und Inspirationen für heute Abend zu entdecken.`}
+          next={`/u/${ownerUsername}`}
           onClose={() => setShowGuestPrompt(false)}
         />
       )}
@@ -481,26 +479,48 @@ function VisitorListGrid({
   );
 }
 
-export function ListItemsGrid({
-  initialItems,
-  isOwner,
-  listId,
-  ownerUsername,
+export function CategoryItemsGrid({
+  username,
+  category,
+  ownerId,
+  currentUserId,
 }: {
-  initialItems: ListItem[];
-  isOwner: boolean;
-  listId: string;
-  ownerUsername: string;
+  username: string;
+  category: SavedCategory;
+  ownerId: string;
+  currentUserId?: string | null;
 }) {
-  if (isOwner) {
-    return <OwnerListGrid initialItems={initialItems} listId={listId} />;
+  const [items, setItems] = useState<CategoryListItem[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setItems(null);
+    (async () => {
+      const response = await fetch(
+        `/api/category-items?username=${encodeURIComponent(username)}&category=${category}`,
+      );
+      if (!response.ok || cancelled) return;
+      const data: { items: CategoryListItem[] } = await response.json();
+      if (!cancelled) setItems(data.items);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [username, category]);
+
+  if (items === null) {
+    return <p className="text-sm text-muted-foreground">Lädt…</p>;
   }
 
-  return (
-    <VisitorListGrid
-      initialItems={initialItems}
-      listId={listId}
-      ownerUsername={ownerUsername}
+  const isOwner = currentUserId === ownerId;
+
+  return isOwner ? (
+    <OwnerCategoryGrid initialItems={items} category={category} userId={ownerId} />
+  ) : (
+    <VisitorCategoryGrid
+      initialItems={items}
+      ownerId={ownerId}
+      ownerUsername={username}
     />
   );
 }

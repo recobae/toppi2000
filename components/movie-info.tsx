@@ -2,36 +2,63 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { Play, Star, User, X } from "lucide-react";
+import Link from "next/link";
+import { Ban, Check, Eye, Play, Star, User, X } from "lucide-react";
 import type { MovieDetails } from "@/lib/tmdb";
-import type { SocialProofEntry } from "@/lib/hooks/use-social-proof";
+import type {
+  SocialProofBreakdown,
+  SocialProofGroup,
+} from "@/lib/hooks/use-social-proof";
 
 const PROFILE_BASE_URL = "https://image.tmdb.org/t/p/w185";
 
-export function SocialProofLabel({
-  entry,
+function personHref(id: number, name: string) {
+  return `/search?person=${id}&name=${encodeURIComponent(name)}`;
+}
+
+export function SocialProofIcons({
+  breakdown,
+  onClick,
   className,
 }: {
-  entry?: SocialProofEntry;
+  breakdown?: SocialProofBreakdown;
+  onClick?: () => void;
   className?: string;
 }) {
-  if (!entry || entry.total === 0) return null;
-
-  let text: string;
-  if (entry.total === 1) {
-    text = `Gefällt ${entry.usernames[0]}`;
-  } else if (entry.total === 2) {
-    text = `Gefällt ${entry.usernames[0]} und ${entry.usernames[1]}`;
-  } else {
-    text = `Gefällt ${entry.usernames[0]} und ${entry.total - 1} weiteren`;
+  if (
+    !breakdown ||
+    (breakdown.positive.total === 0 &&
+      breakdown.watchlist.total === 0 &&
+      breakdown.dontWatch.total === 0)
+  ) {
+    return null;
   }
 
   return (
-    <p
-      className={`text-[10px] text-muted-foreground italic truncate ${className ?? ""}`}
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-2 text-[10px] text-muted-foreground ${className ?? ""}`}
     >
-      {text}
-    </p>
+      {breakdown.positive.total > 0 && (
+        <span className="inline-flex items-center gap-0.5 text-green-600">
+          <Check className="size-3" />
+          {breakdown.positive.total}
+        </span>
+      )}
+      {breakdown.watchlist.total > 0 && (
+        <span className="inline-flex items-center gap-0.5">
+          <Eye className="size-3" />
+          {breakdown.watchlist.total}
+        </span>
+      )}
+      {breakdown.dontWatch.total > 0 && (
+        <span className="inline-flex items-center gap-0.5 text-destructive">
+          <Ban className="size-3" />
+          {breakdown.dontWatch.total}
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -70,6 +97,28 @@ export function MovieMetaBadges({
   );
 }
 
+function SocialProofGroupRow({
+  icon,
+  label,
+  group,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  group: SocialProofGroup;
+}) {
+  if (group.total === 0) return null;
+
+  return (
+    <div className="flex items-start gap-2 text-xs">
+      <span className="mt-0.5 shrink-0">{icon}</span>
+      <p className="text-muted-foreground">
+        <span className="font-medium text-foreground">{label}: </span>
+        {group.usernames.join(", ")}
+      </p>
+    </div>
+  );
+}
+
 export function MovieDetailModal({
   title,
   posterUrl,
@@ -77,6 +126,7 @@ export function MovieDetailModal({
   details,
   tmdbId,
   mediaType,
+  socialProof,
   onClose,
 }: {
   title: string;
@@ -85,6 +135,7 @@ export function MovieDetailModal({
   details: MovieDetails;
   tmdbId: number;
   mediaType: "movie" | "tv";
+  socialProof?: SocialProofBreakdown;
   onClose: () => void;
 }) {
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
@@ -121,6 +172,12 @@ export function MovieDetailModal({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [onClose]);
+
+  const hasSocialProof =
+    socialProof &&
+    (socialProof.positive.total > 0 ||
+      socialProof.watchlist.total > 0 ||
+      socialProof.dontWatch.total > 0);
 
   return (
     <div
@@ -176,7 +233,13 @@ export function MovieDetailModal({
             </span>
             {details.director && (
               <p className="text-xs text-muted-foreground">
-                Regie: {details.director}
+                Regie:{" "}
+                <Link
+                  href={personHref(details.director.id, details.director.name)}
+                  className="text-foreground hover:underline"
+                >
+                  {details.director.name}
+                </Link>
               </p>
             )}
           </div>
@@ -198,6 +261,26 @@ export function MovieDetailModal({
           {details.overview || "Keine Beschreibung verfügbar."}
         </p>
 
+        {hasSocialProof && socialProof && (
+          <div className="flex flex-col gap-1.5 rounded-md bg-muted/50 p-3">
+            <SocialProofGroupRow
+              icon={<Check className="size-3.5 text-green-600" />}
+              label="Gefällt"
+              group={socialProof.positive}
+            />
+            <SocialProofGroupRow
+              icon={<Eye className="size-3.5" />}
+              label="Watchlist"
+              group={socialProof.watchlist}
+            />
+            <SocialProofGroupRow
+              icon={<Ban className="size-3.5 text-destructive" />}
+              label="Don't Watch"
+              group={socialProof.dontWatch}
+            />
+          </div>
+        )}
+
         <div className="flex flex-col gap-2">
           <p className="text-xs font-medium text-muted-foreground">
             Besetzung
@@ -209,8 +292,9 @@ export function MovieDetailModal({
           ) : (
             <div className="flex gap-3">
               {details.cast.map((actor) => (
-                <div
-                  key={actor.name}
+                <Link
+                  key={actor.id}
+                  href={personHref(actor.id, actor.name)}
                   className="flex flex-col items-center gap-1 w-16 shrink-0"
                 >
                   <div className="relative size-12 rounded-full overflow-hidden bg-muted flex items-center justify-center">
@@ -226,10 +310,10 @@ export function MovieDetailModal({
                       <User className="size-5 text-muted-foreground" />
                     )}
                   </div>
-                  <span className="text-[10px] text-center leading-tight line-clamp-2">
+                  <span className="text-[10px] text-center leading-tight line-clamp-2 hover:underline">
                     {actor.name}
                   </span>
-                </div>
+                </Link>
               ))}
             </div>
           )}

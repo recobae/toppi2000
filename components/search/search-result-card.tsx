@@ -7,40 +7,45 @@ import { WatchProviderBadges } from "@/components/watch-provider-badges";
 import {
   MovieMetaBadges,
   MovieDetailModal,
-  SocialProofLabel,
+  SocialProofIcons,
 } from "@/components/movie-info";
-import {
-  AddToListMenu,
-  filterListsForMediaType,
-  type ListSummary,
-} from "@/components/search/add-to-list-menu";
-import type { SocialProofEntry } from "@/lib/hooks/use-social-proof";
+import { SaveButtons } from "@/components/search/save-buttons";
+import type { SavedState } from "@/lib/hooks/use-saved-state";
+import type { SocialProofBreakdown } from "@/lib/hooks/use-social-proof";
 import type { SearchResult } from "@/lib/tmdb";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
 
+const EMPTY_SAVED_STATE: SavedState = {
+  top_list: false,
+  watchlist: false,
+  dont_watch: false,
+  likes: false,
+};
+
 export function SearchResultCard({
   result,
   isLoggedIn,
-  isLoadingLists,
-  lists,
-  addingListId,
-  onAdd,
+  userId,
+  savedState,
+  onSavedChange,
   jobTags,
-  preselectedListId,
   onGuestClick,
   socialProof,
+  extraFooter,
 }: {
   result: SearchResult;
   isLoggedIn: boolean;
-  isLoadingLists: boolean;
-  lists: ListSummary[];
-  addingListId: string | null;
-  onAdd: (list: ListSummary) => void;
+  userId?: string | null;
+  savedState?: SavedState;
+  onSavedChange?: (
+    category: "top_list" | "watchlist" | "dont_watch",
+    value: boolean,
+  ) => void;
   jobTags?: string[];
-  preselectedListId?: string | null;
   onGuestClick?: () => void;
-  socialProof?: SocialProofEntry;
+  socialProof?: SocialProofBreakdown;
+  extraFooter?: React.ReactNode;
 }) {
   const [showDetails, setShowDetails] = useState(false);
   const posterUrl = result.posterPath
@@ -75,7 +80,11 @@ export function SearchResultCard({
             {result.title}
           </p>
           <MovieMetaBadges details={result.movieDetails} year={result.year} />
-          <SocialProofLabel entry={socialProof} />
+          <SocialProofIcons
+            breakdown={socialProof}
+            onClick={() => setShowDetails(true)}
+            className="mt-1"
+          />
           {jobTags && jobTags.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1">
               {jobTags.map((job) => (
@@ -94,16 +103,23 @@ export function SearchResultCard({
           title={result.title}
         />
       </CardContent>
-      <CardFooter className="p-3 pt-0">
-        <AddToListMenu
+      <CardFooter className="p-3 pt-0 flex flex-col gap-2 items-stretch">
+        <SaveButtons
           isLoggedIn={isLoggedIn}
-          isLoadingLists={isLoadingLists}
-          lists={filterListsForMediaType(lists, result.mediaType)}
-          addingListId={addingListId}
-          onAdd={onAdd}
-          preselectedListId={preselectedListId}
+          userId={userId}
+          item={{
+            itemId: result.id,
+            mediaType: result.mediaType,
+            title: result.title,
+            imageUrl: posterUrl,
+            year: result.year,
+          }}
+          savedState={savedState ?? EMPTY_SAVED_STATE}
+          onChange={(category, value) => onSavedChange?.(category, value)}
           onGuestClick={onGuestClick}
+          size="compact"
         />
+        {extraFooter}
       </CardFooter>
 
       {showDetails && (
@@ -114,6 +130,7 @@ export function SearchResultCard({
           details={result.movieDetails}
           tmdbId={result.id}
           mediaType={result.mediaType}
+          socialProof={socialProof}
           onClose={() => setShowDetails(false)}
         />
       )}

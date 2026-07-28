@@ -1,0 +1,78 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SavedCategory } from "@/lib/categories";
+
+export type SavableItem = {
+  itemId: number;
+  mediaType: "movie" | "tv";
+  title: string;
+  imageUrl: string | null;
+  year: string | null;
+};
+
+/**
+ * Saves an item to one of the 3 ranked categories (top_list/watchlist/
+ * dont_watch). New items always go to the top (lowest position).
+ */
+export async function saveToCategory(
+  supabase: SupabaseClient,
+  category: SavedCategory,
+  userId: string,
+  item: SavableItem,
+) {
+  const { data: topRow } = await supabase
+    .from(category)
+    .select("position")
+    .eq("user_id", userId)
+    .order("position", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const nextPosition = (topRow?.position ?? 0) - 1;
+
+  return supabase.from(category).upsert(
+    {
+      user_id: userId,
+      item_id: item.itemId,
+      media_type: item.mediaType,
+      title: item.title,
+      image_url: item.imageUrl,
+      metadata: { year: item.year },
+      position: nextPosition,
+    },
+    { onConflict: "user_id,item_id,media_type" },
+  );
+}
+
+export async function removeFromCategory(
+  supabase: SupabaseClient,
+  category: SavedCategory,
+  userId: string,
+  itemId: number,
+  mediaType: "movie" | "tv",
+) {
+  return supabase
+    .from(category)
+    .delete()
+    .eq("user_id", userId)
+    .eq("item_id", itemId)
+    .eq("media_type", mediaType);
+}
+
+/** "likes" is a lightweight table: no ranking, no position. */
+export async function saveLike(
+  supabase: SupabaseClient,
+  userId: string,
+  item: SavableItem,
+) {
+  return supabase.from("likes").upsert(
+    {
+      user_id: userId,
+      item_id: item.itemId,
+      media_type: item.mediaType,
+      title: item.title,
+      image_url: item.imageUrl,
+      metadata: { year: item.year },
+    },
+    { onConflict: "user_id,item_id,media_type" },
+  );
+}

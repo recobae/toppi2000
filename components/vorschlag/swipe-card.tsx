@@ -9,15 +9,19 @@ import {
   animate,
   type PanInfo,
 } from "framer-motion";
-import { Bookmark, Crown, Info } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Info } from "lucide-react";
 import { WatchProviderBadges } from "@/components/watch-provider-badges";
 import {
   MovieMetaBadges,
   MovieDetailModal,
-  SocialProofLabel,
+  SocialProofIcons,
 } from "@/components/movie-info";
-import type { SocialProofEntry } from "@/lib/hooks/use-social-proof";
+import {
+  CATEGORY_ACTION_LABELS,
+  CATEGORY_ICONS,
+  type SavedCategory,
+} from "@/lib/categories";
+import type { SocialProofBreakdown } from "@/lib/hooks/use-social-proof";
 import type { SearchResult } from "@/lib/tmdb";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w500";
@@ -25,37 +29,52 @@ const SWIPE_THRESHOLD = 120;
 const VELOCITY_THRESHOLD = 500;
 const EXIT_DELAY_MS = 220;
 
-type SwipeDirection = "left" | "right" | "up";
+type ExitDirection = "left" | "right" | "up";
+
+const CATEGORY_EXIT_DIRECTION: Record<SavedCategory, ExitDirection> = {
+  dont_watch: "left",
+  top_list: "up",
+  watchlist: "right",
+};
+
+const CATEGORY_BUTTON_CLASSES: Record<SavedCategory, string> = {
+  dont_watch:
+    "border-red-500 text-red-500 hover:bg-red-500/10",
+  top_list:
+    "border-primary bg-primary text-primary-foreground scale-110 shadow-lg",
+  watchlist: "border-input text-foreground hover:bg-accent",
+};
 
 export function SwipeCard({
   result,
   stackIndex,
   isTop,
+  isLoggedIn,
   onSwipeLeft,
   onSwipeRight,
-  onSwipeUp,
-  onAddToWatchlist,
+  onCategorySelect,
+  onGuestClick,
   socialProof,
 }: {
   result: SearchResult;
   stackIndex: number;
   isTop: boolean;
+  isLoggedIn: boolean;
   onSwipeLeft: () => void;
   onSwipeRight: () => void;
-  onSwipeUp: () => void;
-  onAddToWatchlist: () => void;
-  socialProof?: SocialProofEntry;
+  onCategorySelect: (category: SavedCategory) => void;
+  onGuestClick: () => void;
+  socialProof?: SocialProofBreakdown;
 }) {
   const x = useMotionValue(0);
   const y = useMotionValue(0);
   const rotate = useTransform(x, [-250, 250], [-18, 18]);
   const likeOpacity = useTransform(x, [20, 120], [0, 1]);
   const nopeOpacity = useTransform(x, [-120, -20], [1, 0]);
-  const upOpacity = useTransform(y, [-120, -20], [1, 0]);
   const [isExiting, setIsExiting] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
-  const exit = (direction: SwipeDirection, callback: () => void) => {
+  const exit = (direction: ExitDirection, callback: () => void) => {
     setIsExiting(true);
     if (direction === "left") {
       animate(x, -600, { duration: 0.25, ease: "easeIn" });
@@ -72,14 +91,13 @@ export function SwipeCard({
     info: PanInfo,
   ) => {
     const { offset, velocity } = info;
-    const isVertical = Math.abs(offset.y) > Math.abs(offset.x);
 
-    if (
-      isVertical &&
-      (offset.y < -SWIPE_THRESHOLD || velocity.y < -VELOCITY_THRESHOLD)
-    ) {
-      exit("up", onSwipeUp);
-    } else if (offset.x > SWIPE_THRESHOLD || velocity.x > VELOCITY_THRESHOLD) {
+    if (offset.x > SWIPE_THRESHOLD || velocity.x > VELOCITY_THRESHOLD) {
+      if (!isLoggedIn) {
+        animate(x, 0, { type: "spring", stiffness: 300, damping: 30 });
+        onGuestClick();
+        return;
+      }
       exit("right", onSwipeRight);
     } else if (
       offset.x < -SWIPE_THRESHOLD ||
@@ -90,6 +108,14 @@ export function SwipeCard({
       animate(x, 0, { type: "spring", stiffness: 300, damping: 30 });
       animate(y, 0, { type: "spring", stiffness: 300, damping: 30 });
     }
+  };
+
+  const handleCategoryClick = (category: SavedCategory) => {
+    if (!isLoggedIn) {
+      onGuestClick();
+      return;
+    }
+    exit(CATEGORY_EXIT_DIRECTION[category], () => onCategorySelect(category));
   };
 
   return (
@@ -106,7 +132,7 @@ export function SwipeCard({
       <motion.div
         className="h-full w-full touch-none"
         style={isTop ? { x, y, rotate } : undefined}
-        drag={isTop}
+        drag={isTop ? "x" : false}
         dragElastic={0.9}
         dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
         onDragEnd={isTop ? handleDragEnd : undefined}
@@ -155,13 +181,6 @@ export function SwipeCard({
                 >
                   NOPE
                 </motion.div>
-                <motion.div
-                  style={{ opacity: upOpacity }}
-                  className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-xl border-4 border-yellow-400 bg-yellow-400/10 px-4 py-2 text-yellow-400 font-extrabold text-2xl sm:text-3xl drop-shadow-lg"
-                >
-                  <Crown className="size-7 sm:size-8 fill-current" />
-                  Lieblingsfilm!
-                </motion.div>
               </>
             )}
           </div>
@@ -172,25 +191,38 @@ export function SwipeCard({
                 {result.title}
               </p>
               <MovieMetaBadges details={result.movieDetails} year={result.year} />
-              <SocialProofLabel entry={socialProof} />
+              <SocialProofIcons
+                breakdown={socialProof}
+                onClick={() => setShowDetails(true)}
+                className="mt-1"
+              />
             </div>
             <WatchProviderBadges
               providers={result.watchProviders}
               title={result.title}
             />
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-auto"
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.stopPropagation();
-                onAddToWatchlist();
-              }}
-            >
-              <Bookmark className="size-4" />
-              Zur Watchlist
-            </Button>
+            <div className="mt-auto flex items-center justify-between gap-2">
+              {(["dont_watch", "top_list", "watchlist"] as const).map(
+                (category) => {
+                  const Icon = CATEGORY_ICONS[category];
+                  return (
+                    <button
+                      key={category}
+                      type="button"
+                      aria-label={CATEGORY_ACTION_LABELS[category]}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleCategoryClick(category);
+                      }}
+                      className={`flex flex-1 items-center justify-center gap-1 rounded-full border h-10 text-xs font-medium transition-colors ${CATEGORY_BUTTON_CLASSES[category]}`}
+                    >
+                      <Icon className="size-4" />
+                    </button>
+                  );
+                },
+              )}
+            </div>
           </div>
         </div>
       </motion.div>
@@ -205,6 +237,7 @@ export function SwipeCard({
           details={result.movieDetails}
           tmdbId={result.id}
           mediaType={result.mediaType}
+          socialProof={socialProof}
           onClose={() => setShowDetails(false)}
         />
       )}

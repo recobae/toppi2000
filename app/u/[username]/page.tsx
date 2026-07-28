@@ -5,17 +5,11 @@ import type { Metadata } from "next";
 import { Heart, Share2, Settings, Search, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
-import { ListTile } from "@/components/profile/list-tile";
-import { CreateListTile } from "@/components/profile/create-list-tile";
 import { GuestProfileCta } from "@/components/profile/guest-profile-cta";
 import { TrackLastVisitedProfile } from "@/components/profile/track-last-visited";
 import { FollowButton } from "@/components/profile/follow-button";
-
-const STANDARD_LABELS: Record<string, string> = {
-  movie: "Lieblingsfilme",
-  tv: "Lieblingsserien",
-  watchlist: "Watchlist",
-};
+import { ProfileCategorySections } from "@/components/profile/category-sections";
+import { SAVED_CATEGORIES } from "@/lib/categories";
 
 async function getProfileUrl(username: string): Promise<string> {
   const headersList = await headers();
@@ -57,24 +51,32 @@ export default async function ProfilePage({
   const isOwner = viewer?.id === profile.id;
   const isGuest = !viewer;
 
-  const { data: lists } = await supabase
-    .from("lists")
-    .select("id, title, category, is_public")
-    .eq("user_id", profile.id)
-    .order("created_at", { ascending: true });
-
-  const publicLists = (lists ?? []).filter((list) => list.is_public);
-  const listIds = publicLists.map((list) => list.id);
-
-  const { data: items } =
-    listIds.length > 0
-      ? await supabase
-          .from("list_items")
-          .select("id, list_id, position, image_url")
-          .in("list_id", listIds)
+  const previewByCategory = await Promise.all(
+    SAVED_CATEGORIES.map(async (category) => {
+      const [{ data: previewRows }, { count }] = await Promise.all([
+        supabase
+          .from(category)
+          .select("image_url")
+          .eq("user_id", profile.id)
           .order("position", { ascending: true })
-      : { data: [] };
+          .limit(4),
+        supabase
+          .from(category)
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", profile.id),
+      ]);
 
+      return {
+        category,
+        posterUrls: (previewRows ?? [])
+          .map((row) => row.image_url)
+          .filter((url): url is string => !!url),
+        itemCount: count ?? 0,
+      };
+    }),
+  );
+
+  const topListPreview = previewByCategory.find((p) => p.category === "top_list");
   const likesCount = profile.total_likes_received ?? 0;
 
   const { count: followerCount } = await supabase
@@ -97,35 +99,20 @@ export default async function ProfilePage({
     const followedIds = (followRows ?? []).map((row) => row.followed_id);
 
     if (followedIds.length > 0) {
-      const [{ data: friendProfiles }, { data: friendMovieLists }] =
+      const [{ data: friendProfiles }, { data: friendTopListItems }] =
         await Promise.all([
           supabase.from("profiles").select("id, username").in("id", followedIds),
           supabase
-            .from("lists")
-            .select("id, user_id")
+            .from("top_list")
+            .select("user_id, image_url")
             .in("user_id", followedIds)
-            .eq("category", "movie"),
+            .order("position", { ascending: true }),
         ]);
 
-      const ownerByListId = new Map(
-        (friendMovieLists ?? []).map((list) => [list.id, list.user_id]),
-      );
-      const movieListIds = (friendMovieLists ?? []).map((list) => list.id);
-
-      const { data: firstItems } =
-        movieListIds.length > 0
-          ? await supabase
-              .from("list_items")
-              .select("list_id, image_url")
-              .in("list_id", movieListIds)
-              .order("position", { ascending: true })
-          : { data: [] };
-
       const avatarByUserId = new Map<string, string>();
-      for (const item of firstItems ?? []) {
-        const userId = ownerByListId.get(item.list_id);
-        if (userId && item.image_url && !avatarByUserId.has(userId)) {
-          avatarByUserId.set(userId, item.image_url);
+      for (const item of friendTopListItems ?? []) {
+        if (item.image_url && !avatarByUserId.has(item.user_id)) {
+          avatarByUserId.set(item.user_id, item.image_url);
         }
       }
 
@@ -137,62 +124,11 @@ export default async function ProfilePage({
     }
   }
 
-  const statsByList = new Map<
-    string,
-    { count: number; posterUrls: string[]; topItemsSeen: number }
-  >();
-  for (const item of items ?? []) {
-    const existing = statsByList.get(item.list_id);
-    if (existing) {
-      existing.count += 1;
-      if (existing.topItemsSeen < 4) {
-        existing.topItemsSeen += 1;
-        if (item.image_url) existing.posterUrls.push(item.image_url);
-      }
-    } else {
-      statsByList.set(item.list_id, {
-        count: 1,
-        posterUrls: item.image_url ? [item.image_url] : [],
-        topItemsSeen: 1,
-      });
-    }
-  }
-
-  const movieList = publicLists.find((list) => list.category === "movie");
-  const tvList = publicLists.find((list) => list.category === "tv");
-  const watchlistList = publicLists.find(
-    (list) => list.category === "watchlist",
-  );
-  const standardListIds = new Set(
-    [movieList, tvList, watchlistList]
-      .filter((list): list is NonNullable<typeof list> => !!list)
-      .map((list) => list.id),
-  );
-  const customLists = publicLists.filter(
-    (list) => !standardListIds.has(list.id),
-  );
-
-  const movieCount = movieList
-    ? (statsByList.get(movieList.id)?.count ?? 0)
-    : 0;
-  const tvCount = tvList ? (statsByList.get(tvList.id)?.count ?? 0) : 0;
-  const watchlistCount = watchlistList
-    ? (statsByList.get(watchlistList.id)?.count ?? 0)
-    : 0;
-
-  const avatarUrl = movieList
-    ? (statsByList.get(movieList.id)?.posterUrls[0] ?? null)
-    : null;
+  const avatarUrl = topListPreview?.posterUrls[0] ?? null;
 
   const profileUrl = await getProfileUrl(profile.username);
   const shareText = `Schau dir ${profile.username}s Filmgeschmack an: ${profileUrl}`;
   const whatsappHref = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
-
-  const standardOrder: { list: typeof movieList; category: string }[] = [
-    { list: movieList, category: "movie" },
-    { list: tvList, category: "tv" },
-    { list: watchlistList, category: "watchlist" },
-  ];
 
   return (
     <main className="min-h-screen flex flex-col items-center">
@@ -222,11 +158,6 @@ export default async function ProfilePage({
             </Link>
           )}
         </div>
-
-        <p className="text-sm text-muted-foreground text-center">
-          {movieCount} Filme · {tvCount} Serien · {watchlistCount} auf der
-          Watchlist
-        </p>
 
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-1.5">
@@ -278,39 +209,17 @@ export default async function ProfilePage({
           </div>
         </div>
 
-        <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {standardOrder.map(({ list, category }) =>
-            list ? (
-              <ListTile
-                key={list.id}
-                listId={list.id}
-                label={STANDARD_LABELS[category]}
-                posterUrls={statsByList.get(list.id)?.posterUrls ?? []}
-                itemCount={statsByList.get(list.id)?.count ?? 0}
-              />
-            ) : null,
-          )}
-          {customLists.map((list) => (
-            <ListTile
-              key={list.id}
-              listId={list.id}
-              label={list.title}
-              posterUrls={statsByList.get(list.id)?.posterUrls ?? []}
-              itemCount={statsByList.get(list.id)?.count ?? 0}
-            />
-          ))}
-          {isOwner && (
-            <CreateListTile
-              existingTitles={(lists ?? []).map((list) => list.title)}
-            />
-          )}
-          {isGuest && <GuestProfileCta variant="tile" />}
-        </div>
+        <ProfileCategorySections
+          username={profile.username}
+          ownerId={profile.id}
+          currentUserId={viewer?.id ?? null}
+          previewByCategory={previewByCategory}
+        />
 
-        {publicLists.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            {profile.username} hat noch keine öffentlichen Listen.
-          </p>
+        {isGuest && (
+          <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <GuestProfileCta variant="tile" />
+          </div>
         )}
 
         {isOwner && (

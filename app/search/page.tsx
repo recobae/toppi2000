@@ -6,28 +6,31 @@ import type { User } from "@supabase/supabase-js";
 import { X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
-import { type ListSummary } from "@/components/search/add-to-list-menu";
 import { SearchResultCard } from "@/components/search/search-result-card";
 import { PersonSelector } from "@/components/search/person-selector";
 import { BackToProfileLink } from "@/components/profile/back-to-profile-link";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { Button } from "@/components/ui/button";
 import { SORT_FILTERS, GENRE_FILTERS } from "@/lib/movie-genres";
-import {
-  useSocialProof,
-  getSocialProofEntry,
-} from "@/lib/hooks/use-social-proof";
+import { useSocialProof, getSocialProofBreakdown } from "@/lib/hooks/use-social-proof";
+import { useSavedState, getSavedState } from "@/lib/hooks/use-saved-state";
+import { CATEGORY_LABELS, isSavedCategory } from "@/lib/categories";
 import type { PersonSummary, SearchResult } from "@/lib/tmdb";
 import type { PersonCreditResult } from "@/app/api/person-credits/route";
 
-const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
+const MY_LIKES_KEY = "__my_likes__";
 
 type Toast = { id: number; message: string };
-type AddingState = { resultKey: string; listId: string } | null;
 
 export default function SearchPage() {
   const searchParams = useSearchParams();
-  const addToListId = searchParams.get("addToList");
+  const addToCategory = searchParams.get("addTo");
+  const addToLabel =
+    addToCategory && isSavedCategory(addToCategory)
+      ? CATEGORY_LABELS[addToCategory]
+      : null;
+  const personIdParam = searchParams.get("person");
+  const personNameParam = searchParams.get("name");
 
   const [query, setQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -45,14 +48,14 @@ export default function SearchPage() {
   const [isLoadingPersonResults, setIsLoadingPersonResults] = useState(false);
 
   const [user, setUser] = useState<User | null>(null);
-  const [lists, setLists] = useState<ListSummary[]>([]);
-  const [isLoadingLists, setIsLoadingLists] = useState(true);
-  const [adding, setAdding] = useState<AddingState>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [showGuestModal, setShowGuestModal] = useState(false);
 
   const [sortFilter, setSortFilter] = useState<string | null>(null);
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
+  const [myLikesActive, setMyLikesActive] = useState(false);
+  const [myLikes, setMyLikes] = useState<SearchResult[]>([]);
+  const [isLoadingMyLikes, setIsLoadingMyLikes] = useState(false);
   const [browseItems, setBrowseItems] = useState<SearchResult[]>([]);
   const [browsePage, setBrowsePage] = useState(1);
   const [isMobile, setIsMobile] = useState(
@@ -143,24 +146,30 @@ export default function SearchPage() {
         data: { user: currentUser },
       } = await supabase.auth.getUser();
       setUser(currentUser);
-
-      if (!currentUser) {
-        setIsLoadingLists(false);
-        return;
-      }
-
-      const { data, error: listsError } = await supabase
-        .from("lists")
-        .select("id, title, category")
-        .eq("user_id", currentUser.id)
-        .order("created_at", { ascending: true });
-
-      if (!listsError && data) {
-        setLists(data);
-      }
-      setIsLoadingLists(false);
     })();
   }, []);
+
+  const loadMyLikes = useCallback(async () => {
+    setIsLoadingMyLikes(true);
+    try {
+      const response = await fetch("/api/my-likes");
+      if (!response.ok) return;
+      const data: { results: SearchResult[] } = await response.json();
+      setMyLikes(data.results);
+    } finally {
+      setIsLoadingMyLikes(false);
+    }
+  }, []);
+
+  const toggleMyLikes = () => {
+    const next = !myLikesActive;
+    setMyLikesActive(next);
+    if (next) {
+      setSortFilter(null);
+      setGenreFilter(null);
+      loadMyLikes();
+    }
+  };
 
   const loadPersonCredits = useCallback(async (person: PersonSummary) => {
     setSelectedPerson(person);
@@ -178,6 +187,20 @@ export default function SearchPage() {
       setIsLoadingPersonResults(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (personIdParam) {
+      const id = Number(personIdParam);
+      if (Number.isFinite(id)) {
+        loadPersonCredits({
+          id,
+          name: personNameParam ?? "",
+          profilePath: null,
+        });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [personIdParam, personNameParam]);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -227,46 +250,6 @@ export default function SearchPage() {
     };
   }, [query, loadPersonCredits]);
 
-  const handleAddToList = useCallback(
-    async (result: SearchResult, list: ListSummary) => {
-      const resultKey = `${result.mediaType}-${result.id}`;
-      setAdding({ resultKey, listId: list.id });
-
-      try {
-        const imageUrl = result.posterPath
-          ? `${POSTER_BASE_URL}${result.posterPath}`
-          : null;
-
-        const response = await fetch("/api/list-items", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            listId: list.id,
-            externalId: result.id,
-            title: result.title,
-            imageUrl,
-            mediaType: result.mediaType,
-            year: result.year,
-          }),
-        });
-
-        const data: { error?: string } = await response.json();
-
-        if (!response.ok) {
-          showToast(data.error ?? "Hinzufügen fehlgeschlagen");
-          return;
-        }
-
-        showToast(`Zu ${list.title} hinzugefügt`);
-      } catch {
-        showToast("Hinzufügen fehlgeschlagen");
-      } finally {
-        setAdding(null);
-      }
-    },
-    [showToast],
-  );
-
   const hasPersonSection = people.length > 0;
   const otherPeople = people.filter((p) => p.id !== selectedPerson?.id);
   const noResultsAtAll =
@@ -286,6 +269,31 @@ export default function SearchPage() {
   const personResultsSocialProof = useSocialProof(
     personResults.map((r) => ({ id: r.id, mediaType: r.mediaType })),
   );
+  const myLikesSocialProof = useSocialProof(
+    myLikes.map((r) => ({ id: r.id, mediaType: r.mediaType })),
+  );
+
+  const savedStateItems = [
+    ...visibleBrowseItems,
+    ...results,
+    ...personResults,
+    ...myLikes,
+  ].map((r) => ({ id: r.id, mediaType: r.mediaType }));
+  const { stateMap, markSaved } = useSavedState(savedStateItems);
+
+  const handleSavedChange = (
+    resultId: number,
+    mediaType: "movie" | "tv",
+    category: "top_list" | "watchlist" | "dont_watch",
+    value: boolean,
+  ) => {
+    markSaved(resultId, mediaType, category, value);
+    showToast(
+      value
+        ? `Zu ${CATEGORY_LABELS[category]} hinzugefügt`
+        : `Aus ${CATEGORY_LABELS[category]} entfernt`,
+    );
+  };
 
   return (
     <main className="min-h-screen flex flex-col items-center">
@@ -304,6 +312,11 @@ export default function SearchPage() {
         <div className="w-full flex flex-col gap-2 pt-8">
           <BackToProfileLink />
           <h1 className="font-medium text-xl">Filme & Serien durchsuchen</h1>
+          {addToLabel && (
+            <p className="text-xs text-muted-foreground">
+              Füge einen Titel zu &bdquo;{addToLabel}&ldquo; hinzu
+            </p>
+          )}
           <div className="relative w-full">
             <Input
               ref={searchInputRef}
@@ -333,15 +346,29 @@ export default function SearchPage() {
         {!query.trim() && (
           <div className="w-full flex flex-col gap-3">
             <div className="w-full flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {user && (
+                <button
+                  type="button"
+                  onClick={toggleMyLikes}
+                  className={`shrink-0 whitespace-nowrap h-7 px-3 rounded-full border text-xs font-medium transition-colors ${
+                    myLikesActive
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-input hover:bg-accent"
+                  }`}
+                >
+                  Meine Likes
+                </button>
+              )}
               {SORT_FILTERS.map((option) => {
                 const isActive = sortFilter === option.key;
                 return (
                   <button
                     key={option.key}
                     type="button"
-                    onClick={() =>
-                      setSortFilter(isActive ? null : option.key)
-                    }
+                    onClick={() => {
+                      setMyLikesActive(false);
+                      setSortFilter(isActive ? null : option.key);
+                    }}
                     className={`shrink-0 whitespace-nowrap h-7 px-3 rounded-full border text-xs font-medium transition-colors ${
                       isActive
                         ? "border-primary bg-primary/10 text-primary"
@@ -359,9 +386,10 @@ export default function SearchPage() {
                   <button
                     key={genre.id}
                     type="button"
-                    onClick={() =>
-                      setGenreFilter(isActive ? null : genre.id)
-                    }
+                    onClick={() => {
+                      setMyLikesActive(false);
+                      setGenreFilter(isActive ? null : genre.id);
+                    }}
                     className={`shrink-0 whitespace-nowrap h-7 px-3 rounded-full border text-xs font-medium transition-colors ${
                       isActive
                         ? "border-primary bg-primary/10 text-primary"
@@ -374,54 +402,107 @@ export default function SearchPage() {
               })}
             </div>
 
-            <h2 className="text-sm font-medium text-muted-foreground">
-              {hasActiveFilter ? "Filme entdecken" : "Trending diese Woche"}
-            </h2>
-
-            {isLoadingBrowse && browseItems.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Lädt…</p>
-            ) : browseItems.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Keine Titel gefunden.
-              </p>
-            ) : (
+            {myLikesActive ? (
               <>
-                <div className="w-full grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 sm:gap-4">
-                  {visibleBrowseItems.map((result) => {
-                    const resultKey = `${result.mediaType}-${result.id}`;
-                    return (
+                <h2 className="text-sm font-medium text-muted-foreground">
+                  Meine Likes
+                </h2>
+                {isLoadingMyLikes ? (
+                  <p className="text-sm text-muted-foreground">Lädt…</p>
+                ) : myLikes.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Du hast noch keine Titel geliked.
+                  </p>
+                ) : (
+                  <div className="w-full grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 sm:gap-4">
+                    {myLikes.map((result) => (
                       <SearchResultCard
-                        key={resultKey}
+                        key={`${MY_LIKES_KEY}-${result.mediaType}-${result.id}`}
                         result={result}
                         isLoggedIn={!!user}
-                        isLoadingLists={isLoadingLists}
-                        lists={lists}
-                        addingListId={
-                          adding?.resultKey === resultKey
-                            ? adding.listId
-                            : null
+                        userId={user?.id}
+                        savedState={getSavedState(
+                          stateMap,
+                          result.id,
+                          result.mediaType,
+                        )}
+                        onSavedChange={(category, value) =>
+                          handleSavedChange(
+                            result.id,
+                            result.mediaType,
+                            category,
+                            value,
+                          )
                         }
-                        onAdd={(list) => handleAddToList(result, list)}
                         onGuestClick={() => setShowGuestModal(true)}
-                        socialProof={getSocialProofEntry(
-                          browseSocialProof,
+                        socialProof={getSocialProofBreakdown(
+                          myLikesSocialProof,
                           result.id,
                           result.mediaType,
                         )}
                       />
-                    );
-                  })}
-                </div>
-                <div className="w-full flex justify-center">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleLoadMoreBrowse}
-                    disabled={isLoadingBrowse}
-                  >
-                    {isLoadingBrowse ? "Lädt…" : "Mehr laden"}
-                  </Button>
-                </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <h2 className="text-sm font-medium text-muted-foreground">
+                  {hasActiveFilter ? "Filme entdecken" : "Trending diese Woche"}
+                </h2>
+
+                {isLoadingBrowse && browseItems.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Lädt…</p>
+                ) : browseItems.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Keine Titel gefunden.
+                  </p>
+                ) : (
+                  <>
+                    <div className="w-full grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 sm:gap-4">
+                      {visibleBrowseItems.map((result) => {
+                        const resultKey = `${result.mediaType}-${result.id}`;
+                        return (
+                          <SearchResultCard
+                            key={resultKey}
+                            result={result}
+                            isLoggedIn={!!user}
+                            userId={user?.id}
+                            savedState={getSavedState(
+                              stateMap,
+                              result.id,
+                              result.mediaType,
+                            )}
+                            onSavedChange={(category, value) =>
+                              handleSavedChange(
+                                result.id,
+                                result.mediaType,
+                                category,
+                                value,
+                              )
+                            }
+                            onGuestClick={() => setShowGuestModal(true)}
+                            socialProof={getSocialProofBreakdown(
+                              browseSocialProof,
+                              result.id,
+                              result.mediaType,
+                            )}
+                          />
+                        );
+                      })}
+                    </div>
+                    <div className="w-full flex justify-center">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleLoadMoreBrowse}
+                        disabled={isLoadingBrowse}
+                      >
+                        {isLoadingBrowse ? "Lädt…" : "Mehr laden"}
+                      </Button>
+                    </div>
+                  </>
+                )}
               </>
             )}
           </div>
@@ -467,17 +548,23 @@ export default function SearchPage() {
                       key={resultKey}
                       result={result}
                       isLoggedIn={!!user}
-                      isLoadingLists={isLoadingLists}
-                      lists={lists}
-                      addingListId={
-                        adding?.resultKey === resultKey
-                          ? adding.listId
-                          : null
+                      userId={user?.id}
+                      savedState={getSavedState(
+                        stateMap,
+                        result.id,
+                        result.mediaType,
+                      )}
+                      onSavedChange={(category, value) =>
+                        handleSavedChange(
+                          result.id,
+                          result.mediaType,
+                          category,
+                          value,
+                        )
                       }
-                      onAdd={(list) => handleAddToList(result, list)}
+                      onGuestClick={() => setShowGuestModal(true)}
                       jobTags={result.jobs}
-                      preselectedListId={addToListId}
-                      socialProof={getSocialProofEntry(
+                      socialProof={getSocialProofBreakdown(
                         personResultsSocialProof,
                         result.id,
                         result.mediaType,
@@ -505,14 +592,22 @@ export default function SearchPage() {
                     key={resultKey}
                     result={result}
                     isLoggedIn={!!user}
-                    isLoadingLists={isLoadingLists}
-                    lists={lists}
-                    addingListId={
-                      adding?.resultKey === resultKey ? adding.listId : null
+                    userId={user?.id}
+                    savedState={getSavedState(
+                      stateMap,
+                      result.id,
+                      result.mediaType,
+                    )}
+                    onSavedChange={(category, value) =>
+                      handleSavedChange(
+                        result.id,
+                        result.mediaType,
+                        category,
+                        value,
+                      )
                     }
-                    onAdd={(list) => handleAddToList(result, list)}
-                    preselectedListId={addToListId}
-                    socialProof={getSocialProofEntry(
+                    onGuestClick={() => setShowGuestModal(true)}
+                    socialProof={getSocialProofBreakdown(
                       resultsSocialProof,
                       result.id,
                       result.mediaType,
@@ -527,7 +622,7 @@ export default function SearchPage() {
 
       {showGuestModal && (
         <GuestSignupModal
-          message="Melde dich an, um Filme zu deinen eigenen Listen hinzuzufügen."
+          message="Melde dich an, um Titel zu deinen eigenen Listen hinzuzufügen."
           next="/search"
           onClose={() => setShowGuestModal(false)}
         />

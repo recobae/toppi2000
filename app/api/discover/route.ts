@@ -5,7 +5,6 @@ import {
   type TmdbTitleLike,
 } from "@/lib/tmdb";
 import { createClient } from "@/lib/supabase/server";
-import { LIKES_LIST_TITLE } from "@/lib/lists";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 const HISTORY_SAMPLE_LIMIT = 20;
@@ -102,40 +101,27 @@ async function getInferredGenreIds(
   userId: string,
   apiKey: string,
 ): Promise<string[]> {
-  const [{ data: categoryLists }, { data: likesLists }] = await Promise.all([
+  const [{ data: topListRows }, { data: likesRows }] = await Promise.all([
     supabase
-      .from("lists")
-      .select("id")
-      .eq("user_id", userId)
-      .in("category", ["movie", "tv"]),
+      .from("top_list")
+      .select("item_id, media_type")
+      .eq("user_id", userId),
     supabase
-      .from("lists")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("title", LIKES_LIST_TITLE),
+      .from("likes")
+      .select("item_id, media_type")
+      .eq("user_id", userId),
   ]);
 
-  const listIds = [
-    ...(categoryLists ?? []).map((list) => list.id),
-    ...(likesLists ?? []).map((list) => list.id),
-  ];
-
-  if (listIds.length === 0) return [];
-
-  const { data: items } = await supabase
-    .from("list_items")
-    .select("external_id, metadata")
-    .in("list_id", listIds);
-
-  const sample = (items ?? []).slice(0, HISTORY_SAMPLE_LIMIT);
+  const items = [...(topListRows ?? []), ...(likesRows ?? [])];
+  const sample = items.slice(0, HISTORY_SAMPLE_LIMIT);
   if (sample.length === 0) return [];
 
   const genreCounts = new Map<number, number>();
 
   await Promise.all(
     sample.map(async (item) => {
-      const mediaType = item.metadata?.type;
-      const tmdbId = Number(item.external_id);
+      const mediaType = item.media_type;
+      const tmdbId = Number(item.item_id);
       if (
         (mediaType !== "movie" && mediaType !== "tv") ||
         !Number.isFinite(tmdbId)
@@ -184,30 +170,26 @@ async function getRecentlySwipedKeys(
   return new Set(data.map((row) => `${row.media_type}-${row.tmdb_id}`));
 }
 
-async function getSavedListKeys(
+const SAVED_ITEM_TABLES = ["likes", "top_list", "watchlist", "dont_watch"] as const;
+
+async function getSavedItemKeys(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
 ): Promise<Set<string>> {
-  const { data: lists } = await supabase
-    .from("lists")
-    .select("id")
-    .eq("user_id", userId);
-
-  const listIds = (lists ?? []).map((list) => list.id);
-  if (listIds.length === 0) return new Set();
-
-  const { data: items, error } = await supabase
-    .from("list_items")
-    .select("external_id, metadata")
-    .in("list_id", listIds);
-
-  if (error || !items) return new Set();
+  const results = await Promise.all(
+    SAVED_ITEM_TABLES.map((table) =>
+      supabase
+        .from(table)
+        .select("item_id, media_type")
+        .eq("user_id", userId),
+    ),
+  );
 
   const keys = new Set<string>();
-  for (const item of items) {
-    const mediaType = item.metadata?.type;
-    if (mediaType !== "movie" && mediaType !== "tv") continue;
-    keys.add(`${mediaType}-${item.external_id}`);
+  for (const { data } of results) {
+    for (const row of data ?? []) {
+      keys.add(`${row.media_type}-${row.item_id}`);
+    }
   }
   return keys;
 }
@@ -244,13 +226,13 @@ export async function GET(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [inferredGenreIds, swipedKeys, savedListKeys] = await Promise.all([
+  const [inferredGenreIds, swipedKeys, savedItemKeys] = await Promise.all([
     user ? getInferredGenreIds(supabase, user.id, apiKey) : Promise.resolve([]),
     user ? getRecentlySwipedKeys(supabase, user.id) : Promise.resolve(new Set<string>()),
-    user ? getSavedListKeys(supabase, user.id) : Promise.resolve(new Set<string>()),
+    user ? getSavedItemKeys(supabase, user.id) : Promise.resolve(new Set<string>()),
   ]);
 
-  const excludedKeys = new Set([...swipedKeys, ...savedListKeys]);
+  const excludedKeys = new Set([...swipedKeys, ...savedItemKeys]);
 
   // TMDB's with_genres joins IDs with OR semantics, so mixing an active mood
   // filter with the user's unrelated inferred history genres would dilute

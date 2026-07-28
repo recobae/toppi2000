@@ -7,20 +7,18 @@ import { createClient } from "@/lib/supabase/client";
 import { SwipeCard } from "@/components/vorschlag/swipe-card";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { BackToProfileLink } from "@/components/profile/back-to-profile-link";
-import {
-  useSocialProof,
-  getSocialProofEntry,
-} from "@/lib/hooks/use-social-proof";
+import { useSocialProof, getSocialProofBreakdown } from "@/lib/hooks/use-social-proof";
+import { saveLike, saveToCategory } from "@/lib/saved-items";
+import { CATEGORY_ACTION_LABELS, type SavedCategory } from "@/lib/categories";
 import type { SearchResult } from "@/lib/tmdb";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
-const LIKES_LIST_TITLE = "Gefällt mir";
 const PRELOAD_THRESHOLD = 3;
 const VISIBLE_STACK_SIZE = 3;
 const GUEST_SWIPE_LIMIT = 3;
 const GUEST_LIMIT_MESSAGE = "Für mehr Inspiration melde dich kurz an.";
 const GUEST_SAVE_MESSAGE =
-  "Melde dich an, um diesen Film zu deinen Listen hinzuzufügen.";
+  "Melde dich an, um diesen Titel zu deinen Listen hinzuzufügen.";
 
 const MOOD_OPTIONS: { key: string; label: string }[] = [
   { key: "lustig", label: "Lustig & leicht" },
@@ -33,20 +31,6 @@ const MOOD_OPTIONS: { key: string; label: string }[] = [
 
 type Toast = { id: number; message: string };
 
-type MyLists = {
-  movieListId: string | null;
-  tvListId: string | null;
-  watchlistId: string | null;
-  likesListId: string | null;
-};
-
-const EMPTY_MY_LISTS: MyLists = {
-  movieListId: null,
-  tvListId: null,
-  watchlistId: null,
-  likesListId: null,
-};
-
 function resultKey(result: SearchResult) {
   return `${result.mediaType}-${result.id}`;
 }
@@ -56,7 +40,6 @@ export default function VorschlagPage() {
   const [cards, setCards] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [myLists, setMyLists] = useState<MyLists>(EMPTY_MY_LISTS);
   const [user, setUser] = useState<User | null>(null);
   const [guestSwipeCount, setGuestSwipeCount] = useState(0);
   const [guestModalMessage, setGuestModalMessage] = useState<string | null>(
@@ -97,21 +80,6 @@ export default function VorschlagPage() {
       setUser(currentUser);
     })();
   }, []);
-
-  const loadMyLists = useCallback(async () => {
-    try {
-      const response = await fetch("/api/my-lists");
-      if (!response.ok) return;
-      const data: MyLists = await response.json();
-      setMyLists(data);
-    } catch {
-      // keep defaults; individual actions will surface errors via toast
-    }
-  }, []);
-
-  useEffect(() => {
-    loadMyLists();
-  }, [loadMyLists]);
 
   const fetchCards = useCallback(
     async (targetPage: number, replace: boolean, activeMood: string | null) => {
@@ -161,58 +129,6 @@ export default function VorschlagPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards.length, isLoading]);
 
-  const addToList = useCallback(
-    async (result: SearchResult, listId: string, successMessage: string) => {
-      try {
-        const imageUrl = result.posterPath
-          ? `${POSTER_BASE_URL}${result.posterPath}`
-          : null;
-
-        const response = await fetch("/api/list-items", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            listId,
-            externalId: result.id,
-            title: result.title,
-            imageUrl,
-            mediaType: result.mediaType,
-            year: result.year,
-          }),
-        });
-        const data: { error?: string } = await response.json();
-
-        if (!response.ok) {
-          showToast(data.error ?? "Aktion fehlgeschlagen");
-          return;
-        }
-        showToast(successMessage);
-      } catch {
-        showToast("Aktion fehlgeschlagen");
-      }
-    },
-    [showToast],
-  );
-
-  const ensureLikesListId = useCallback(async (): Promise<string | null> => {
-    if (myLists.likesListId) return myLists.likesListId;
-
-    try {
-      const response = await fetch("/api/lists", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: LIKES_LIST_TITLE }),
-      });
-      const data: { id?: string; error?: string } = await response.json();
-      if (!response.ok || !data.id) return null;
-
-      setMyLists((prev) => ({ ...prev, likesListId: data.id ?? null }));
-      return data.id;
-    } catch {
-      return null;
-    }
-  }, [myLists.likesListId]);
-
   const removeCard = useCallback((result: SearchResult) => {
     setCards((prev) => prev.filter((card) => resultKey(card) !== resultKey(result)));
   }, []);
@@ -248,67 +164,61 @@ export default function VorschlagPage() {
     async (result: SearchResult) => {
       removeCard(result);
 
-      if (!isLoggedIn) {
+      if (!user) {
+        incrementGuestSwipes();
+        setGuestModalMessage(GUEST_SAVE_MESSAGE);
+        return;
+      }
+
+      const supabase = createClient();
+      const posterUrl = result.posterPath
+        ? `${POSTER_BASE_URL}${result.posterPath}`
+        : null;
+      const { error } = await saveLike(supabase, user.id, {
+        itemId: result.id,
+        mediaType: result.mediaType,
+        title: result.title,
+        imageUrl: posterUrl,
+        year: result.year,
+      });
+      if (error) {
+        showToast("Aktion fehlgeschlagen");
+        return;
+      }
+      showToast("Gefällt mir gemerkt");
+    },
+    [removeCard, user, incrementGuestSwipes, showToast],
+  );
+
+  const handleCategorySelect = useCallback(
+    async (result: SearchResult, category: SavedCategory) => {
+      removeCard(result);
+
+      if (!user) {
         incrementGuestSwipes();
         setGuestModalMessage(GUEST_SAVE_MESSAGE);
         return;
       }
 
       logSwipe(result);
-      const listId = await ensureLikesListId();
-      if (!listId) {
-        showToast("Liste konnte nicht erstellt werden");
+      const supabase = createClient();
+      const posterUrl = result.posterPath
+        ? `${POSTER_BASE_URL}${result.posterPath}`
+        : null;
+      const { error } = await saveToCategory(supabase, category, user.id, {
+        itemId: result.id,
+        mediaType: result.mediaType,
+        title: result.title,
+        imageUrl: posterUrl,
+        year: result.year,
+      });
+      if (error) {
+        showToast("Aktion fehlgeschlagen");
         return;
       }
-      await addToList(result, listId, "Zu Gefällt mir hinzugefügt");
+      showToast(`Zu ${CATEGORY_ACTION_LABELS[category]} hinzugefügt`);
     },
-    [removeCard, logSwipe, isLoggedIn, incrementGuestSwipes, ensureLikesListId, addToList, showToast],
-  );
-
-  const handleSwipeUp = useCallback(
-    async (result: SearchResult) => {
-      removeCard(result);
-
-      if (!isLoggedIn) {
-        incrementGuestSwipes();
-        setGuestModalMessage(GUEST_SAVE_MESSAGE);
-        return;
-      }
-
-      logSwipe(result);
-      const listId =
-        result.mediaType === "movie" ? myLists.movieListId : myLists.tvListId;
-      if (!listId) {
-        showToast("Keine passende Liste gefunden");
-        return;
-      }
-      await addToList(
-        result,
-        listId,
-        result.mediaType === "movie"
-          ? "Zu Lieblingsfilme hinzugefügt"
-          : "Zu Lieblingsserien hinzugefügt",
-      );
-    },
-    [removeCard, logSwipe, isLoggedIn, incrementGuestSwipes, myLists, addToList, showToast],
-  );
-
-  const handleAddToWatchlist = useCallback(
-    async (result: SearchResult) => {
-      if (!isLoggedIn) {
-        setGuestModalMessage(GUEST_SAVE_MESSAGE);
-        return;
-      }
-
-      removeCard(result);
-      logSwipe(result);
-      if (!myLists.watchlistId) {
-        showToast("Keine Watchlist gefunden");
-        return;
-      }
-      await addToList(result, myLists.watchlistId, "Zur Watchlist hinzugefügt");
-    },
-    [removeCard, logSwipe, isLoggedIn, myLists.watchlistId, addToList, showToast],
+    [removeCard, user, incrementGuestSwipes, logSwipe, showToast],
   );
 
   const visibleCards = guestLimitReached ? [] : cards.slice(0, VISIBLE_STACK_SIZE);
@@ -387,11 +297,14 @@ export default function VorschlagPage() {
                   result={result}
                   stackIndex={stackIndex}
                   isTop={stackIndex === 0}
+                  isLoggedIn={isLoggedIn}
                   onSwipeLeft={() => handleSwipeLeft(result)}
                   onSwipeRight={() => handleSwipeRight(result)}
-                  onSwipeUp={() => handleSwipeUp(result)}
-                  onAddToWatchlist={() => handleAddToWatchlist(result)}
-                  socialProof={getSocialProofEntry(
+                  onCategorySelect={(category) =>
+                    handleCategorySelect(result, category)
+                  }
+                  onGuestClick={() => setGuestModalMessage(GUEST_SAVE_MESSAGE)}
+                  socialProof={getSocialProofBreakdown(
                     visibleCardsSocialProof,
                     result.id,
                     result.mediaType,
@@ -403,8 +316,8 @@ export default function VorschlagPage() {
         </div>
 
         <p className="text-xs text-muted-foreground text-center">
-          Rechts wischen = Gefällt mir · Links wischen = Kein Interesse · Hoch
-          wischen = Lieblingsliste
+          Rechts wischen = Gefällt mir · Links wischen = Kein Interesse ·
+          Buttons = direkt in eine Liste einsortieren
         </p>
       </div>
 

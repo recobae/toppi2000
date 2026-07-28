@@ -28,18 +28,10 @@ export function SiteHeader() {
       if (!profile?.username) return;
       setUsername(profile.username);
 
-      const { data: movieList } = await supabase
-        .from("lists")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("category", "movie")
-        .maybeSingle();
-      if (!movieList) return;
-
       const { data: firstItem } = await supabase
-        .from("list_items")
+        .from("top_list")
         .select("image_url")
-        .eq("list_id", movieList.id)
+        .eq("user_id", user.id)
         .order("position", { ascending: true })
         .limit(1)
         .maybeSingle();

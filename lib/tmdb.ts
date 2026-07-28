@@ -104,8 +104,14 @@ export async function getTrailerKey(
 }
 
 export type CastMember = {
+  id: number;
   name: string;
   profilePath: string | null;
+};
+
+export type DirectorInfo = {
+  id: number;
+  name: string;
 };
 
 export type MovieDetails = {
@@ -114,7 +120,7 @@ export type MovieDetails = {
   runtimeMinutes: number | null;
   overview: string;
   cast: CastMember[];
-  director: string | null;
+  director: DirectorInfo | null;
   ageRating: string | null;
 };
 
@@ -131,8 +137,8 @@ const EMPTY_MOVIE_DETAILS: MovieDetails = {
 const AGE_RATING_REGIONS = ["DE", "US"];
 
 type TmdbGenre = { id: number; name: string };
-type TmdbCastMember = { name: string; profile_path: string | null };
-type TmdbCrewMember = { name: string; job: string };
+type TmdbCastMember = { id: number; name: string; profile_path: string | null };
+type TmdbCrewMember = { id: number; name: string; job: string };
 
 type TmdbMovieDetailsResponse = {
   vote_average?: number;
@@ -141,7 +147,7 @@ type TmdbMovieDetailsResponse = {
   overview?: string;
   genres?: TmdbGenre[];
   credits?: { cast?: TmdbCastMember[]; crew?: TmdbCrewMember[] };
-  created_by?: { name: string }[];
+  created_by?: { id: number; name: string }[];
   release_dates?: {
     results?: {
       iso_3166_1: string;
@@ -181,15 +187,17 @@ export async function getMovieDetails(
         : (data.episode_run_time?.[0] ?? null);
 
     const cast = (data.credits?.cast ?? []).slice(0, 3).map((member) => ({
+      id: member.id,
       name: member.name,
       profilePath: member.profile_path,
     }));
 
-    const director =
-      (data.credits?.crew ?? []).find((member) => member.job === "Director")
-        ?.name ??
-      data.created_by?.[0]?.name ??
-      null;
+    const directorCredit =
+      (data.credits?.crew ?? []).find((member) => member.job === "Director") ??
+      data.created_by?.[0];
+    const director: DirectorInfo | null = directorCredit
+      ? { id: directorCredit.id, name: directorCredit.name }
+      : null;
 
     let ageRating: string | null = null;
     if (mediaType === "movie") {
