@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { ShareListButton } from "@/components/lists/share-list-button";
 
@@ -9,28 +10,21 @@ export function ListTile({
   icon: Icon,
   posterUrls,
   itemCount,
+  href,
   shareUrl,
-  isExpanded,
-  onToggle,
 }: {
   label: string;
   icon: LucideIcon;
   posterUrls: string[];
   itemCount: number;
+  href: string;
   shareUrl: string;
-  isExpanded: boolean;
-  onToggle: () => void;
 }) {
   const posters = posterUrls.slice(0, 4);
 
   return (
     <div className="relative flex flex-col gap-2 rounded-lg border p-2 hover:bg-accent transition-colors">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={isExpanded}
-        className="relative aspect-[2/3] w-full bg-muted rounded-md overflow-hidden"
-      >
+      <div className="relative aspect-[2/3] w-full bg-muted rounded-md overflow-hidden">
         {posters.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <Icon className="size-8 text-muted-foreground" />
@@ -63,22 +57,20 @@ export function ListTile({
             })}
           </div>
         )}
-      </button>
-      <button type="button" onClick={onToggle} className="text-left">
+      </div>
+      <div>
         <div className="flex items-center gap-1">
           <Icon className="size-3.5 text-muted-foreground shrink-0" />
           <p className="text-sm font-medium leading-tight line-clamp-1">
             {label}
           </p>
-          <span
-            className="relative z-10"
-            onClick={(event) => event.stopPropagation()}
-          >
+          <span className="relative z-10">
             <ShareListButton shareTitle={label} url={shareUrl} iconOnly />
           </span>
         </div>
         <p className="text-xs text-muted-foreground">{itemCount} Titel</p>
-      </button>
+      </div>
+      <Link href={href} aria-label={label} className="absolute inset-0 z-0 rounded-lg" />
     </div>
   );
 }

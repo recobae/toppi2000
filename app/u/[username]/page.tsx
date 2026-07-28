@@ -2,14 +2,17 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Heart, Share2, Settings, Search, Users } from "lucide-react";
+import { Heart, Settings, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
+import { ListTile } from "@/components/profile/list-tile";
 import { GuestProfileCta } from "@/components/profile/guest-profile-cta";
 import { TrackLastVisitedProfile } from "@/components/profile/track-last-visited";
 import { FollowButton } from "@/components/profile/follow-button";
-import { ProfileCategorySections } from "@/components/profile/category-sections";
-import { SAVED_CATEGORIES } from "@/lib/categories";
+import { FollowingBar } from "@/components/profile/following-bar";
+import { FollowerCount } from "@/components/profile/follower-count";
+import { ShareListButton } from "@/components/lists/share-list-button";
+import { CATEGORY_ICONS, CATEGORY_LABELS, SAVED_CATEGORIES } from "@/lib/categories";
 
 async function getProfileUrl(username: string): Promise<string> {
   const headersList = await headers();
@@ -125,15 +128,12 @@ export default async function ProfilePage({
   }
 
   const avatarUrl = topListPreview?.posterUrls[0] ?? null;
-
   const profileUrl = await getProfileUrl(profile.username);
-  const shareText = `Schau dir ${profile.username}s Filmgeschmack an: ${profileUrl}`;
-  const whatsappHref = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
 
   return (
     <main className="min-h-screen flex flex-col items-center">
       <TrackLastVisitedProfile username={profile.username} />
-      <div className="flex-1 w-full flex flex-col items-center gap-6 max-w-2xl p-5 pt-10">
+      <div className="flex-1 w-full flex flex-col items-center gap-4 max-w-2xl p-5 pt-6">
         <Link
           href="/vorschlag"
           aria-label="Zur Inspiration"
@@ -144,119 +144,84 @@ export default async function ProfilePage({
           </span>
         </Link>
 
-        <div className="flex items-center gap-1.5">
-          <h1 className="text-xl font-semibold text-center">
+        <div className="w-full flex items-center justify-between gap-2">
+          <div className="w-9 flex justify-start">
+            {isOwner && (
+              <Link
+                href="/settings"
+                aria-label="Einstellungen"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Settings className="size-5" />
+              </Link>
+            )}
+          </div>
+          <h1 className="text-xl font-semibold text-center truncate">
             {profile.username}
           </h1>
-          {isOwner && (
+          <div className="w-9 flex items-center justify-end gap-1">
+            {isOwner && (
+              <ShareListButton
+                shareTitle={`Schau dir ${profile.username}s Filmgeschmack an`}
+                url={profileUrl}
+                iconOnly
+              />
+            )}
             <Link
-              href="/settings"
-              aria-label="Einstellungen"
-              className="text-muted-foreground hover:text-foreground transition-colors"
+              href="/search"
+              aria-label="Suche"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             >
-              <Settings className="size-4" />
+              <Search className="size-4" />
             </Link>
-          )}
+          </div>
         </div>
 
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-1.5">
             <Heart className="size-4 fill-current text-red-500" />
-            <span>{likesCount} erhaltene Likes</span>
+            <span>{likesCount} Likes</span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <Users className="size-4" />
-            <span>{followerCount ?? 0} Follower</span>
-          </div>
+          <FollowerCount targetUserId={profile.id} count={followerCount ?? 0} />
         </div>
 
-        <div className="w-full flex items-center gap-3">
-          <Link
-            href="/search"
-            aria-label="Suche"
-            className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-input px-3 py-2 text-sm font-medium hover:bg-accent transition-colors min-h-11"
-          >
-            <Search className="size-4" />
-            Suche
-          </Link>
-          <div className="flex-1 flex flex-wrap items-center justify-center gap-2">
-            {isOwner && (
-              <a
-                href={whatsappHref}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground text-sm font-medium px-4 py-2 hover:bg-primary/90 transition-colors min-h-11"
-              >
-                <Share2 className="size-4" />
-                Profil teilen
-              </a>
-            )}
-            {!isOwner && !isGuest && (
-              <FollowButton
-                targetUserId={profile.id}
-                targetUsername={profile.username}
-              />
-            )}
-            {isGuest && (
-              <>
-                <GuestProfileCta variant="button" />
-                <FollowButton
-                  targetUserId={profile.id}
-                  targetUsername={profile.username}
-                />
-              </>
-            )}
-          </div>
-        </div>
-
-        <ProfileCategorySections
-          username={profile.username}
-          ownerId={profile.id}
-          currentUserId={viewer?.id ?? null}
-          previewByCategory={previewByCategory}
-        />
-
+        {!isOwner && !isGuest && (
+          <FollowButton
+            targetUserId={profile.id}
+            targetUsername={profile.username}
+          />
+        )}
         {isGuest && (
-          <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <GuestProfileCta variant="tile" />
+          <div className="flex items-center gap-2">
+            <GuestProfileCta variant="button" />
+            <FollowButton
+              targetUserId={profile.id}
+              targetUsername={profile.username}
+            />
           </div>
         )}
 
         {isOwner && (
-          <div className="w-full flex flex-col gap-3">
-            <h2 className="text-sm font-medium text-muted-foreground">
-              Ich folge
-            </h2>
-            {followingProfiles.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Du folgst noch niemandem.
-              </p>
-            ) : (
-              <div className="w-full flex flex-wrap gap-4">
-                {followingProfiles.map((friend) => (
-                  <Link
-                    key={friend.id}
-                    href={`/u/${friend.username}`}
-                    className="flex flex-col items-center gap-1.5 w-16"
-                  >
-                    <span className="rounded-full p-[3px] bg-[conic-gradient(from_0deg,#f97316,#ec4899,#8b5cf6,#3b82f6,#10b981,#f97316)]">
-                      <span className="block rounded-full bg-background p-[3px]">
-                        <ProfileAvatar
-                          username={friend.username}
-                          imageUrl={friend.avatarUrl}
-                          size="sm"
-                        />
-                      </span>
-                    </span>
-                    <span className="text-[11px] text-center line-clamp-1 w-full">
-                      {friend.username}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
+          <FollowingBar
+            currentUserId={profile.id}
+            followingProfiles={followingProfiles}
+          />
         )}
+
+        <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-3 mt-2">
+          {previewByCategory.map(({ category, posterUrls, itemCount }) => (
+            <ListTile
+              key={category}
+              label={CATEGORY_LABELS[category]}
+              icon={CATEGORY_ICONS[category]}
+              posterUrls={posterUrls}
+              itemCount={itemCount}
+              href={`/u/${profile.username}/${category}`}
+              shareUrl={`/u/${profile.username}/${category}`}
+            />
+          ))}
+          {isGuest && <GuestProfileCta variant="tile" />}
+        </div>
       </div>
     </main>
   );

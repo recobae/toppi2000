@@ -9,7 +9,7 @@ import {
   animate,
   type PanInfo,
 } from "framer-motion";
-import { Info } from "lucide-react";
+import { Heart, X } from "lucide-react";
 import { WatchProviderBadges } from "@/components/watch-provider-badges";
 import {
   MovieMetaBadges,
@@ -75,6 +75,7 @@ export function SwipeCard({
   const [showDetails, setShowDetails] = useState(false);
 
   const exit = (direction: ExitDirection, callback: () => void) => {
+    if (isExiting) return;
     setIsExiting(true);
     if (direction === "left") {
       animate(x, -600, { duration: 0.25, ease: "easeIn" });
@@ -118,6 +119,18 @@ export function SwipeCard({
     exit(CATEGORY_EXIT_DIRECTION[category], () => onCategorySelect(category));
   };
 
+  const handleNopeClick = () => {
+    exit("left", onSwipeLeft);
+  };
+
+  const handleLikeClick = () => {
+    if (!isLoggedIn) {
+      onGuestClick();
+      return;
+    }
+    exit("right", onSwipeRight);
+  };
+
   return (
     <motion.div
       className="absolute inset-0"
@@ -138,7 +151,12 @@ export function SwipeCard({
         onDragEnd={isTop ? handleDragEnd : undefined}
       >
         <div className="relative h-full w-full rounded-2xl overflow-hidden border bg-card shadow-lg select-none flex flex-col">
-          <div className="relative h-2/3 w-full bg-muted shrink-0">
+          <button
+            type="button"
+            aria-label="Details anzeigen"
+            onClick={() => setShowDetails(true)}
+            className="relative h-2/3 w-full bg-muted shrink-0 text-left"
+          >
             {result.posterPath ? (
               <Image
                 src={`${POSTER_BASE_URL}${result.posterPath}`}
@@ -153,19 +171,6 @@ export function SwipeCard({
                 Kein Poster
               </div>
             )}
-
-            <button
-              type="button"
-              aria-label="Details anzeigen"
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.stopPropagation();
-                setShowDetails(true);
-              }}
-              className="absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
-            >
-              <Info className="size-5" />
-            </button>
 
             {isTop && (
               <>
@@ -183,7 +188,7 @@ export function SwipeCard({
                 </motion.div>
               </>
             )}
-          </div>
+          </button>
 
           <div className="p-3 flex flex-col gap-2 flex-1 min-h-0">
             <div>
@@ -226,6 +231,27 @@ export function SwipeCard({
           </div>
         </div>
       </motion.div>
+
+      {isTop && (
+        <div className="absolute left-1/2 -translate-x-1/2 -bottom-8 z-30 flex items-center gap-7">
+          <button
+            type="button"
+            aria-label="Kein Interesse"
+            onClick={handleNopeClick}
+            className="flex h-16 w-16 items-center justify-center rounded-full bg-background border-[3px] border-red-500 text-red-500 shadow-xl hover:scale-105 active:scale-95 transition-transform"
+          >
+            <X className="size-8" strokeWidth={3} />
+          </button>
+          <button
+            type="button"
+            aria-label="Gefällt mir"
+            onClick={handleLikeClick}
+            className="flex h-16 w-16 items-center justify-center rounded-full bg-background border-[3px] border-green-500 text-green-500 shadow-xl hover:scale-105 active:scale-95 transition-transform"
+          >
+            <Heart className="size-8 fill-current" />
+          </button>
+        </div>
+      )}
 
       {showDetails && (
         <MovieDetailModal

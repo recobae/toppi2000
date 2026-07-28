@@ -204,6 +204,14 @@ export default function SearchPage() {
 
   useEffect(() => {
     const trimmed = query.trim();
+
+    if (!trimmed && personIdParam) {
+      // A deep-linked person filmography (?person=&name=) owns the display
+      // while no text has been typed -- don't let this effect's mount-time
+      // run wipe out the state the person-deeplink effect just set.
+      return;
+    }
+
     setSelectedPerson(null);
     setPersonResults([]);
 
@@ -248,7 +256,7 @@ export default function SearchPage() {
       clearTimeout(timeout);
       controller.abort();
     };
-  }, [query, loadPersonCredits]);
+  }, [query, loadPersonCredits, personIdParam]);
 
   const hasPersonSection = people.length > 0;
   const otherPeople = people.filter((p) => p.id !== selectedPerson?.id);

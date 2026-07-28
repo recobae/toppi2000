@@ -13,9 +13,16 @@ export const SAVED_CATEGORIES: SavedCategory[] = [
 ];
 
 export const CATEGORY_LABELS: Record<SavedCategory, string> = {
-  top_list: "Top Filme & Shows",
+  top_list: "Top-Liste",
   watchlist: "Watchlist",
   dont_watch: "Don't Watch",
+};
+
+// Subheading shown on the full-page list view (app/u/[username]/[category]).
+export const CATEGORY_PAGE_SUBTITLES: Record<SavedCategory, string> = {
+  top_list: "Meine Top Filme & Serien",
+  watchlist: "Meine Watchlist",
+  dont_watch: "Meine Don't-Watch-Liste",
 };
 
 export const CATEGORY_ACTION_LABELS: Record<SavedCategory, string> = {

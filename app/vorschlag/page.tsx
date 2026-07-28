@@ -242,7 +242,7 @@ export default function VorschlagPage() {
       <div className="flex-1 w-full flex flex-col items-center gap-4 max-w-md p-5 pt-8">
         <div className="w-full flex flex-col gap-2">
           <BackToProfileLink />
-          <h1 className="font-medium text-xl">Inspiration</h1>
+          <h1 className="font-medium text-xl">Entdecke und empfehle neue Titel</h1>
         </div>
 
         <div className="w-full flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -315,9 +315,9 @@ export default function VorschlagPage() {
           )}
         </div>
 
-        <p className="text-xs text-muted-foreground text-center">
-          Rechts wischen = Gefällt mir · Links wischen = Kein Interesse ·
-          Buttons = direkt in eine Liste einsortieren
+        <p className="text-xs text-muted-foreground text-center mt-10">
+          Tippe auf das Poster für Details · Buttons in der Karte = direkt in
+          eine Liste einsortieren
         </p>
       </div>
 
