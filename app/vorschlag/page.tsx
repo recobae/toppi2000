@@ -8,8 +8,9 @@ import { SwipeCard } from "@/components/vorschlag/swipe-card";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { BackToProfileLink } from "@/components/profile/back-to-profile-link";
 import { useSocialProof, getSocialProofBreakdown } from "@/lib/hooks/use-social-proof";
-import { saveLike, saveToCategory } from "@/lib/saved-items";
+import { saveLike, saveToCategory, updateNote } from "@/lib/saved-items";
 import { CATEGORY_ACTION_LABELS, type SavedCategory } from "@/lib/categories";
+import { NoteModal } from "@/components/lists/note-modal";
 import type { SearchResult } from "@/lib/tmdb";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
@@ -45,6 +46,10 @@ export default function VorschlagPage() {
   const [guestModalMessage, setGuestModalMessage] = useState<string | null>(
     null,
   );
+  const [notePrompt, setNotePrompt] = useState<{
+    result: SearchResult;
+    category: SavedCategory;
+  } | null>(null);
 
   const pageRef = useRef(1);
   const seenKeys = useRef<Set<string>>(new Set());
@@ -217,6 +222,7 @@ export default function VorschlagPage() {
         return;
       }
       showToast(`Zu ${CATEGORY_ACTION_LABELS[category]} hinzugefügt`);
+      setNotePrompt({ result, category });
     },
     [removeCard, user, incrementGuestSwipes, logSwipe, showToast],
   );
@@ -326,6 +332,30 @@ export default function VorschlagPage() {
           message={guestModalMessage}
           next="/vorschlag"
           onClose={() => setGuestModalMessage(null)}
+        />
+      )}
+
+      {notePrompt && user && (
+        <NoteModal
+          title={notePrompt.result.title}
+          posterUrl={
+            notePrompt.result.posterPath
+              ? `${POSTER_BASE_URL}${notePrompt.result.posterPath}`
+              : null
+          }
+          initialNote={null}
+          onSave={async (note) => {
+            const supabase = createClient();
+            await updateNote(
+              supabase,
+              notePrompt.category,
+              user.id,
+              notePrompt.result.id,
+              notePrompt.result.mediaType,
+              note,
+            );
+          }}
+          onClose={() => setNotePrompt(null)}
         />
       )}
     </main>

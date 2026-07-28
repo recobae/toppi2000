@@ -43,6 +43,26 @@ export async function saveToCategory(
   );
 }
 
+/**
+ * Sets or clears the recommendation note on an already-saved item. Pass
+ * `null` to delete the note.
+ */
+export async function updateNote(
+  supabase: SupabaseClient,
+  category: SavedCategory,
+  userId: string,
+  itemId: number,
+  mediaType: "movie" | "tv",
+  note: string | null,
+) {
+  return supabase
+    .from(category)
+    .update({ note })
+    .eq("user_id", userId)
+    .eq("item_id", itemId)
+    .eq("media_type", mediaType);
+}
+
 export async function removeFromCategory(
   supabase: SupabaseClient,
   category: SavedCategory,

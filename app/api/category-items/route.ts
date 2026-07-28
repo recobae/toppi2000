@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isSavedCategory } from "@/lib/categories";
+import { canViewOwnerNotes, isNotesVisibility } from "@/lib/notes";
 import {
   getWatchProviders,
   getMovieDetails,
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, username")
+    .select("id, username, notes_visibility")
     .eq("username", username)
     .single();
 
@@ -49,9 +50,22 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getUser();
   const isOwner = viewer?.id === profile.id;
 
+  const notesVisibility = isNotesVisibility(profile.notes_visibility)
+    ? profile.notes_visibility
+    : "all";
+  // Enforced here, server-side -- the underlying tables are publicly
+  // readable via RLS (same as every other list-entry column), so the
+  // "followers"/"self" restriction only exists at this application layer.
+  // Notes never reach the client response unless this check passes.
+  const canViewNotes = await canViewOwnerNotes(supabase, {
+    ownerId: profile.id,
+    viewerId: viewer?.id ?? null,
+    notesVisibility,
+  });
+
   const { data: rows, error } = await supabase
     .from(category)
-    .select("id, item_id, media_type, title, image_url, metadata, position")
+    .select("id, item_id, media_type, title, image_url, metadata, position, note")
     .eq("user_id", profile.id)
     .order("position", { ascending: true });
 
@@ -83,6 +97,7 @@ export async function GET(request: NextRequest) {
         title: row.title,
         imageUrl: row.image_url,
         year: (row.metadata as { year?: string | null } | null)?.year ?? null,
+        note: canViewNotes ? (row.note ?? null) : null,
         watchProviders,
         movieDetails,
       };

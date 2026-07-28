@@ -18,6 +18,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { BackToProfileLink } from "@/components/profile/back-to-profile-link";
+import {
+  NOTES_VISIBILITY_OPTIONS,
+  isNotesVisibility,
+  type NotesVisibility,
+} from "@/lib/notes";
 
 const UNIQUE_VIOLATION_CODE = "23505";
 
@@ -40,6 +45,9 @@ export default function SettingsPage() {
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
 
+  const [notesVisibility, setNotesVisibility] = useState<NotesVisibility>("all");
+  const [isSavingNotesVisibility, setIsSavingNotesVisibility] = useState(false);
+
   const usernameStatus = useUsernameAvailability(username, currentUsername);
   const isEmailProvider = user?.app_metadata?.provider === "email";
 
@@ -61,12 +69,15 @@ export default function SettingsPage() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("username")
+        .select("username, notes_visibility")
         .eq("id", currentUser.id)
         .maybeSingle();
 
       setCurrentUsername(profile?.username ?? null);
       setUsername(profile?.username ?? "");
+      if (profile?.notes_visibility && isNotesVisibility(profile.notes_visibility)) {
+        setNotesVisibility(profile.notes_visibility);
+      }
       setIsLoading(false);
     })();
   }, [router]);
@@ -150,6 +161,22 @@ export default function SettingsPage() {
     setIsSavingPassword(false);
   };
 
+  const handleNotesVisibilityChange = async (value: NotesVisibility) => {
+    if (!user || value === notesVisibility) return;
+    const previous = notesVisibility;
+    setNotesVisibility(value);
+    setIsSavingNotesVisibility(true);
+
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("profiles")
+      .update({ notes_visibility: value })
+      .eq("id", user.id);
+
+    if (error) setNotesVisibility(previous);
+    setIsSavingNotesVisibility(false);
+  };
+
   if (isLoading) {
     return (
       <main className="min-h-screen flex items-center justify-center">
@@ -218,6 +245,37 @@ export default function SettingsPage() {
                 {isSavingUsername ? "Wird gespeichert…" : "Speichern"}
               </Button>
             </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Notizen</CardTitle>
+            <CardDescription>
+              Wer deine Notizen zu Empfehlungen sehen kann.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-2">
+              {NOTES_VISIBILITY_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  disabled={isSavingNotesVisibility}
+                  onClick={() => handleNotesVisibilityChange(option.value)}
+                  className={`flex flex-col items-start gap-0.5 rounded-md border px-3 py-2 text-left transition-colors disabled:opacity-50 ${
+                    notesVisibility === option.value
+                      ? "border-primary bg-primary/5"
+                      : "border-input hover:bg-accent"
+                  }`}
+                >
+                  <span className="text-sm font-medium">{option.label}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {option.description}
+                  </span>
+                </button>
+              ))}
+            </div>
           </CardContent>
         </Card>
 

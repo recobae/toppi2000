@@ -14,9 +14,13 @@ import { Button } from "@/components/ui/button";
 import { SORT_FILTERS, GENRE_FILTERS } from "@/lib/movie-genres";
 import { useSocialProof, getSocialProofBreakdown } from "@/lib/hooks/use-social-proof";
 import { useSavedState, getSavedState } from "@/lib/hooks/use-saved-state";
-import { CATEGORY_LABELS, isSavedCategory } from "@/lib/categories";
+import { CATEGORY_LABELS, isSavedCategory, type SavedCategory } from "@/lib/categories";
+import { updateNote } from "@/lib/saved-items";
+import { NoteModal } from "@/components/lists/note-modal";
 import type { PersonSummary, SearchResult } from "@/lib/tmdb";
 import type { PersonCreditResult } from "@/app/api/person-credits/route";
+
+const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
 
 const MY_LIKES_KEY = "__my_likes__";
 
@@ -289,18 +293,23 @@ export default function SearchPage() {
   ].map((r) => ({ id: r.id, mediaType: r.mediaType }));
   const { stateMap, markSaved } = useSavedState(savedStateItems);
 
+  const [notePrompt, setNotePrompt] = useState<{
+    result: SearchResult;
+    category: SavedCategory;
+  } | null>(null);
+
   const handleSavedChange = (
-    resultId: number,
-    mediaType: "movie" | "tv",
-    category: "top_list" | "watchlist" | "dont_watch",
+    result: SearchResult,
+    category: SavedCategory,
     value: boolean,
   ) => {
-    markSaved(resultId, mediaType, category, value);
+    markSaved(result.id, result.mediaType, category, value);
     showToast(
       value
         ? `Zu ${CATEGORY_LABELS[category]} hinzugefügt`
         : `Aus ${CATEGORY_LABELS[category]} entfernt`,
     );
+    if (value) setNotePrompt({ result, category });
   };
 
   return (
@@ -435,12 +444,7 @@ export default function SearchPage() {
                           result.mediaType,
                         )}
                         onSavedChange={(category, value) =>
-                          handleSavedChange(
-                            result.id,
-                            result.mediaType,
-                            category,
-                            value,
-                          )
+                          handleSavedChange(result, category, value)
                         }
                         onGuestClick={() => setShowGuestModal(true)}
                         socialProof={getSocialProofBreakdown(
@@ -482,12 +486,7 @@ export default function SearchPage() {
                               result.mediaType,
                             )}
                             onSavedChange={(category, value) =>
-                              handleSavedChange(
-                                result.id,
-                                result.mediaType,
-                                category,
-                                value,
-                              )
+                              handleSavedChange(result, category, value)
                             }
                             onGuestClick={() => setShowGuestModal(true)}
                             socialProof={getSocialProofBreakdown(
@@ -563,12 +562,7 @@ export default function SearchPage() {
                         result.mediaType,
                       )}
                       onSavedChange={(category, value) =>
-                        handleSavedChange(
-                          result.id,
-                          result.mediaType,
-                          category,
-                          value,
-                        )
+                        handleSavedChange(result, category, value)
                       }
                       onGuestClick={() => setShowGuestModal(true)}
                       jobTags={result.jobs}
@@ -607,12 +601,7 @@ export default function SearchPage() {
                       result.mediaType,
                     )}
                     onSavedChange={(category, value) =>
-                      handleSavedChange(
-                        result.id,
-                        result.mediaType,
-                        category,
-                        value,
-                      )
+                      handleSavedChange(result, category, value)
                     }
                     onGuestClick={() => setShowGuestModal(true)}
                     socialProof={getSocialProofBreakdown(
@@ -633,6 +622,30 @@ export default function SearchPage() {
           message="Melde dich an, um Titel zu deinen eigenen Listen hinzuzufügen."
           next="/search"
           onClose={() => setShowGuestModal(false)}
+        />
+      )}
+
+      {notePrompt && user && (
+        <NoteModal
+          title={notePrompt.result.title}
+          posterUrl={
+            notePrompt.result.posterPath
+              ? `${POSTER_BASE_URL}${notePrompt.result.posterPath}`
+              : null
+          }
+          initialNote={null}
+          onSave={async (note) => {
+            const supabase = createClient();
+            await updateNote(
+              supabase,
+              notePrompt.category,
+              user.id,
+              notePrompt.result.id,
+              notePrompt.result.mediaType,
+              note,
+            );
+          }}
+          onClose={() => setNotePrompt(null)}
         />
       )}
     </main>

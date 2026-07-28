@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ThumbsDown, ThumbsUp, GripVertical, Plus, X } from "lucide-react";
+import { Pencil, ThumbsDown, ThumbsUp, GripVertical, Plus, X } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import {
   DndContext,
@@ -28,8 +28,10 @@ import { WatchProviderBadges } from "@/components/watch-provider-badges";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { MovieMetaBadges, MovieDetailModal } from "@/components/movie-info";
 import { SearchResultCard } from "@/components/search/search-result-card";
-import { removeFromCategory } from "@/lib/saved-items";
+import { removeFromCategory, updateNote } from "@/lib/saved-items";
 import { CATEGORY_LABELS, type SavedCategory } from "@/lib/categories";
+import { truncateNote } from "@/lib/notes";
+import { NoteModal } from "@/components/lists/note-modal";
 import { useSavedState, getSavedState } from "@/lib/hooks/use-saved-state";
 import { useSocialProof, getSocialProofBreakdown } from "@/lib/hooks/use-social-proof";
 import { getItemRatings, rateItem } from "@/lib/item-ratings";
@@ -42,6 +44,7 @@ export type CategoryListItem = {
   title: string;
   imageUrl: string | null;
   year: string | null;
+  note: string | null;
   watchProviders: WatchProviderGroups;
   movieDetails: MovieDetails;
 };
@@ -79,12 +82,18 @@ function ToastStack({ toasts }: { toasts: Toast[] }) {
 
 function OwnerListItemCard({
   item,
+  category,
+  userId,
   onRemove,
   isRemoving,
+  onNoteSaved,
 }: {
   item: CategoryListItem;
+  category: SavedCategory;
+  userId: string;
   onRemove: (item: CategoryListItem) => void;
   isRemoving: boolean;
+  onNoteSaved: (item: CategoryListItem, note: string | null) => void;
 }) {
   const sortable = useSortable({ id: item.id });
   const style = {
@@ -92,6 +101,20 @@ function OwnerListItemCard({
     transition: sortable.transition,
   };
   const [showDetails, setShowDetails] = useState(false);
+  const [showNoteModal, setShowNoteModal] = useState(false);
+
+  const handleSaveNote = async (note: string | null) => {
+    const supabase = createClient();
+    const { error } = await updateNote(
+      supabase,
+      category,
+      userId,
+      item.itemId,
+      item.mediaType,
+      note,
+    );
+    if (!error) onNoteSaved(item, note);
+  };
 
   return (
     <div
@@ -137,21 +160,36 @@ function OwnerListItemCard({
               {item.title}
             </p>
             <MovieMetaBadges details={item.movieDetails} year={item.year} />
+            {item.note && (
+              <p className="mt-1 text-[11px] italic text-muted-foreground line-clamp-2">
+                „{truncateNote(item.note)}“
+              </p>
+            )}
           </div>
           <WatchProviderBadges
             providers={item.watchProviders}
             title={item.title}
           />
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-auto"
-            disabled={isRemoving}
-            onClick={() => onRemove(item)}
-          >
-            <X />
-            {isRemoving ? "Wird entfernt…" : "Entfernen"}
-          </Button>
+          <div className="mt-auto flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              disabled={isRemoving}
+              onClick={() => onRemove(item)}
+            >
+              <X />
+              {isRemoving ? "Wird entfernt…" : "Entfernen"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={item.note ? "Notiz bearbeiten" : "Notiz hinzufügen"}
+              onClick={() => setShowNoteModal(true)}
+            >
+              <Pencil />
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -163,7 +201,18 @@ function OwnerListItemCard({
           details={item.movieDetails}
           tmdbId={item.itemId}
           mediaType={item.mediaType}
+          note={item.note}
           onClose={() => setShowDetails(false)}
+        />
+      )}
+
+      {showNoteModal && (
+        <NoteModal
+          title={item.title}
+          posterUrl={item.imageUrl}
+          initialNote={item.note}
+          onSave={handleSaveNote}
+          onClose={() => setShowNoteModal(false)}
         />
       )}
     </div>
@@ -231,6 +280,14 @@ function OwnerCategoryGrid({
     }
   };
 
+  const handleNoteSaved = (item: CategoryListItem, note: string | null) => {
+    setItems((prev) =>
+      prev.map((existing) =>
+        existing.id === item.id ? { ...existing, note } : existing,
+      ),
+    );
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -265,8 +322,11 @@ function OwnerCategoryGrid({
               <OwnerListItemCard
                 key={item.id}
                 item={item}
+                category={category}
+                userId={userId}
                 onRemove={handleRemove}
                 isRemoving={removingId === item.id}
+                onNoteSaved={handleNoteSaved}
               />
             ))}
             <AddItemTile category={category} />
@@ -357,6 +417,10 @@ function VisitorCategoryGrid({
   const [ratings, setRatings] = useState<
     Record<string, { up: number; down: number; myVote: boolean | null }>
   >({});
+  const [notePrompt, setNotePrompt] = useState<{
+    result: SearchResult;
+    category: SavedCategory;
+  } | null>(null);
 
   const showToast = useCallback((message: string) => {
     const id = Date.now() + Math.random();
@@ -426,6 +490,7 @@ function VisitorCategoryGrid({
                     ? `Zu ${CATEGORY_LABELS[category]} hinzugefügt`
                     : `Aus ${CATEGORY_LABELS[category]} entfernt`,
                 );
+                if (value) setNotePrompt({ result, category });
               }}
               onGuestClick={() => setShowGuestPrompt(true)}
               socialProof={getSocialProofBreakdown(
@@ -433,6 +498,7 @@ function VisitorCategoryGrid({
                 item.itemId,
                 item.mediaType,
               )}
+              note={item.note}
               extraFooter={
                 user ? (
                   <RatingButtons
@@ -473,6 +539,30 @@ function VisitorCategoryGrid({
           message={`Melde dich an, um Titel zu deinen eigenen Listen hinzuzufügen, ${ownerUsername}s Liste zu entdecken, direkt zu sehen wo Titel gerade laufen, und Inspirationen für heute Abend zu entdecken.`}
           next={`/u/${ownerUsername}`}
           onClose={() => setShowGuestPrompt(false)}
+        />
+      )}
+
+      {notePrompt && user && (
+        <NoteModal
+          title={notePrompt.result.title}
+          posterUrl={
+            notePrompt.result.posterPath
+              ? `https://image.tmdb.org/t/p/w342${notePrompt.result.posterPath}`
+              : null
+          }
+          initialNote={null}
+          onSave={async (note) => {
+            const supabase = createClient();
+            await updateNote(
+              supabase,
+              notePrompt.category,
+              user.id,
+              notePrompt.result.id,
+              notePrompt.result.mediaType,
+              note,
+            );
+          }}
+          onClose={() => setNotePrompt(null)}
         />
       )}
     </div>

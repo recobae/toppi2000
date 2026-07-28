@@ -127,6 +127,7 @@ export function MovieDetailModal({
   tmdbId,
   mediaType,
   socialProof,
+  note,
   onClose,
 }: {
   title: string;
@@ -136,6 +137,7 @@ export function MovieDetailModal({
   tmdbId: number;
   mediaType: "movie" | "tv";
   socialProof?: SocialProofBreakdown;
+  note?: string | null;
   onClose: () => void;
 }) {
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
@@ -260,6 +262,15 @@ export function MovieDetailModal({
         <p className="text-sm text-muted-foreground">
           {details.overview || "Keine Beschreibung verfügbar."}
         </p>
+
+        {note && (
+          <div className="flex flex-col gap-1 rounded-md bg-muted/50 p-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              Notiz
+            </p>
+            <p className="text-sm italic">„{note}“</p>
+          </div>
+        )}
 
         {hasSocialProof && socialProof && (
           <div className="flex flex-col gap-1.5 rounded-md bg-muted/50 p-3">
