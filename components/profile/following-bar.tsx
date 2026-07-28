@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { FollowSuggestionsModal } from "@/components/profile/follow-suggestions-modal";
+import { EXPERTISE_ICONS, type ExpertiseLabelKey } from "@/lib/expertise";
 
 const RING_CLASS =
   "rounded-full p-[3px] bg-[conic-gradient(from_0deg,#f97316,#ec4899,#8b5cf6,#3b82f6,#10b981,#f97316)]";
@@ -13,7 +14,21 @@ type FollowingProfile = {
   id: string;
   username: string;
   avatarUrl: string | null;
+  expertiseKeys: string[];
 };
+
+function ExpertiseCornerBadge({ expertiseKeys }: { expertiseKeys: string[] }) {
+  const key = expertiseKeys[0] as ExpertiseLabelKey | undefined;
+  if (!key) return null;
+  const Icon = EXPERTISE_ICONS[key];
+  if (!Icon) return null;
+
+  return (
+    <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-background border border-border">
+      <Icon className="size-2.5 fill-current text-primary" />
+    </span>
+  );
+}
 
 export function FollowingBar({
   currentUserId,
@@ -54,14 +69,17 @@ export function FollowingBar({
           aria-label={friend.username}
           className="shrink-0 flex flex-col items-center gap-1 w-14"
         >
-          <span className={`block ${RING_CLASS}`}>
-            <span className="block rounded-full bg-background p-[3px]">
-              <ProfileAvatar
-                username={friend.username}
-                imageUrl={friend.avatarUrl}
-                size="sm"
-              />
+          <span className="relative block">
+            <span className={`block ${RING_CLASS}`}>
+              <span className="block rounded-full bg-background p-[3px]">
+                <ProfileAvatar
+                  username={friend.username}
+                  imageUrl={friend.avatarUrl}
+                  size="sm"
+                />
+              </span>
             </span>
+            <ExpertiseCornerBadge expertiseKeys={friend.expertiseKeys} />
           </span>
           <span className="w-full text-center text-[10px] text-muted-foreground truncate">
             {friend.username}

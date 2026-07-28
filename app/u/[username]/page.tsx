@@ -12,7 +12,14 @@ import { FollowButton } from "@/components/profile/follow-button";
 import { FollowingBar } from "@/components/profile/following-bar";
 import { FollowerCount } from "@/components/profile/follower-count";
 import { ShareListButton } from "@/components/lists/share-list-button";
-import { CATEGORY_ICONS, CATEGORY_LABELS, SAVED_CATEGORIES } from "@/lib/categories";
+import { ExpertiseBadges } from "@/components/profile/expertise-badges";
+import {
+  CATEGORY_ICONS,
+  CATEGORY_LABELS,
+  SAVED_CATEGORIES,
+  type SavedCategory,
+} from "@/lib/categories";
+import { resolveEarnedExpertiseLabels } from "@/lib/expertise";
 
 async function getProfileUrl(username: string): Promise<string> {
   const headersList = await headers();
@@ -82,6 +89,11 @@ export default async function ProfilePage({
   const topListPreview = previewByCategory.find((p) => p.category === "top_list");
   const likesCount = profile.total_likes_received ?? 0;
 
+  const itemCountByCategory = Object.fromEntries(
+    previewByCategory.map((entry) => [entry.category, entry.itemCount]),
+  ) as Partial<Record<SavedCategory, number>>;
+  const earnedExpertiseLabels = resolveEarnedExpertiseLabels(itemCountByCategory);
+
   const { count: followerCount } = await supabase
     .from("user_follows")
     .select("id", { count: "exact", head: true })
@@ -91,6 +103,7 @@ export default async function ProfilePage({
     id: string;
     username: string;
     avatarUrl: string | null;
+    expertiseKeys: string[];
   };
 
   let followingProfiles: FollowingProfile[] = [];
@@ -113,17 +126,34 @@ export default async function ProfilePage({
         ]);
 
       const avatarByUserId = new Map<string, string>();
+      // Currently every expertise label sources from "top_list", the same
+      // table already queried above for avatar posters -- reuse those rows
+      // to count per-friend items instead of an extra query. A future label
+      // backed by a different category would add its own count map here.
+      const topListCountByUserId = new Map<string, number>();
       for (const item of friendTopListItems ?? []) {
         if (item.image_url && !avatarByUserId.has(item.user_id)) {
           avatarByUserId.set(item.user_id, item.image_url);
         }
+        topListCountByUserId.set(
+          item.user_id,
+          (topListCountByUserId.get(item.user_id) ?? 0) + 1,
+        );
       }
 
-      followingProfiles = (friendProfiles ?? []).map((friend) => ({
-        id: friend.id,
-        username: friend.username,
-        avatarUrl: avatarByUserId.get(friend.id) ?? null,
-      }));
+      followingProfiles = (friendProfiles ?? []).map((friend) => {
+        const itemCounts: Partial<Record<SavedCategory, number>> = {
+          top_list: topListCountByUserId.get(friend.id) ?? 0,
+        };
+        return {
+          id: friend.id,
+          username: friend.username,
+          avatarUrl: avatarByUserId.get(friend.id) ?? null,
+          expertiseKeys: resolveEarnedExpertiseLabels(itemCounts).map(
+            (entry) => entry.key,
+          ),
+        };
+      });
     }
   }
 
@@ -165,6 +195,8 @@ export default async function ProfilePage({
             />
           )}
         </div>
+
+        <ExpertiseBadges labels={earnedExpertiseLabels} />
 
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-1.5">
