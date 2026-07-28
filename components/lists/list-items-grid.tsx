@@ -30,7 +30,7 @@ import { MovieMetaBadges, MovieDetailModal } from "@/components/movie-info";
 import { SearchResultCard } from "@/components/search/search-result-card";
 import { removeFromCategory, updateNote } from "@/lib/saved-items";
 import { CATEGORY_LABELS, type SavedCategory } from "@/lib/categories";
-import { truncateNote } from "@/lib/notes";
+import { NOTE_PLACEHOLDERS, SKIP_ADD_NOTE_PROMPT, truncateNote } from "@/lib/notes";
 import { NoteModal } from "@/components/lists/note-modal";
 import { useSavedState, getSavedState } from "@/lib/hooks/use-saved-state";
 import { useSocialProof, getSocialProofBreakdown } from "@/lib/hooks/use-social-proof";
@@ -211,6 +211,7 @@ function OwnerListItemCard({
           title={item.title}
           posterUrl={item.imageUrl}
           initialNote={item.note}
+          placeholder={NOTE_PLACEHOLDERS[category]}
           onSave={handleSaveNote}
           onClose={() => setShowNoteModal(false)}
         />
@@ -490,7 +491,9 @@ function VisitorCategoryGrid({
                     ? `Zu ${CATEGORY_LABELS[category]} hinzugefügt`
                     : `Aus ${CATEGORY_LABELS[category]} entfernt`,
                 );
-                if (value) setNotePrompt({ result, category });
+                if (value && !SKIP_ADD_NOTE_PROMPT.includes(category)) {
+                  setNotePrompt({ result, category });
+                }
               }}
               onGuestClick={() => setShowGuestPrompt(true)}
               socialProof={getSocialProofBreakdown(
@@ -551,6 +554,7 @@ function VisitorCategoryGrid({
               : null
           }
           initialNote={null}
+          placeholder={NOTE_PLACEHOLDERS[notePrompt.category]}
           onSave={async (note) => {
             const supabase = createClient();
             await updateNote(

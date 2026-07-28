@@ -16,6 +16,7 @@ import { useSocialProof, getSocialProofBreakdown } from "@/lib/hooks/use-social-
 import { useSavedState, getSavedState } from "@/lib/hooks/use-saved-state";
 import { CATEGORY_LABELS, isSavedCategory, type SavedCategory } from "@/lib/categories";
 import { updateNote } from "@/lib/saved-items";
+import { NOTE_PLACEHOLDERS, SKIP_ADD_NOTE_PROMPT } from "@/lib/notes";
 import { NoteModal } from "@/components/lists/note-modal";
 import type { PersonSummary, SearchResult } from "@/lib/tmdb";
 import type { PersonCreditResult } from "@/app/api/person-credits/route";
@@ -309,7 +310,9 @@ export default function SearchPage() {
         ? `Zu ${CATEGORY_LABELS[category]} hinzugefügt`
         : `Aus ${CATEGORY_LABELS[category]} entfernt`,
     );
-    if (value) setNotePrompt({ result, category });
+    if (value && !SKIP_ADD_NOTE_PROMPT.includes(category)) {
+      setNotePrompt({ result, category });
+    }
   };
 
   return (
@@ -634,6 +637,7 @@ export default function SearchPage() {
               : null
           }
           initialNote={null}
+          placeholder={NOTE_PLACEHOLDERS[notePrompt.category]}
           onSave={async (note) => {
             const supabase = createClient();
             await updateNote(

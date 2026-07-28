@@ -12,10 +12,12 @@ export const SAVED_CATEGORIES: SavedCategory[] = [
   "dont_watch",
 ];
 
+// "dont_watch" stays the internal key (matches the DB table name) -- only
+// the user-facing label changed from "Don't Watch" to "Overrated".
 export const CATEGORY_LABELS: Record<SavedCategory, string> = {
   top_list: "Top-Liste",
   watchlist: "Watchlist",
-  dont_watch: "Don't Watch",
+  dont_watch: "Overrated",
 };
 
 // Subheading shown on the full-page list view (app/u/[username]/[category]).
@@ -28,7 +30,7 @@ export const CATEGORY_PAGE_SUBTITLES: Record<SavedCategory, string> = {
 export const CATEGORY_ACTION_LABELS: Record<SavedCategory, string> = {
   top_list: "Top List",
   watchlist: "Watchlist",
-  dont_watch: "Don't Watch",
+  dont_watch: "Overrated",
 };
 
 export function isSavedCategory(value: string): value is SavedCategory {

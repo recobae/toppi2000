@@ -286,7 +286,7 @@ export function MovieDetailModal({
             />
             <SocialProofGroupRow
               icon={<Ban className="size-3.5 text-destructive" />}
-              label="Don't Watch"
+              label="Overrated"
               group={socialProof.dontWatch}
             />
           </div>

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SavedCategory } from "@/lib/categories";
 
 // A recommendation note is category-agnostic: it lives as a plain "note"
 // column on whichever list-entry table the item belongs to (top_list,
@@ -64,6 +65,20 @@ export async function canViewOwnerNotes(
     .maybeSingle();
   return !!data;
 }
+
+// Same field, different prompt per category -- what's worth noting about a
+// Top-Liste pick isn't the same as what's worth noting about an Overrated
+// pick. Used both when the field appears at add-time and when editing later.
+export const NOTE_PLACEHOLDERS: Record<SavedCategory, string> = {
+  top_list: "Teile, was du daran besonders gut findest",
+  dont_watch: "Was nervt dich daran am meisten?",
+  watchlist: "Was erwartest Du?",
+};
+
+// Watchlist entries keep full note support (add/edit/delete via the list's
+// edit option) -- they just don't interrupt the add flow with the prompt
+// the way Top-Liste/Overrated do.
+export const SKIP_ADD_NOTE_PROMPT: SavedCategory[] = ["watchlist"];
 
 export function truncateNote(note: string, maxLength = 48): string {
   const trimmed = note.trim();

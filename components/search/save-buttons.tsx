@@ -20,7 +20,7 @@ const CATEGORY_ACTIVE_CLASSES: Record<SavedCategory, string> = {
 };
 
 /**
- * Tinder-style 3-button save row: Don't Watch (left, red), Top List
+ * Tinder-style 3-button save row: Overrated (left, red), Top List
  * (center, highlighted), Watchlist (right, neutral). Clicking immediately
  * writes/removes the entry -- no confirmation step.
  */

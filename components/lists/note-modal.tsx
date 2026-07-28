@@ -9,12 +9,14 @@ export function NoteModal({
   title,
   posterUrl,
   initialNote,
+  placeholder = "Warum empfiehlst du das?",
   onSave,
   onClose,
 }: {
   title: string;
   posterUrl: string | null;
   initialNote: string | null;
+  placeholder?: string;
   onSave: (note: string | null) => void | Promise<void>;
   onClose: () => void;
 }) {
@@ -86,7 +88,7 @@ export function NoteModal({
             maxLength={NOTE_MAX_LENGTH}
             rows={3}
             autoFocus
-            placeholder="Warum empfiehlst du das?"
+            placeholder={placeholder}
             className="w-full resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm"
           />
           <span className="self-end text-[10px] text-muted-foreground">

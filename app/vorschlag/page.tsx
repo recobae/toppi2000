@@ -10,6 +10,7 @@ import { BackToProfileLink } from "@/components/profile/back-to-profile-link";
 import { useSocialProof, getSocialProofBreakdown } from "@/lib/hooks/use-social-proof";
 import { saveLike, saveToCategory, updateNote } from "@/lib/saved-items";
 import { CATEGORY_ACTION_LABELS, type SavedCategory } from "@/lib/categories";
+import { NOTE_PLACEHOLDERS, SKIP_ADD_NOTE_PROMPT } from "@/lib/notes";
 import { NoteModal } from "@/components/lists/note-modal";
 import type { SearchResult } from "@/lib/tmdb";
 
@@ -222,7 +223,9 @@ export default function VorschlagPage() {
         return;
       }
       showToast(`Zu ${CATEGORY_ACTION_LABELS[category]} hinzugefügt`);
-      setNotePrompt({ result, category });
+      if (!SKIP_ADD_NOTE_PROMPT.includes(category)) {
+        setNotePrompt({ result, category });
+      }
     },
     [removeCard, user, incrementGuestSwipes, logSwipe, showToast],
   );
@@ -344,6 +347,7 @@ export default function VorschlagPage() {
               : null
           }
           initialNote={null}
+          placeholder={NOTE_PLACEHOLDERS[notePrompt.category]}
           onSave={async (note) => {
             const supabase = createClient();
             await updateNote(
