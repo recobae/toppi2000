@@ -16,18 +16,10 @@ export function BackToProfileLink({
     const supabase = createClient();
 
     (async () => {
-      let lastVisitedUsername: string | null = null;
-      try {
-        lastVisitedUsername = localStorage.getItem(LAST_VISITED_PROFILE_KEY);
-      } catch {
-        // localStorage unavailable; fall back to the own-profile lookup below
-      }
-
-      if (lastVisitedUsername) {
-        setHref(`/u/${lastVisitedUsername}`);
-        return;
-      }
-
+      // Always resolve the actual signed-in user first -- localStorage is
+      // not scoped per account, so a value written by a previous session
+      // (a different account, or a guest browsing before logging in) must
+      // never be trusted on its own.
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -38,10 +30,25 @@ export function BackToProfileLink({
         .select("username")
         .eq("id", user.id)
         .maybeSingle();
+      const ownUsername = profile?.username ?? null;
+      if (!ownUsername) return;
 
-      if (profile?.username) {
-        setHref(`/u/${profile.username}`);
+      let lastVisitedUsername: string | null = null;
+      try {
+        lastVisitedUsername = localStorage.getItem(LAST_VISITED_PROFILE_KEY);
+      } catch {
+        // localStorage unavailable; fall back to the own-profile link below
       }
+
+      // Only a genuinely different, foreign profile is worth a shortcut back
+      // to "the profile I was just looking at" -- otherwise this is just the
+      // own-profile link.
+      const target =
+        lastVisitedUsername && lastVisitedUsername !== ownUsername
+          ? lastVisitedUsername
+          : ownUsername;
+
+      setHref(`/u/${target}`);
     })();
   }, []);
 

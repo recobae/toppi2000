@@ -18,11 +18,13 @@ export default async function Home() {
     <main className="min-h-screen flex flex-col items-center justify-center">
       <div className="flex flex-col items-center gap-6 max-w-md p-5 text-center">
         <h1 className="text-2xl font-semibold">
-          Erstelle deine eigenen Toplisten und teile sie mit Freunden
+          Dein Kumpel kennt die besten Filme, deine Freundin die besten
+          Restaurants
         </h1>
         <p className="text-muted-foreground">
-          Ranke deine Lieblingsfilme und -serien, verwalte deine Watchlist und
-          zeig deinen Freunden per WhatsApp, was du noch schauen willst
+          Empfehlungen von Leuten, deren Geschmack du vertraust. Direkt
+          checken, ohne Anfragen. Unterstützt durch AI-Inspirationen
+          basierend auf deinen Vorlieben.
         </p>
         <div className="flex gap-3">
           <Button asChild variant="outline">

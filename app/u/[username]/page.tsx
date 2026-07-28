@@ -180,15 +180,7 @@ export default async function ProfilePage({
             targetUsername={profile.username}
           />
         )}
-        {isGuest && (
-          <div className="flex items-center gap-2">
-            <GuestProfileCta variant="button" />
-            <FollowButton
-              targetUserId={profile.id}
-              targetUsername={profile.username}
-            />
-          </div>
-        )}
+        {isGuest && <GuestProfileCta variant="button" />}
 
         {isOwner && (
           <FollowingBar
