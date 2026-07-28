@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Heart, Settings, Search } from "lucide-react";
+import { Heart, Settings } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { ListTile } from "@/components/profile/list-tile";
@@ -144,37 +144,26 @@ export default async function ProfilePage({
           </span>
         </Link>
 
-        <div className="w-full flex items-center justify-between gap-2">
-          <div className="w-9 flex justify-start">
-            {isOwner && (
-              <Link
-                href="/settings"
-                aria-label="Einstellungen"
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Settings className="size-5" />
-              </Link>
-            )}
-          </div>
+        <div className="flex items-center justify-center gap-1.5">
+          {isOwner && (
+            <Link
+              href="/settings"
+              aria-label="Einstellungen"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Settings className="size-5" />
+            </Link>
+          )}
           <h1 className="text-xl font-semibold text-center truncate">
             {profile.username}
           </h1>
-          <div className="w-9 flex items-center justify-end gap-1">
-            {isOwner && (
-              <ShareListButton
-                shareTitle={`Schau dir ${profile.username}s Filmgeschmack an`}
-                url={profileUrl}
-                iconOnly
-              />
-            )}
-            <Link
-              href="/search"
-              aria-label="Suche"
-              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
-              <Search className="size-4" />
-            </Link>
-          </div>
+          {isOwner && (
+            <ShareListButton
+              shareTitle={`Schau dir ${profile.username}s Filmgeschmack an`}
+              url={profileUrl}
+              iconOnly
+            />
+          )}
         </div>
 
         <div className="flex items-center gap-4 text-sm text-muted-foreground">

@@ -22,7 +22,7 @@ export const CATEGORY_LABELS: Record<SavedCategory, string> = {
 export const CATEGORY_PAGE_SUBTITLES: Record<SavedCategory, string> = {
   top_list: "Meine Top Filme & Serien",
   watchlist: "Meine Watchlist",
-  dont_watch: "Meine Don't-Watch-Liste",
+  dont_watch: "Absoluter Schrott",
 };
 
 export const CATEGORY_ACTION_LABELS: Record<SavedCategory, string> = {

@@ -46,20 +46,25 @@ export function FollowingBar({
   }
 
   return (
-    <div className="w-full flex items-center gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="w-full flex items-start gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {followingProfiles.map((friend) => (
         <Link
           key={friend.id}
           href={`/u/${friend.username}`}
           aria-label={friend.username}
-          className={`shrink-0 block ${RING_CLASS}`}
+          className="shrink-0 flex flex-col items-center gap-1 w-14"
         >
-          <span className="block rounded-full bg-background p-[3px]">
-            <ProfileAvatar
-              username={friend.username}
-              imageUrl={friend.avatarUrl}
-              size="sm"
-            />
+          <span className={`block ${RING_CLASS}`}>
+            <span className="block rounded-full bg-background p-[3px]">
+              <ProfileAvatar
+                username={friend.username}
+                imageUrl={friend.avatarUrl}
+                size="sm"
+              />
+            </span>
+          </span>
+          <span className="w-full text-center text-[10px] text-muted-foreground truncate">
+            {friend.username}
           </span>
         </Link>
       ))}

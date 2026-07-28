@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Search } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
@@ -40,15 +41,36 @@ export function SiteHeader() {
   }, []);
 
   if (!username) return null;
-  if (pathname === `/u/${username}`) return null;
+
+  // Own profile overview or any of its own list detail pages already carry
+  // an equivalent "back to profile" affordance -- showing the avatar there
+  // too would be a redundant link to the page you're already on.
+  const onOwnProfile =
+    pathname === `/u/${username}` || pathname.startsWith(`/u/${username}/`);
+  const onSearch = pathname === "/search";
+
+  if (onOwnProfile && onSearch) return null;
 
   return (
-    <Link
-      href={`/u/${username}`}
-      aria-label="Zu meinem Profil"
-      className="fixed top-4 right-4 z-50 rounded-full shadow-sm hover:opacity-90 transition-opacity"
-    >
-      <ProfileAvatar username={username} imageUrl={avatarUrl} size="sm" />
-    </Link>
+    <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
+      {!onSearch && (
+        <Link
+          href="/search"
+          aria-label="Suche"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-background border shadow-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Search className="size-4" />
+        </Link>
+      )}
+      {!onOwnProfile && (
+        <Link
+          href={`/u/${username}`}
+          aria-label="Zu meinem Profil"
+          className="rounded-full shadow-sm hover:opacity-90 transition-opacity"
+        >
+          <ProfileAvatar username={username} imageUrl={avatarUrl} size="sm" />
+        </Link>
+      )}
+    </div>
   );
 }

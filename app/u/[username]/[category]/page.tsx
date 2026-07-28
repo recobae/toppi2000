@@ -55,10 +55,9 @@ export default async function CategoryListPage({
           >
             ← Zum Profil
           </Link>
-          <h1 className="font-medium text-xl">{CATEGORY_LABELS[category]}</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="font-medium text-xl">
             {CATEGORY_PAGE_SUBTITLES[category]}
-          </p>
+          </h1>
         </div>
         <CategoryItemsGrid
           username={profile.username}
