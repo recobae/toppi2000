@@ -12,7 +12,12 @@ import {
 import { Bookmark, Crown, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { WatchProviderBadges } from "@/components/watch-provider-badges";
-import { MovieMetaBadges, MovieDetailModal } from "@/components/movie-info";
+import {
+  MovieMetaBadges,
+  MovieDetailModal,
+  SocialProofLabel,
+} from "@/components/movie-info";
+import type { SocialProofEntry } from "@/lib/hooks/use-social-proof";
 import type { SearchResult } from "@/lib/tmdb";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w500";
@@ -30,6 +35,7 @@ export function SwipeCard({
   onSwipeRight,
   onSwipeUp,
   onAddToWatchlist,
+  socialProof,
 }: {
   result: SearchResult;
   stackIndex: number;
@@ -38,6 +44,7 @@ export function SwipeCard({
   onSwipeRight: () => void;
   onSwipeUp: () => void;
   onAddToWatchlist: () => void;
+  socialProof?: SocialProofEntry;
 }) {
   const x = useMotionValue(0);
   const y = useMotionValue(0);
@@ -165,6 +172,7 @@ export function SwipeCard({
                 {result.title}
               </p>
               <MovieMetaBadges details={result.movieDetails} year={result.year} />
+              <SocialProofLabel entry={socialProof} />
             </div>
             <WatchProviderBadges
               providers={result.watchProviders}

@@ -7,6 +7,10 @@ import { createClient } from "@/lib/supabase/client";
 import { SwipeCard } from "@/components/vorschlag/swipe-card";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { BackToProfileLink } from "@/components/profile/back-to-profile-link";
+import {
+  useSocialProof,
+  getSocialProofEntry,
+} from "@/lib/hooks/use-social-proof";
 import type { SearchResult } from "@/lib/tmdb";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
@@ -308,6 +312,9 @@ export default function VorschlagPage() {
   );
 
   const visibleCards = guestLimitReached ? [] : cards.slice(0, VISIBLE_STACK_SIZE);
+  const visibleCardsSocialProof = useSocialProof(
+    visibleCards.map((card) => ({ id: card.id, mediaType: card.mediaType })),
+  );
 
   return (
     <main className="min-h-screen flex flex-col items-center">
@@ -384,6 +391,11 @@ export default function VorschlagPage() {
                   onSwipeRight={() => handleSwipeRight(result)}
                   onSwipeUp={() => handleSwipeUp(result)}
                   onAddToWatchlist={() => handleAddToWatchlist(result)}
+                  socialProof={getSocialProofEntry(
+                    visibleCardsSocialProof,
+                    result.id,
+                    result.mediaType,
+                  )}
                 />
               );
             })

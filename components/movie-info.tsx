@@ -4,8 +4,36 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Play, Star, User, X } from "lucide-react";
 import type { MovieDetails } from "@/lib/tmdb";
+import type { SocialProofEntry } from "@/lib/hooks/use-social-proof";
 
 const PROFILE_BASE_URL = "https://image.tmdb.org/t/p/w185";
+
+export function SocialProofLabel({
+  entry,
+  className,
+}: {
+  entry?: SocialProofEntry;
+  className?: string;
+}) {
+  if (!entry || entry.total === 0) return null;
+
+  let text: string;
+  if (entry.total === 1) {
+    text = `Gefällt ${entry.usernames[0]}`;
+  } else if (entry.total === 2) {
+    text = `Gefällt ${entry.usernames[0]} und ${entry.usernames[1]}`;
+  } else {
+    text = `Gefällt ${entry.usernames[0]} und ${entry.total - 1} weiteren`;
+  }
+
+  return (
+    <p
+      className={`text-[10px] text-muted-foreground italic truncate ${className ?? ""}`}
+    >
+      {text}
+    </p>
+  );
+}
 
 export function MovieMetaBadges({
   details,

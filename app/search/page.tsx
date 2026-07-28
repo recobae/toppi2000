@@ -13,6 +13,10 @@ import { BackToProfileLink } from "@/components/profile/back-to-profile-link";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { Button } from "@/components/ui/button";
 import { SORT_FILTERS, GENRE_FILTERS } from "@/lib/movie-genres";
+import {
+  useSocialProof,
+  getSocialProofEntry,
+} from "@/lib/hooks/use-social-proof";
 import type { PersonSummary, SearchResult } from "@/lib/tmdb";
 import type { PersonCreditResult } from "@/app/api/person-credits/route";
 
@@ -272,6 +276,17 @@ export default function SearchPage() {
     results.length === 0 &&
     people.length === 0;
 
+  const visibleBrowseItems = browseItems.slice(0, visibleCount);
+  const browseSocialProof = useSocialProof(
+    visibleBrowseItems.map((r) => ({ id: r.id, mediaType: r.mediaType })),
+  );
+  const resultsSocialProof = useSocialProof(
+    results.map((r) => ({ id: r.id, mediaType: r.mediaType })),
+  );
+  const personResultsSocialProof = useSocialProof(
+    personResults.map((r) => ({ id: r.id, mediaType: r.mediaType })),
+  );
+
   return (
     <main className="min-h-screen flex flex-col items-center">
       <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
@@ -372,7 +387,7 @@ export default function SearchPage() {
             ) : (
               <>
                 <div className="w-full grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 sm:gap-4">
-                  {browseItems.slice(0, visibleCount).map((result) => {
+                  {visibleBrowseItems.map((result) => {
                     const resultKey = `${result.mediaType}-${result.id}`;
                     return (
                       <SearchResultCard
@@ -388,6 +403,11 @@ export default function SearchPage() {
                         }
                         onAdd={(list) => handleAddToList(result, list)}
                         onGuestClick={() => setShowGuestModal(true)}
+                        socialProof={getSocialProofEntry(
+                          browseSocialProof,
+                          result.id,
+                          result.mediaType,
+                        )}
                       />
                     );
                   })}
@@ -457,6 +477,11 @@ export default function SearchPage() {
                       onAdd={(list) => handleAddToList(result, list)}
                       jobTags={result.jobs}
                       preselectedListId={addToListId}
+                      socialProof={getSocialProofEntry(
+                        personResultsSocialProof,
+                        result.id,
+                        result.mediaType,
+                      )}
                     />
                   );
                 })}
@@ -487,6 +512,11 @@ export default function SearchPage() {
                     }
                     onAdd={(list) => handleAddToList(result, list)}
                     preselectedListId={addToListId}
+                    socialProof={getSocialProofEntry(
+                      resultsSocialProof,
+                      result.id,
+                      result.mediaType,
+                    )}
                   />
                 );
               })}

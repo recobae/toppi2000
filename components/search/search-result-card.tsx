@@ -4,12 +4,17 @@ import { useState } from "react";
 import Image from "next/image";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { WatchProviderBadges } from "@/components/watch-provider-badges";
-import { MovieMetaBadges, MovieDetailModal } from "@/components/movie-info";
+import {
+  MovieMetaBadges,
+  MovieDetailModal,
+  SocialProofLabel,
+} from "@/components/movie-info";
 import {
   AddToListMenu,
   filterListsForMediaType,
   type ListSummary,
 } from "@/components/search/add-to-list-menu";
+import type { SocialProofEntry } from "@/lib/hooks/use-social-proof";
 import type { SearchResult } from "@/lib/tmdb";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
@@ -24,6 +29,7 @@ export function SearchResultCard({
   jobTags,
   preselectedListId,
   onGuestClick,
+  socialProof,
 }: {
   result: SearchResult;
   isLoggedIn: boolean;
@@ -34,6 +40,7 @@ export function SearchResultCard({
   jobTags?: string[];
   preselectedListId?: string | null;
   onGuestClick?: () => void;
+  socialProof?: SocialProofEntry;
 }) {
   const [showDetails, setShowDetails] = useState(false);
   const posterUrl = result.posterPath
@@ -68,6 +75,7 @@ export function SearchResultCard({
             {result.title}
           </p>
           <MovieMetaBadges details={result.movieDetails} year={result.year} />
+          <SocialProofLabel entry={socialProof} />
           {jobTags && jobTags.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1">
               {jobTags.map((job) => (

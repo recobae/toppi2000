@@ -30,6 +30,10 @@ import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { MovieMetaBadges, MovieDetailModal } from "@/components/movie-info";
 import { SearchResultCard } from "@/components/search/search-result-card";
 import { type ListSummary } from "@/components/search/add-to-list-menu";
+import {
+  useSocialProof,
+  getSocialProofEntry,
+} from "@/lib/hooks/use-social-proof";
 import type { WatchProviderGroups, MovieDetails, SearchResult } from "@/lib/tmdb";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
@@ -424,6 +428,13 @@ function VisitorListGrid({
     [showToast],
   );
 
+  const socialProofMap = useSocialProof(
+    items.map((item) => ({
+      id: Number(item.external_id),
+      mediaType: item.metadata?.type ?? "movie",
+    })),
+  );
+
   if (items.length === 0) {
     return (
       <p className="w-full text-sm text-muted-foreground">
@@ -449,6 +460,11 @@ function VisitorListGrid({
               addingListId={adding?.resultKey === resultKey ? adding.listId : null}
               onAdd={(list) => handleAddToList(item, list)}
               onGuestClick={() => setShowGuestPrompt(true)}
+              socialProof={getSocialProofEntry(
+                socialProofMap,
+                result.id,
+                result.mediaType,
+              )}
             />
           );
         })}
