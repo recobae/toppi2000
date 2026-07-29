@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { FollowSuggestionsModal } from "@/components/profile/follow-suggestions-modal";
-import { EXPERTISE_ICONS, type ExpertiseLabelKey } from "@/lib/expertise";
+import { getExpertiseIcon } from "@/lib/expertise";
 
 const RING_CLASS =
   "rounded-full p-[3px] bg-[conic-gradient(from_0deg,#f97316,#ec4899,#8b5cf6,#3b82f6,#10b981,#f97316)]";
@@ -18,10 +18,9 @@ type FollowingProfile = {
 };
 
 function ExpertiseCornerBadge({ expertiseKeys }: { expertiseKeys: string[] }) {
-  const key = expertiseKeys[0] as ExpertiseLabelKey | undefined;
+  const key = expertiseKeys[0];
   if (!key) return null;
-  const Icon = EXPERTISE_ICONS[key];
-  if (!Icon) return null;
+  const Icon = getExpertiseIcon(key);
 
   return (
     <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-background border border-border">

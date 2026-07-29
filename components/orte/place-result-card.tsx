@@ -1,0 +1,116 @@
+"use client";
+
+import { useState } from "react";
+import Image from "next/image";
+import { Check, Plus } from "lucide-react";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { PlaceDetailModal } from "@/components/orte/place-detail-modal";
+import { PLACE_CATEGORY_ICONS, PLACE_CATEGORY_LABELS, type PlaceCategory } from "@/lib/places";
+import { truncateNote } from "@/lib/notes";
+
+export type PlaceCardData = {
+  placeId: string;
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  category: PlaceCategory;
+  photoUrl: string | null;
+};
+
+export function PlaceResultCard({
+  place,
+  isLoggedIn,
+  isSaved,
+  isSaving,
+  onToggleSave,
+  onGuestClick,
+  note,
+}: {
+  place: PlaceCardData;
+  isLoggedIn: boolean;
+  isSaved: boolean;
+  isSaving?: boolean;
+  onToggleSave: () => void;
+  onGuestClick?: () => void;
+  note?: string | null;
+}) {
+  const [showDetails, setShowDetails] = useState(false);
+  const Icon = PLACE_CATEGORY_ICONS[place.category];
+
+  const handleSaveClick = () => {
+    if (!isLoggedIn) {
+      onGuestClick?.();
+      return;
+    }
+    onToggleSave();
+  };
+
+  return (
+    <Card className="overflow-hidden flex flex-col">
+      <button
+        type="button"
+        onClick={() => setShowDetails(true)}
+        className="relative aspect-[4/3] w-full bg-muted text-left"
+        aria-label={`Details zu ${place.name} anzeigen`}
+      >
+        {place.photoUrl ? (
+          <Image
+            src={place.photoUrl}
+            alt={place.name}
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 20vw"
+            className="object-cover"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-muted-foreground">
+            <Icon className="size-8" />
+          </div>
+        )}
+      </button>
+      <CardContent className="p-3 flex-1 flex flex-col gap-1">
+        <p className="text-sm font-medium leading-tight line-clamp-2">
+          {place.name}
+        </p>
+        <span className="inline-flex w-fit items-center gap-1 text-[10px] font-medium rounded bg-secondary text-secondary-foreground px-1.5 py-0.5">
+          <Icon className="size-3" />
+          {PLACE_CATEGORY_LABELS[place.category]}
+        </span>
+        <p className="text-[11px] text-muted-foreground line-clamp-1">
+          {place.address}
+        </p>
+        {note && (
+          <p className="text-[11px] italic text-muted-foreground line-clamp-2">
+            „{truncateNote(note)}“
+          </p>
+        )}
+      </CardContent>
+      <CardFooter className="p-3 pt-0">
+        <Button
+          variant={isSaved ? "outline" : "default"}
+          size="sm"
+          className="w-full"
+          disabled={isSaving}
+          onClick={handleSaveClick}
+        >
+          {isSaved ? <Check /> : <Plus />}
+          {isSaved ? "Gespeichert" : "Hinzufügen"}
+        </Button>
+      </CardFooter>
+
+      {showDetails && (
+        <PlaceDetailModal
+          name={place.name}
+          address={place.address}
+          category={place.category}
+          photoUrl={place.photoUrl}
+          lat={place.lat}
+          lng={place.lng}
+          note={note}
+          onClose={() => setShowDetails(false)}
+        />
+      )}
+    </Card>
+  );
+}

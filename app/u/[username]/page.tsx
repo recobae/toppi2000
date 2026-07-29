@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Heart, Settings } from "lucide-react";
+import { Heart, MapPin, Plus, Settings } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { ListTile } from "@/components/profile/list-tile";
@@ -19,7 +19,7 @@ import {
   SAVED_CATEGORIES,
   type SavedCategory,
 } from "@/lib/categories";
-import { resolveEarnedExpertiseLabels } from "@/lib/expertise";
+import { resolveEarnedExpertiseLabels, resolvePlaceExpertiseLabels } from "@/lib/expertise";
 
 async function getProfileUrl(username: string): Promise<string> {
   const headersList = await headers();
@@ -92,7 +92,43 @@ export default async function ProfilePage({
   const itemCountByCategory = Object.fromEntries(
     previewByCategory.map((entry) => [entry.category, entry.itemCount]),
   ) as Partial<Record<SavedCategory, number>>;
-  const earnedExpertiseLabels = resolveEarnedExpertiseLabels(itemCountByCategory);
+
+  const { data: regionRows } = await supabase
+    .from("place_regions")
+    .select("id, region_name, region_key")
+    .eq("user_id", profile.id)
+    .order("created_at", { ascending: true });
+
+  const regions = await Promise.all(
+    (regionRows ?? []).map(async (region) => {
+      const [{ data: previewRows }, { count }] = await Promise.all([
+        supabase
+          .from("places")
+          .select("photo_url")
+          .eq("region_id", region.id)
+          .order("position", { ascending: true })
+          .limit(4),
+        supabase
+          .from("places")
+          .select("id", { count: "exact", head: true })
+          .eq("region_id", region.id),
+      ]);
+
+      return {
+        key: region.region_key,
+        name: region.region_name,
+        photoUrls: (previewRows ?? [])
+          .map((row) => row.photo_url)
+          .filter((url): url is string => !!url),
+        itemCount: count ?? 0,
+      };
+    }),
+  );
+
+  const earnedExpertiseLabels = [
+    ...resolveEarnedExpertiseLabels(itemCountByCategory),
+    ...resolvePlaceExpertiseLabels(regions),
+  ];
 
   const { count: followerCount } = await supabase
     .from("user_follows")
@@ -235,6 +271,36 @@ export default async function ProfilePage({
           ))}
           {isGuest && <GuestProfileCta variant="tile" />}
         </div>
+
+        {(regions.length > 0 || isOwner) && (
+          <div className="w-full flex flex-col gap-3">
+            <h2 className="text-sm font-medium text-muted-foreground">Orte</h2>
+            <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {regions.map((region) => (
+                <ListTile
+                  key={region.key}
+                  label={region.name}
+                  icon={MapPin}
+                  posterUrls={region.photoUrls}
+                  itemCount={region.itemCount}
+                  href={`/u/${profile.username}/orte/${region.key}`}
+                  shareUrl={`/u/${profile.username}/orte/${region.key}`}
+                />
+              ))}
+              {isOwner && (
+                <Link
+                  href="/orte"
+                  className="flex flex-col items-center justify-center gap-2 aspect-[2/3] w-full rounded-lg border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                >
+                  <Plus className="size-8" />
+                  <span className="text-xs font-medium text-center">
+                    Ort hinzufügen
+                  </span>
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );
