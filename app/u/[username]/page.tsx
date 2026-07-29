@@ -126,8 +126,8 @@ export default async function ProfilePage({
   );
 
   const earnedExpertiseLabels = [
-    ...resolveEarnedExpertiseLabels(itemCountByCategory),
-    ...resolvePlaceExpertiseLabels(regions),
+    ...resolveEarnedExpertiseLabels(itemCountByCategory, profile.username),
+    ...resolvePlaceExpertiseLabels(regions, profile.username),
   ];
 
   const { count: followerCount } = await supabase
@@ -185,9 +185,10 @@ export default async function ProfilePage({
           id: friend.id,
           username: friend.username,
           avatarUrl: avatarByUserId.get(friend.id) ?? null,
-          expertiseKeys: resolveEarnedExpertiseLabels(itemCounts).map(
-            (entry) => entry.key,
-          ),
+          expertiseKeys: resolveEarnedExpertiseLabels(
+            itemCounts,
+            friend.username,
+          ).map((entry) => entry.key),
         };
       });
     }
