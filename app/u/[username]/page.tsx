@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Heart, ListChecks, MapPin, Plus, Repeat2, Settings } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { ProfileAvatar } from "@/components/profile/profile-avatar";
+import { ProfileStoryAvatar } from "@/components/profile/profile-story-avatar";
 import { ListTile } from "@/components/profile/list-tile";
 import { GuestProfileCta } from "@/components/profile/guest-profile-cta";
 import { TrackLastVisitedProfile } from "@/components/profile/track-last-visited";
@@ -131,38 +131,49 @@ export default async function ProfilePage({
     ...resolvePlaceExpertiseLabels(regions, profile.username),
   ];
 
-  // Two distinct stats: "Likes" (others liked something I recommended) is
-  // sourced live from item_interactions, the new generic model -- it no
-  // longer reads profiles.total_likes_received (that counter's history
-  // comes from the now-deprecated item_ratings trigger and isn't extended
-  // going forward). "Übernommen" counts how often my recommendations were
-  // adopted onto someone else's list, tracked via each list row's
-  // adopted_from provenance column.
-  const [{ count: likesCount }, topListAdoptions, watchlistAdoptions, placesAdoptions] =
-    await Promise.all([
-      supabase
-        .from("item_interactions")
-        .select("id", { count: "exact", head: true })
-        .eq("target_user_id", profile.id)
-        .eq("interaction_type", "like"),
-      supabase
-        .from("top_list")
-        .select("id", { count: "exact", head: true })
-        .eq("adopted_from", profile.id),
-      supabase
-        .from("watchlist")
-        .select("id", { count: "exact", head: true })
-        .eq("adopted_from", profile.id),
-      supabase
-        .from("places")
-        .select("id", { count: "exact", head: true })
-        .eq("adopted_from", profile.id),
-    ]);
+  // Two distinct stats, both sourced from interaction_credits -- a ledger of
+  // (actor, owner, item, credit_type) rows written at the moment someone
+  // likes or adds an item that's on one or more followed people's lists,
+  // crediting EVERY one of those owners, not just the first. This replaced
+  // the old single-column item_interactions.target_user_id / adopted_from
+  // approach, which could only ever credit one owner per event.
+  const [{ count: likesCount }, { count: inspiredCount }] = await Promise.all([
+    supabase
+      .from("interaction_credits")
+      .select("id", { count: "exact", head: true })
+      .eq("owner_user_id", profile.id)
+      .eq("credit_type", "like"),
+    supabase
+      .from("interaction_credits")
+      .select("id", { count: "exact", head: true })
+      .eq("owner_user_id", profile.id)
+      .eq("credit_type", "inspired"),
+  ]);
 
-  const adoptionsCount =
-    (topListAdoptions.count ?? 0) +
-    (watchlistAdoptions.count ?? 0) +
-    (placesAdoptions.count ?? 0);
+  const since24h = new Date(Date.now() - STORY_WINDOW_MS).toISOString();
+  const [
+    { count: recentTopListCount },
+    { count: recentWatchlistCount },
+    { count: recentPlacesCount },
+  ] = await Promise.all([
+    supabase
+      .from("top_list")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", profile.id)
+      .gte("created_at", since24h),
+    supabase
+      .from("watchlist")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", profile.id)
+      .gte("created_at", since24h),
+    supabase
+      .from("places")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", profile.id)
+      .gte("created_at", since24h),
+  ]);
+  const hasActiveStory =
+    (recentTopListCount ?? 0) + (recentWatchlistCount ?? 0) + (recentPlacesCount ?? 0) > 0;
 
   const { count: followerCount } = await supabase
     .from("user_follows")
@@ -281,15 +292,13 @@ export default async function ProfilePage({
     <main className="min-h-screen flex flex-col items-center">
       <TrackLastVisitedProfile username={profile.username} />
       <div className="flex-1 w-full flex flex-col items-center gap-4 max-w-2xl p-5 pt-6">
-        <Link
-          href="/inspo"
-          aria-label="Zu Inspo"
-          className="rounded-full p-[3px] bg-[conic-gradient(from_0deg,#f97316,#ec4899,#8b5cf6,#3b82f6,#10b981,#f97316)]"
-        >
-          <span className="block rounded-full bg-background p-[3px]">
-            <ProfileAvatar username={profile.username} imageUrl={avatarUrl} />
-          </span>
-        </Link>
+        <ProfileStoryAvatar
+          username={profile.username}
+          avatarUrl={avatarUrl}
+          hasActiveStory={hasActiveStory}
+          isOwnStory={isOwner}
+          canInteract={!isGuest}
+        />
 
         <div className="flex items-center justify-center gap-1.5">
           {isOwner && (
@@ -322,7 +331,7 @@ export default async function ProfilePage({
           </div>
           <div className="flex items-center gap-1.5">
             <Repeat2 className="size-4 text-primary" />
-            <span>{adoptionsCount} mal übernommen</span>
+            <span>{inspiredCount ?? 0} mal inspiriert</span>
           </div>
           <FollowerCount targetUserId={profile.id} count={followerCount ?? 0} />
         </div>

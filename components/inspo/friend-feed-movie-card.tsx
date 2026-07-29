@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Ban, Check, Heart, SkipForward } from "lucide-react";
+import { Ban, Heart, Plus, SkipForward } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { CategoryPickerModal } from "@/components/inspo/category-picker-modal";
 import type { SavedCategory } from "@/lib/categories";
@@ -40,13 +40,13 @@ export function FriendFeedMovieCard({
   item,
   isLoggedIn,
   onInteraction,
-  onMerken,
+  onAdd,
   onGuestClick,
 }: {
   item: FriendFeedMovieItem;
   isLoggedIn: boolean;
   onInteraction: (type: "like" | "dislike" | "skip") => void;
-  onMerken: (category: SavedCategory) => void;
+  onAdd: (category: SavedCategory) => void;
   onGuestClick: () => void;
 }) {
   const [showPicker, setShowPicker] = useState(false);
@@ -115,8 +115,8 @@ export function FriendFeedMovieCard({
             onClick={() => guarded(() => setShowPicker(true))}
             className="ml-auto flex items-center gap-1 h-8 px-2.5 rounded-full bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
           >
-            <Check className="size-3.5" />
-            Merken
+            <Plus className="size-3.5" />
+            Hinzufügen
           </button>
         </div>
       </div>
@@ -127,7 +127,7 @@ export function FriendFeedMovieCard({
           imageUrl={item.imageUrl}
           onPick={(category) => {
             setShowPicker(false);
-            onMerken(category);
+            onAdd(category);
           }}
           onClose={() => setShowPicker(false)}
         />

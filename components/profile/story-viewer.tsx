@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { X } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
+import { createClient } from "@/lib/supabase/client";
+import { removeFromCategory } from "@/lib/saved-items";
+import { removePlace } from "@/lib/place-items";
 import type { StoryUpdate } from "@/app/api/story-updates/route";
 
 const SLIDE_DURATION_MS = 4000;
@@ -18,13 +21,16 @@ function timeAgo(iso: string): string {
 
 export function StoryViewer({
   username,
+  allowDelete = false,
   onClose,
 }: {
   username: string;
+  allowDelete?: boolean;
   onClose: () => void;
 }) {
   const [updates, setUpdates] = useState<StoryUpdate[] | null>(null);
   const [index, setIndex] = useState(0);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -68,6 +74,27 @@ export function StoryViewer({
 
   const current = updates?.[index];
 
+  const handleDelete = async () => {
+    if (!current || deleting) return;
+    setDeleting(true);
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      if (current.category === "places" && current.placeId) {
+        await removePlace(supabase, user.id, current.placeId);
+      } else if (current.category !== "places" && current.itemId != null && current.mediaType) {
+        await removeFromCategory(supabase, current.category, user.id, current.itemId, current.mediaType);
+      }
+      setUpdates((prev) => (prev ?? []).filter((_, i) => i !== index));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black"
@@ -98,14 +125,27 @@ export function StoryViewer({
               <span className="text-xs text-white/70">{timeAgo(current.createdAt)}</span>
             )}
           </div>
-          <button
-            type="button"
-            aria-label="Schließen"
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-black/30 text-white hover:bg-black/50"
-          >
-            <X className="size-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            {allowDelete && current && (
+              <button
+                type="button"
+                aria-label="Update löschen"
+                disabled={deleting}
+                onClick={handleDelete}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-black/30 text-white hover:bg-black/50 disabled:opacity-50"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            )}
+            <button
+              type="button"
+              aria-label="Schließen"
+              onClick={onClose}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-black/30 text-white hover:bg-black/50"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
         </div>
 
         {/* Tap zones for prev/next, Instagram-style */}

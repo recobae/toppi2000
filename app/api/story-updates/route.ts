@@ -5,8 +5,11 @@ import { CATEGORY_LABELS, type SavedCategory } from "@/lib/categories";
 const STORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export type StoryUpdate = {
-  itemId: number;
+  id: string;
+  category: "top_list" | "watchlist" | "places";
+  itemId: number | null;
   mediaType: "movie" | "tv" | null;
+  placeId: string | null;
   title: string;
   imageUrl: string | null;
   categoryLabel: string;
@@ -48,17 +51,17 @@ export async function GET(request: NextRequest) {
   const [topList, watchlist, places] = await Promise.all([
     supabase
       .from("top_list")
-      .select("item_id, media_type, title, image_url, created_at")
+      .select("id, item_id, media_type, title, image_url, created_at")
       .eq("user_id", target.id)
       .gte("created_at", since),
     supabase
       .from("watchlist")
-      .select("item_id, media_type, title, image_url, created_at")
+      .select("id, item_id, media_type, title, image_url, created_at")
       .eq("user_id", target.id)
       .gte("created_at", since),
     supabase
       .from("places")
-      .select("google_place_id, name, photo_url, created_at")
+      .select("id, google_place_id, name, photo_url, created_at")
       .eq("user_id", target.id)
       .gte("created_at", since),
   ]);
@@ -67,24 +70,33 @@ export async function GET(request: NextRequest) {
 
   const updates: StoryUpdate[] = [
     ...(topList.data ?? []).map((row) => ({
+      id: row.id,
+      category: "top_list" as const,
       itemId: row.item_id,
       mediaType: row.media_type as "movie" | "tv",
+      placeId: null,
       title: row.title,
       imageUrl: row.image_url,
       categoryLabel: categoryLabelFor("top_list"),
       createdAt: row.created_at,
     })),
     ...(watchlist.data ?? []).map((row) => ({
+      id: row.id,
+      category: "watchlist" as const,
       itemId: row.item_id,
       mediaType: row.media_type as "movie" | "tv",
+      placeId: null,
       title: row.title,
       imageUrl: row.image_url,
       categoryLabel: categoryLabelFor("watchlist"),
       createdAt: row.created_at,
     })),
     ...(places.data ?? []).map((row) => ({
-      itemId: 0,
+      id: row.id,
+      category: "places" as const,
+      itemId: null,
       mediaType: null,
+      placeId: row.google_place_id,
       title: row.name,
       imageUrl: row.photo_url,
       categoryLabel: "Orte",

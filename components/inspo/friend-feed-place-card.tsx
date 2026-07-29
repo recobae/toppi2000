@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Ban, Check, Heart, SkipForward } from "lucide-react";
+import { Ban, Heart, Plus, SkipForward } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { PLACE_CATEGORY_ICONS, PLACE_CATEGORY_LABELS, type PlaceCategory } from "@/lib/places";
 
@@ -42,13 +42,13 @@ export function FriendFeedPlaceCard({
   item,
   isLoggedIn,
   onInteraction,
-  onUebernehmen,
+  onAdd,
   onGuestClick,
 }: {
   item: FriendFeedPlaceItem;
   isLoggedIn: boolean;
   onInteraction: (type: "like" | "dislike" | "skip") => void;
-  onUebernehmen: () => void;
+  onAdd: () => void;
   onGuestClick: () => void;
 }) {
   const [pending, setPending] = useState(false);
@@ -119,11 +119,11 @@ export function FriendFeedPlaceCard({
           </button>
           <button
             type="button"
-            onClick={() => guarded(onUebernehmen)}
+            onClick={() => guarded(onAdd)}
             className="ml-auto flex items-center gap-1 h-8 px-2.5 rounded-full bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
           >
-            <Check className="size-3.5" />
-            Übernehmen
+            <Plus className="size-3.5" />
+            Hinzufügen
           </button>
         </div>
       </div>

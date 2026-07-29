@@ -5,7 +5,7 @@ import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { FriendFeedPlaceCard, type FriendFeedPlaceItem } from "@/components/inspo/friend-feed-place-card";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
-import { recordInteraction } from "@/lib/interactions";
+import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
 import { savePlaceToRegion } from "@/lib/place-items";
 
 const GUEST_SAVE_MESSAGE = "Melde dich an, um Orte zu deinen eigenen Listen hinzuzufügen.";
@@ -39,22 +39,23 @@ export function OrteInspoTab({
     if (!user) return;
     removeFeedItem(item.placeId);
     const supabase = createClient();
-    const targetUserId = item.recommended.userIds[0] ?? item.liked.userIds[0] ?? null;
-    await recordInteraction(supabase, user.id, {
-      itemId: item.placeId,
-      mediaType: "place",
-      interactionType: type,
-      targetUserId,
-    });
+    const ownerUserIds = item.recommended.userIds;
+    await setInteractionWithCredits(
+      supabase,
+      user.id,
+      { itemId: item.placeId, mediaType: "place" },
+      type,
+      ownerUserIds,
+    );
     if (type === "like") showToast("Gefällt mir gemerkt");
     if (type === "dislike") showToast("Nicht dein Geschmack? Notiert.");
   };
 
-  const handleUebernehmen = async (item: FriendFeedPlaceItem) => {
+  const handleAdd = async (item: FriendFeedPlaceItem) => {
     if (!user) return;
     removeFeedItem(item.placeId);
     const supabase = createClient();
-    const adoptedFrom = item.recommended.userIds[0] ?? null;
+    const ownerUserIds = item.recommended.userIds;
     const { error, regionName } = await savePlaceToRegion(
       supabase,
       user.id,
@@ -68,12 +69,16 @@ export function OrteInspoTab({
         category: item.category,
         photoUrl: item.photoUrl,
       },
-      adoptedFrom,
+      ownerUserIds[0] ?? null,
     );
     if (error) {
-      showToast("Übernehmen fehlgeschlagen");
+      showToast("Hinzufügen fehlgeschlagen");
       return;
     }
+    await recordInspiredCredits(supabase, user.id, ownerUserIds, {
+      itemId: item.placeId,
+      mediaType: "place",
+    });
     showToast(`Zu „${regionName}“ hinzugefügt`);
   };
 
@@ -95,7 +100,7 @@ export function OrteInspoTab({
                 item={item}
                 isLoggedIn={!!user}
                 onInteraction={(type) => handleInteraction(item, type)}
-                onUebernehmen={() => handleUebernehmen(item)}
+                onAdd={() => handleAdd(item)}
                 onGuestClick={() => setGuestModalMessage(GUEST_SAVE_MESSAGE)}
               />
             ))}

@@ -5,7 +5,8 @@ import Image from "next/image";
 import { Heart, Ban, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { BackToProfileLink } from "@/components/profile/back-to-profile-link";
-import { recordInteraction, removeInteraction, type InteractionMediaType } from "@/lib/interactions";
+import type { InteractionMediaType } from "@/lib/interactions";
+import { setInteractionWithCredits, removeInteractionWithCredits } from "@/lib/interaction-credits";
 
 type ActivityItem = {
   id: string;
@@ -49,11 +50,14 @@ export default function MeineAktivitaetPage() {
       } = await supabase.auth.getUser();
       if (!user) return;
       const nextType = item.interactionType === "like" ? "dislike" : "like";
-      const { error } = await recordInteraction(supabase, user.id, {
-        itemId: item.itemId,
-        mediaType: item.mediaType,
-        interactionType: nextType,
-      });
+      // No owner ids known here -- this only ever toggles the actor's own
+      // stance, it never (re-)creates new like credits for anyone.
+      const { error } = await setInteractionWithCredits(
+        supabase,
+        user.id,
+        { itemId: item.itemId, mediaType: item.mediaType },
+        nextType,
+      );
       if (!error) {
         setItems((prev) =>
           (prev ?? []).map((existing) =>
@@ -75,10 +79,11 @@ export default function MeineAktivitaetPage() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
-      const { error } = await removeInteraction(supabase, user.id, item.itemId, item.mediaType);
-      if (!error) {
-        setItems((prev) => (prev ?? []).filter((existing) => existing.id !== item.id));
-      }
+      await removeInteractionWithCredits(supabase, user.id, {
+        itemId: item.itemId,
+        mediaType: item.mediaType,
+      });
+      setItems((prev) => (prev ?? []).filter((existing) => existing.id !== item.id));
     } finally {
       setPendingId(null);
     }

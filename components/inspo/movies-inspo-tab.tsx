@@ -10,6 +10,7 @@ import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { useSocialProof, getSocialProofBreakdown } from "@/lib/hooks/use-social-proof";
 import { saveToCategory, updateNote } from "@/lib/saved-items";
 import { recordInteraction } from "@/lib/interactions";
+import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
 import { CATEGORY_ACTION_LABELS, type SavedCategory } from "@/lib/categories";
 import { NOTE_PLACEHOLDERS, SKIP_ADD_NOTE_PROMPT } from "@/lib/notes";
 import { NoteModal } from "@/components/lists/note-modal";
@@ -69,22 +70,23 @@ export function MoviesInspoTab({
     if (!user) return;
     removeFeedItem(item.itemId, item.mediaType);
     const supabase = createClient();
-    const targetUserId = item.topList.userIds[0] ?? item.liked.userIds[0] ?? null;
-    await recordInteraction(supabase, user.id, {
-      itemId: item.itemId,
-      mediaType: item.mediaType,
-      interactionType: type,
-      targetUserId,
-    });
+    const ownerUserIds = item.topList.userIds;
+    await setInteractionWithCredits(
+      supabase,
+      user.id,
+      { itemId: item.itemId, mediaType: item.mediaType },
+      type,
+      ownerUserIds,
+    );
     if (type === "like") showToast("Gefällt mir gemerkt");
     if (type === "dislike") showToast("Nicht dein Geschmack? Notiert.");
   };
 
-  const handleFeedMerken = async (item: FriendFeedMovieItem, category: SavedCategory) => {
+  const handleFeedAdd = async (item: FriendFeedMovieItem, category: SavedCategory) => {
     if (!user) return;
     removeFeedItem(item.itemId, item.mediaType);
     const supabase = createClient();
-    const adoptedFrom = item.topList.userIds[0] ?? null;
+    const ownerUserIds = item.topList.userIds;
     const { error } = await saveToCategory(
       supabase,
       category,
@@ -96,12 +98,16 @@ export function MoviesInspoTab({
         imageUrl: item.imageUrl,
         year: item.year,
       },
-      adoptedFrom,
+      ownerUserIds[0] ?? null,
     );
     if (error) {
       showToast("Aktion fehlgeschlagen");
       return;
     }
+    await recordInspiredCredits(supabase, user.id, ownerUserIds, {
+      itemId: item.itemId,
+      mediaType: item.mediaType,
+    });
     showToast(`Zu ${CATEGORY_ACTION_LABELS[category]} hinzugefügt`);
   };
 
@@ -275,7 +281,7 @@ export function MoviesInspoTab({
                 item={item}
                 isLoggedIn={isLoggedIn}
                 onInteraction={(type) => handleFeedInteraction(item, type)}
-                onMerken={(category) => handleFeedMerken(item, category)}
+                onAdd={(category) => handleFeedAdd(item, category)}
                 onGuestClick={() => setGuestModalMessage(GUEST_SAVE_MESSAGE)}
               />
             ))}
