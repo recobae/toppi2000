@@ -47,10 +47,13 @@ export function ShareListButton({
         <Button
           variant="ghost"
           size="icon"
-          // Visible box stays 24px (matches the other header icons); the
-          // negative margin expands only the invisible hit area to the
-          // 44px minimum touch target without shifting surrounding layout.
-          className="h-11 w-11 -m-2.5 text-muted-foreground hover:text-foreground"
+          // Visible box stays 24px (matches the other header icons). The
+          // negative margin only expands the invisible hit area a little
+          // (4px/side, not 10px) -- a wider overflow risked bleeding into
+          // whatever sits directly below in tightly-spaced layouts (e.g.
+          // the profile header's expertise-label row sits only 16px below
+          // this button) and silently eating clicks meant for that element.
+          className="h-8 w-8 -m-1 text-muted-foreground hover:text-foreground"
           aria-label="Liste teilen"
           onClick={handleShare}
         >
