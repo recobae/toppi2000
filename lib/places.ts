@@ -65,6 +65,21 @@ export function normalizeRegionKey(regionName: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+export type PlacePriceLevel =
+  | "free"
+  | "inexpensive"
+  | "moderate"
+  | "expensive"
+  | "very_expensive";
+
+export const PRICE_LEVEL_LABELS: Record<PlacePriceLevel, string> = {
+  free: "Kostenlos",
+  inexpensive: "€",
+  moderate: "€€",
+  expensive: "€€€",
+  very_expensive: "€€€€",
+};
+
 // A user needs at least this many saved places in a region before it counts
 // as "expertise" -- deliberately higher than the 1-item threshold for
 // Filme & Serien, since a single restaurant tip doesn't make someone the

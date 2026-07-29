@@ -3,7 +3,9 @@
 import { useEffect } from "react";
 import Image from "next/image";
 import { ExternalLink, X } from "lucide-react";
-import { PLACE_CATEGORY_ICONS, PLACE_CATEGORY_LABELS, type PlaceCategory } from "@/lib/places";
+import { PLACE_CATEGORY_ICONS, PLACE_CATEGORY_LABELS, type PlaceCategory, type PlacePriceLevel } from "@/lib/places";
+import { PlaceDetailsRow } from "@/components/orte/place-details-row";
+import type { OpeningStatus } from "@/lib/opening-hours";
 
 export function PlaceDetailModal({
   name,
@@ -12,6 +14,13 @@ export function PlaceDetailModal({
   photoUrl,
   lat,
   lng,
+  googleMapsUri,
+  rating,
+  userRatingCount,
+  priceLevel,
+  phoneNumber,
+  websiteUri,
+  openingStatus,
   note,
   onClose,
 }: {
@@ -21,6 +30,13 @@ export function PlaceDetailModal({
   photoUrl: string | null;
   lat: number;
   lng: number;
+  googleMapsUri?: string | null;
+  rating?: number | null;
+  userRatingCount?: number | null;
+  priceLevel?: PlacePriceLevel | null;
+  phoneNumber?: string | null;
+  websiteUri?: string | null;
+  openingStatus?: OpeningStatus | null;
   note?: string | null;
   onClose: () => void;
 }) {
@@ -37,7 +53,11 @@ export function PlaceDetailModal({
   }, [onClose]);
 
   const Icon = PLACE_CATEGORY_ICONS[category];
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+  // googleMapsUri is the API-provided link to the actual place page (name,
+  // reviews, photos); a coordinates-only fallback is only used if that
+  // field wasn't available (e.g. saved before this field was added).
+  const mapsUrl =
+    googleMapsUri ?? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
   return (
     <div
@@ -77,6 +97,15 @@ export function PlaceDetailModal({
               {PLACE_CATEGORY_LABELS[category]}
             </span>
             <p className="text-xs text-muted-foreground">{address}</p>
+            <PlaceDetailsRow
+              rating={rating}
+              userRatingCount={userRatingCount}
+              openingStatus={openingStatus}
+              priceLevel={priceLevel}
+              phoneNumber={phoneNumber}
+              websiteUri={websiteUri}
+              size="default"
+            />
           </div>
         </div>
 

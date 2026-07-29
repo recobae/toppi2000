@@ -6,8 +6,10 @@ import { Check, Plus } from "lucide-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PlaceDetailModal } from "@/components/orte/place-detail-modal";
-import { PLACE_CATEGORY_ICONS, PLACE_CATEGORY_LABELS, type PlaceCategory } from "@/lib/places";
+import { PlaceDetailsRow } from "@/components/orte/place-details-row";
+import { PLACE_CATEGORY_ICONS, PLACE_CATEGORY_LABELS, type PlaceCategory, type PlacePriceLevel } from "@/lib/places";
 import { truncateNote } from "@/lib/notes";
+import type { OpeningStatus } from "@/lib/opening-hours";
 
 export type PlaceCardData = {
   placeId: string;
@@ -17,6 +19,13 @@ export type PlaceCardData = {
   lng: number;
   category: PlaceCategory;
   photoUrl: string | null;
+  googleMapsUri?: string | null;
+  rating?: number | null;
+  userRatingCount?: number | null;
+  priceLevel?: PlacePriceLevel | null;
+  phoneNumber?: string | null;
+  websiteUri?: string | null;
+  openingStatus?: OpeningStatus | null;
 };
 
 export function PlaceResultCard({
@@ -80,6 +89,14 @@ export function PlaceResultCard({
         <p className="text-[11px] text-muted-foreground line-clamp-1">
           {place.address}
         </p>
+        <PlaceDetailsRow
+          rating={place.rating}
+          userRatingCount={place.userRatingCount}
+          openingStatus={place.openingStatus}
+          priceLevel={place.priceLevel}
+          phoneNumber={place.phoneNumber}
+          websiteUri={place.websiteUri}
+        />
         {note && (
           <p className="text-[11px] italic text-muted-foreground line-clamp-2">
             „{truncateNote(note)}“
@@ -107,6 +124,13 @@ export function PlaceResultCard({
           photoUrl={place.photoUrl}
           lat={place.lat}
           lng={place.lng}
+          googleMapsUri={place.googleMapsUri}
+          rating={place.rating}
+          userRatingCount={place.userRatingCount}
+          priceLevel={place.priceLevel}
+          phoneNumber={place.phoneNumber}
+          websiteUri={place.websiteUri}
+          openingStatus={place.openingStatus}
           note={note}
           onClose={() => setShowDetails(false)}
         />

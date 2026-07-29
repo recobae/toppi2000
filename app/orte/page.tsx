@@ -8,17 +8,18 @@ import { createClient } from "@/lib/supabase/client";
 import { BackToProfileLink } from "@/components/profile/back-to-profile-link";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { NoteModal } from "@/components/lists/note-modal";
-import { PlaceResultCard, type PlaceCardData } from "@/components/orte/place-result-card";
+import { PlaceResultCard } from "@/components/orte/place-result-card";
 import { usePlaceSavedState } from "@/lib/hooks/use-place-saved-state";
 import { savePlaceToRegion, removePlace, updatePlaceNote } from "@/lib/place-items";
 import { PLACES_EXPERTISE_MIN_ITEMS } from "@/lib/places";
+import type { PlaceSearchResult } from "@/lib/google-places";
 
 type Toast = { id: number; message: string };
 
 export default function OrtePage() {
   const [query, setQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [results, setResults] = useState<PlaceCardData[]>([]);
+  const [results, setResults] = useState<PlaceSearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [notConfigured, setNotConfigured] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +29,7 @@ export default function OrtePage() {
   const [showGuestModal, setShowGuestModal] = useState(false);
   const [pendingPlaceId, setPendingPlaceId] = useState<string | null>(null);
   const [notePrompt, setNotePrompt] = useState<{
-    place: PlaceCardData;
+    place: PlaceSearchResult;
     region: string;
   } | null>(null);
 
@@ -72,7 +73,7 @@ export default function OrtePage() {
           { signal: controller.signal },
         );
         const data: {
-          results: PlaceCardData[];
+          results: PlaceSearchResult[];
           error?: string;
         } = await response.json();
 
@@ -96,7 +97,7 @@ export default function OrtePage() {
     };
   }, [query]);
 
-  const handleToggleSave = async (place: PlaceCardData) => {
+  const handleToggleSave = async (place: PlaceSearchResult) => {
     if (!user || pendingPlaceId) return;
     setPendingPlaceId(place.placeId);
     const supabase = createClient();

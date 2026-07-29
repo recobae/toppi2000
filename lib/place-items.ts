@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { normalizeRegionKey, type PlaceCategory } from "@/lib/places";
+import { normalizeRegionKey, type PlaceCategory, type PlacePriceLevel } from "@/lib/places";
+import type { OpeningPeriod } from "@/lib/opening-hours";
 
 export type SavablePlace = {
   placeId: string;
@@ -9,6 +10,14 @@ export type SavablePlace = {
   lng: number;
   category: PlaceCategory;
   photoUrl: string | null;
+  googleMapsUri?: string | null;
+  rating?: number | null;
+  userRatingCount?: number | null;
+  priceLevel?: PlacePriceLevel | null;
+  phoneNumber?: string | null;
+  websiteUri?: string | null;
+  openingPeriods?: OpeningPeriod[] | null;
+  utcOffsetMinutes?: number | null;
 };
 
 export type SavePlaceResult = {
@@ -74,6 +83,14 @@ export async function savePlaceToRegion(
       lng: place.lng,
       places_category: place.category,
       photo_url: place.photoUrl,
+      google_maps_uri: place.googleMapsUri ?? null,
+      rating: place.rating ?? null,
+      user_rating_count: place.userRatingCount ?? null,
+      price_level: place.priceLevel ?? null,
+      phone_number: place.phoneNumber ?? null,
+      website_uri: place.websiteUri ?? null,
+      opening_periods: place.openingPeriods ?? null,
+      utc_offset_minutes: place.utcOffsetMinutes ?? null,
       position: nextPosition,
     },
     { onConflict: "user_id,google_place_id" },

@@ -30,13 +30,16 @@ import { PlaceDetailModal } from "@/components/orte/place-detail-modal";
 import { PlaceResultCard } from "@/components/orte/place-result-card";
 import { removePlace, savePlaceToRegion, updatePlaceNote } from "@/lib/place-items";
 import { usePlaceSavedState } from "@/lib/hooks/use-place-saved-state";
+import { PlaceDetailsRow } from "@/components/orte/place-details-row";
 import {
   PLACE_CATEGORIES,
   PLACE_CATEGORY_ICONS,
   PLACE_CATEGORY_LABELS,
   type PlaceCategory,
+  type PlacePriceLevel,
 } from "@/lib/places";
 import { truncateNote } from "@/lib/notes";
+import type { OpeningStatus } from "@/lib/opening-hours";
 
 export type RegionPlaceItem = {
   id: string;
@@ -48,6 +51,13 @@ export type RegionPlaceItem = {
   category: PlaceCategory;
   photoUrl: string | null;
   note: string | null;
+  googleMapsUri: string | null;
+  rating: number | null;
+  userRatingCount: number | null;
+  priceLevel: PlacePriceLevel | null;
+  phoneNumber: string | null;
+  websiteUri: string | null;
+  openingStatus: OpeningStatus | null;
 };
 
 type Toast = { id: number; message: string };
@@ -196,6 +206,14 @@ function OwnerPlaceCard({
           <p className="text-[11px] text-muted-foreground line-clamp-1">
             {item.address}
           </p>
+          <PlaceDetailsRow
+            rating={item.rating}
+            userRatingCount={item.userRatingCount}
+            openingStatus={item.openingStatus}
+            priceLevel={item.priceLevel}
+            phoneNumber={item.phoneNumber}
+            websiteUri={item.websiteUri}
+          />
           {item.note && (
             <p className="text-[11px] italic text-muted-foreground line-clamp-2">
               „{truncateNote(item.note)}“
@@ -232,6 +250,13 @@ function OwnerPlaceCard({
           photoUrl={item.photoUrl}
           lat={item.lat}
           lng={item.lng}
+          googleMapsUri={item.googleMapsUri}
+          rating={item.rating}
+          userRatingCount={item.userRatingCount}
+          priceLevel={item.priceLevel}
+          phoneNumber={item.phoneNumber}
+          websiteUri={item.websiteUri}
+          openingStatus={item.openingStatus}
           note={item.note}
           onClose={() => setShowDetails(false)}
         />
@@ -422,6 +447,12 @@ function VisitorRegionGrid({ initialItems }: { initialItems: RegionPlaceItem[] }
         lng: item.lng,
         category: item.category,
         photoUrl: item.photoUrl,
+        googleMapsUri: item.googleMapsUri,
+        rating: item.rating,
+        userRatingCount: item.userRatingCount,
+        priceLevel: item.priceLevel,
+        phoneNumber: item.phoneNumber,
+        websiteUri: item.websiteUri,
       });
 
       if (!error) {
@@ -466,6 +497,13 @@ function VisitorRegionGrid({ initialItems }: { initialItems: RegionPlaceItem[] }
               lng: item.lng,
               category: item.category,
               photoUrl: item.photoUrl,
+              googleMapsUri: item.googleMapsUri,
+              rating: item.rating,
+              userRatingCount: item.userRatingCount,
+              priceLevel: item.priceLevel,
+              phoneNumber: item.phoneNumber,
+              websiteUri: item.websiteUri,
+              openingStatus: item.openingStatus,
             }}
             isLoggedIn={!!user}
             isSaved={savedIds.has(item.placeId)}
