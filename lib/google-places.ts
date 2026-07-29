@@ -71,9 +71,13 @@ type GeocodeResponse = {
 
 /**
  * Resolves the "region" a coordinate belongs to for the auto-clustered
- * lists -- prefers a city-level match (Düsseldorf) but falls back to
- * broader administrative areas or the country for places without a clear
- * locality (e.g. villages on Bali resolve to the "Bali" province instead).
+ * lists -- prefers a city-level match (Düsseldorf) but falls back to the
+ * broader province/state (administrative_area_level_1) for places without a
+ * clear locality, since that's the name people actually recognize (e.g. a
+ * village on Bali has no "locality" component at all in Google's response,
+ * only the much more obscure regency "Gianyar" one level below -- nobody
+ * calls themselves the "Gianyar expert"). The finer administrative_area_2
+ * is checked only as a last resort before the country itself.
  */
 export async function reverseGeocodeRegion(
   lat: number,
@@ -98,8 +102,8 @@ export async function reverseGeocodeRegion(
 
     return (
       findByType("locality") ??
-      findByType("administrative_area_level_2") ??
       findByType("administrative_area_level_1") ??
+      findByType("administrative_area_level_2") ??
       findByType("country") ??
       null
     );
