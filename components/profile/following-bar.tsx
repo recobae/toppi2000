@@ -6,13 +6,8 @@ import { Compass, Plus } from "lucide-react";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { FollowSuggestionsModal } from "@/components/profile/follow-suggestions-modal";
 import { StoryViewer } from "@/components/profile/story-viewer";
+import { STORY_RING_CLASS, STORY_RING_CLASS_INACTIVE } from "@/components/profile/story-ring-styles";
 import { getExpertiseIcon } from "@/lib/expertise";
-
-const RING_CLASS =
-  "rounded-full p-[3px] bg-[conic-gradient(from_0deg,#f97316,#ec4899,#8b5cf6,#3b82f6,#10b981,#f97316)]";
-// Same padding as RING_CLASS so avatars line up identically whether or not
-// they currently have an unseen story -- just no color when there's nothing new.
-const SEEN_RING_CLASS = "rounded-full p-[3px] bg-transparent";
 
 type FollowingProfile = {
   id: string;
@@ -93,7 +88,7 @@ export function FollowingBar({
         const hasUnseenStory = friend.hasUnseenStory && !locallyViewedIds.has(friend.id);
         const avatar = (
           <span className="relative block">
-            <span className={`block ${hasUnseenStory ? RING_CLASS : SEEN_RING_CLASS}`}>
+            <span className={`block ${hasUnseenStory ? STORY_RING_CLASS : STORY_RING_CLASS_INACTIVE}`}>
               <span className="block rounded-full bg-background p-[3px]">
                 <ProfileAvatar
                   username={friend.username}

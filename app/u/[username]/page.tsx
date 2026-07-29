@@ -20,8 +20,7 @@ import {
   type SavedCategory,
 } from "@/lib/categories";
 import { resolveEarnedExpertiseLabels, resolvePlaceExpertiseLabels } from "@/lib/expertise";
-
-const STORY_WINDOW_MS = 24 * 60 * 60 * 1000;
+import { hasActiveStory as checkHasActiveStory, storyWindowSince } from "@/lib/story-activity";
 
 async function getProfileUrl(username: string): Promise<string> {
   const headersList = await headers();
@@ -150,30 +149,7 @@ export default async function ProfilePage({
       .eq("credit_type", "inspired"),
   ]);
 
-  const since24h = new Date(Date.now() - STORY_WINDOW_MS).toISOString();
-  const [
-    { count: recentTopListCount },
-    { count: recentWatchlistCount },
-    { count: recentPlacesCount },
-  ] = await Promise.all([
-    supabase
-      .from("top_list")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", profile.id)
-      .gte("created_at", since24h),
-    supabase
-      .from("watchlist")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", profile.id)
-      .gte("created_at", since24h),
-    supabase
-      .from("places")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", profile.id)
-      .gte("created_at", since24h),
-  ]);
-  const hasActiveStory =
-    (recentTopListCount ?? 0) + (recentWatchlistCount ?? 0) + (recentPlacesCount ?? 0) > 0;
+  const hasActiveStory = await checkHasActiveStory(supabase, profile.id);
 
   const { count: followerCount } = await supabase
     .from("user_follows")
@@ -197,7 +173,7 @@ export default async function ProfilePage({
     const followedIds = (followRows ?? []).map((row) => row.followed_id);
 
     if (followedIds.length > 0) {
-      const since = new Date(Date.now() - STORY_WINDOW_MS).toISOString();
+      const since = storyWindowSince();
 
       const [
         { data: friendProfiles },

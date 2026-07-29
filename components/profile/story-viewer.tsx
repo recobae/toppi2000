@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { Trash2, X } from "lucide-react";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { createClient } from "@/lib/supabase/client";
@@ -119,8 +120,14 @@ export function StoryViewer({
 
         <div className="absolute top-5 left-3 right-3 z-20 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <ProfileAvatar username={username} imageUrl={null} size="sm" />
-            <span className="text-sm font-medium text-white">{username}</span>
+            <Link
+              href={`/u/${username}`}
+              onClick={onClose}
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            >
+              <ProfileAvatar username={username} imageUrl={null} size="sm" />
+              <span className="text-sm font-medium text-white">{username}</span>
+            </Link>
             {current && (
               <span className="text-xs text-white/70">{timeAgo(current.createdAt)}</span>
             )}

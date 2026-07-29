@@ -27,19 +27,28 @@ async function upsertCredits(
       credit_type: creditType,
     }));
   if (rows.length === 0) return;
-  await supabase
+  const { error } = await supabase
     .from("interaction_credits")
     .upsert(rows, { onConflict: "actor_user_id,owner_user_id,item_id,media_type,credit_type" });
+  if (error) {
+    // Was previously swallowed silently -- surface it so a failure (RLS,
+    // bad conflict target, ...) actually shows up in the browser console
+    // instead of just quietly leaving "X Likes"/"X mal inspiriert" at 0.
+    console.error("interaction_credits upsert failed", error, rows);
+  }
 }
 
 async function clearLikeCredits(supabase: SupabaseClient, actorUserId: string, item: CreditItem) {
-  await supabase
+  const { error } = await supabase
     .from("interaction_credits")
     .delete()
     .eq("actor_user_id", actorUserId)
     .eq("item_id", item.itemId)
     .eq("media_type", item.mediaType)
     .eq("credit_type", "like");
+  if (error) {
+    console.error("interaction_credits cleanup failed", error);
+  }
 }
 
 /**

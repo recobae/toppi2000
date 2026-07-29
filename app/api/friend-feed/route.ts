@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
         .map((r) => r.user_id);
 
       return {
-        itemId: row.item_id,
+        itemId: String(row.item_id),
         mediaType: row.media_type as "movie" | "tv",
         title: row.title,
         imageUrl: row.image_url,
