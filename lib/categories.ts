@@ -37,6 +37,14 @@ export function isSavedCategory(value: string): value is SavedCategory {
   return (SAVED_CATEGORIES as string[]).includes(value);
 }
 
+// "Overrated" (dont_watch) is hidden from the UI -- no entry points create
+// or surface it anymore, but the table/route/data stay fully intact for a
+// possible later reactivation. Every UI surface that used to iterate
+// SAVED_CATEGORIES (profile tiles, save buttons, swipe-card actions) should
+// iterate this instead; direct links to an existing dont_watch list still
+// resolve normally since the underlying route is untouched.
+export const VISIBLE_SAVED_CATEGORIES: SavedCategory[] = ["top_list", "watchlist"];
+
 // One consistent icon per category, reused on the profile page (next to the
 // list title) and on the 3 save buttons in the Inspiration feed.
 export const CATEGORY_ICONS: Record<SavedCategory, LucideIcon> = {

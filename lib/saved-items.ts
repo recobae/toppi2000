@@ -18,6 +18,7 @@ export async function saveToCategory(
   category: SavedCategory,
   userId: string,
   item: SavableItem,
+  adoptedFrom?: string | null,
 ) {
   const { data: topRow } = await supabase
     .from(category)
@@ -38,6 +39,7 @@ export async function saveToCategory(
       image_url: item.imageUrl,
       metadata: { year: item.year },
       position: nextPosition,
+      ...(adoptedFrom ? { adopted_from: adoptedFrom } : {}),
     },
     { onConflict: "user_id,item_id,media_type" },
   );

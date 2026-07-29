@@ -37,6 +37,7 @@ export async function savePlaceToRegion(
   userId: string,
   regionName: string,
   place: SavablePlace,
+  adoptedFrom?: string | null,
 ): Promise<SavePlaceResult> {
   const regionKey = normalizeRegionKey(regionName);
 
@@ -92,6 +93,7 @@ export async function savePlaceToRegion(
       opening_periods: place.openingPeriods ?? null,
       utc_offset_minutes: place.utcOffsetMinutes ?? null,
       position: nextPosition,
+      ...(adoptedFrom ? { adopted_from: adoptedFrom } : {}),
     },
     { onConflict: "user_id,google_place_id" },
   );

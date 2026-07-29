@@ -101,18 +101,20 @@ async function getInferredGenreIds(
   userId: string,
   apiKey: string,
 ): Promise<string[]> {
-  const [{ data: topListRows }, { data: likesRows }] = await Promise.all([
+  const [{ data: topListRows }, { data: likedRows }] = await Promise.all([
     supabase
       .from("top_list")
       .select("item_id, media_type")
       .eq("user_id", userId),
     supabase
-      .from("likes")
+      .from("item_interactions")
       .select("item_id, media_type")
-      .eq("user_id", userId),
+      .eq("user_id", userId)
+      .eq("interaction_type", "like")
+      .in("media_type", ["movie", "tv"]),
   ]);
 
-  const items = [...(topListRows ?? []), ...(likesRows ?? [])];
+  const items = [...(topListRows ?? []), ...(likedRows ?? [])];
   const sample = items.slice(0, HISTORY_SAMPLE_LIMIT);
   if (sample.length === 0) return [];
 
@@ -152,6 +154,10 @@ async function getInferredGenreIds(
     .map(([id]) => String(id));
 }
 
+// swiped_titles is no longer written to (see item_interactions), but old
+// rows from before this migration still apply for their remaining 60-day
+// window so a title doesn't reappear mid-way through someone's prior
+// exclusion period.
 async function getRecentlySwipedKeys(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
@@ -168,6 +174,24 @@ async function getRecentlySwipedKeys(
   if (error || !data) return new Set();
 
   return new Set(data.map((row) => `${row.media_type}-${row.tmdb_id}`));
+}
+
+// The generic, permanent successor: any like/dislike/skip in the new Inspo
+// system keeps a title out of the algorithmic feed for good, not just 60
+// days -- "skip" specifically exists for exactly this purpose.
+async function getInteractionExcludedKeys(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from("item_interactions")
+    .select("item_id, media_type")
+    .eq("user_id", userId)
+    .in("media_type", ["movie", "tv"]);
+
+  if (error || !data) return new Set();
+
+  return new Set(data.map((row) => `${row.media_type}-${row.item_id}`));
 }
 
 const SAVED_ITEM_TABLES = ["likes", "top_list", "watchlist", "dont_watch"] as const;
@@ -226,13 +250,14 @@ export async function GET(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [inferredGenreIds, swipedKeys, savedItemKeys] = await Promise.all([
+  const [inferredGenreIds, swipedKeys, interactionKeys, savedItemKeys] = await Promise.all([
     user ? getInferredGenreIds(supabase, user.id, apiKey) : Promise.resolve([]),
     user ? getRecentlySwipedKeys(supabase, user.id) : Promise.resolve(new Set<string>()),
+    user ? getInteractionExcludedKeys(supabase, user.id) : Promise.resolve(new Set<string>()),
     user ? getSavedItemKeys(supabase, user.id) : Promise.resolve(new Set<string>()),
   ]);
 
-  const excludedKeys = new Set([...swipedKeys, ...savedItemKeys]);
+  const excludedKeys = new Set([...swipedKeys, ...interactionKeys, ...savedItemKeys]);
 
   // TMDB's with_genres joins IDs with OR semantics, so mixing an active mood
   // filter with the user's unrelated inferred history genres would dilute

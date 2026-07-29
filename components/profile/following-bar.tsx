@@ -2,19 +2,24 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Compass, Plus } from "lucide-react";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { FollowSuggestionsModal } from "@/components/profile/follow-suggestions-modal";
+import { StoryViewer } from "@/components/profile/story-viewer";
 import { getExpertiseIcon } from "@/lib/expertise";
 
 const RING_CLASS =
   "rounded-full p-[3px] bg-[conic-gradient(from_0deg,#f97316,#ec4899,#8b5cf6,#3b82f6,#10b981,#f97316)]";
+// Same padding as RING_CLASS so avatars line up identically whether or not
+// they currently have an unseen story -- just no color when there's nothing new.
+const SEEN_RING_CLASS = "rounded-full p-[3px] bg-transparent";
 
 type FollowingProfile = {
   id: string;
   username: string;
   avatarUrl: string | null;
   expertiseKeys: string[];
+  hasUnseenStory: boolean;
 };
 
 function ExpertiseCornerBadge({ expertiseKeys }: { expertiseKeys: string[] }) {
@@ -29,6 +34,23 @@ function ExpertiseCornerBadge({ expertiseKeys }: { expertiseKeys: string[] }) {
   );
 }
 
+function InspoWidget() {
+  return (
+    <Link
+      href="/inspo"
+      aria-label="Inspo"
+      className="shrink-0 flex flex-col items-center gap-1 w-14"
+    >
+      <span className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/60 text-primary-foreground">
+        <Compass className="size-6" />
+      </span>
+      <span className="w-full text-center text-[10px] font-medium truncate">
+        Inspo
+      </span>
+    </Link>
+  );
+}
+
 export function FollowingBar({
   currentUserId,
   followingProfiles,
@@ -37,10 +59,15 @@ export function FollowingBar({
   followingProfiles: FollowingProfile[];
 }) {
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [storyUsername, setStoryUsername] = useState<string | null>(null);
+  // Opening a story marks it viewed server-side; track that locally too so
+  // the ring disappears immediately without waiting for a full page refetch.
+  const [locallyViewedIds, setLocallyViewedIds] = useState<Set<string>>(new Set());
 
   if (followingProfiles.length === 0) {
     return (
-      <>
+      <div className="w-full flex items-center gap-3">
+        <InspoWidget />
         <button
           type="button"
           onClick={() => setShowSuggestions(true)}
@@ -55,21 +82,18 @@ export function FollowingBar({
             onClose={() => setShowSuggestions(false)}
           />
         )}
-      </>
+      </div>
     );
   }
 
   return (
     <div className="w-full flex items-start gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {followingProfiles.map((friend) => (
-        <Link
-          key={friend.id}
-          href={`/u/${friend.username}`}
-          aria-label={friend.username}
-          className="shrink-0 flex flex-col items-center gap-1 w-14"
-        >
+      <InspoWidget />
+      {followingProfiles.map((friend) => {
+        const hasUnseenStory = friend.hasUnseenStory && !locallyViewedIds.has(friend.id);
+        const avatar = (
           <span className="relative block">
-            <span className={`block ${RING_CLASS}`}>
+            <span className={`block ${hasUnseenStory ? RING_CLASS : SEEN_RING_CLASS}`}>
               <span className="block rounded-full bg-background p-[3px]">
                 <ProfileAvatar
                   username={friend.username}
@@ -80,11 +104,48 @@ export function FollowingBar({
             </span>
             <ExpertiseCornerBadge expertiseKeys={friend.expertiseKeys} />
           </span>
-          <span className="w-full text-center text-[10px] text-muted-foreground truncate">
-            {friend.username}
-          </span>
-        </Link>
-      ))}
+        );
+
+        return hasUnseenStory ? (
+          <button
+            key={friend.id}
+            type="button"
+            onClick={() => setStoryUsername(friend.username)}
+            aria-label={`Story von ${friend.username}`}
+            className="shrink-0 flex flex-col items-center gap-1 w-14"
+          >
+            {avatar}
+            <span className="w-full text-center text-[10px] text-muted-foreground truncate">
+              {friend.username}
+            </span>
+          </button>
+        ) : (
+          <Link
+            key={friend.id}
+            href={`/u/${friend.username}`}
+            aria-label={friend.username}
+            className="shrink-0 flex flex-col items-center gap-1 w-14"
+          >
+            {avatar}
+            <span className="w-full text-center text-[10px] text-muted-foreground truncate">
+              {friend.username}
+            </span>
+          </Link>
+        );
+      })}
+
+      {storyUsername && (
+        <StoryViewer
+          username={storyUsername}
+          onClose={() => {
+            const viewedFriend = followingProfiles.find((f) => f.username === storyUsername);
+            if (viewedFriend) {
+              setLocallyViewedIds((prev) => new Set(prev).add(viewedFriend.id));
+            }
+            setStoryUsername(null);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -18,6 +18,7 @@ import { CATEGORY_LABELS, isSavedCategory, type SavedCategory } from "@/lib/cate
 import { updateNote } from "@/lib/saved-items";
 import { NOTE_PLACEHOLDERS, SKIP_ADD_NOTE_PROMPT } from "@/lib/notes";
 import { NoteModal } from "@/components/lists/note-modal";
+import { OrteSearchPanel } from "@/components/orte/orte-search-panel";
 import type { PersonSummary, SearchResult } from "@/lib/tmdb";
 import type { PersonCreditResult } from "@/app/api/person-credits/route";
 
@@ -27,8 +28,11 @@ const MY_LIKES_KEY = "__my_likes__";
 
 type Toast = { id: number; message: string };
 
+type SearchCategory = "movies" | "orte";
+
 export default function SearchPage() {
   const searchParams = useSearchParams();
+  const [searchCategory, setSearchCategory] = useState<SearchCategory>("movies");
   const addToCategory = searchParams.get("addTo");
   const addToLabel =
     addToCategory && isSavedCategory(addToCategory)
@@ -331,39 +335,71 @@ export default function SearchPage() {
       <div className="flex-1 w-full flex flex-col gap-6 items-center max-w-5xl p-5">
         <div className="w-full flex flex-col gap-2 pt-8">
           <BackToProfileLink />
-          <h1 className="font-medium text-xl">Filme & Serien durchsuchen</h1>
-          {addToLabel && (
+          <h1 className="font-medium text-xl">
+            {searchCategory === "movies" ? "Filme & Serien durchsuchen" : "Orte durchsuchen"}
+          </h1>
+
+          <div className="w-full flex gap-1.5 border-b">
+            {(
+              [
+                { key: "movies", label: "Filme & Serien" },
+                { key: "orte", label: "Orte" },
+              ] as const
+            ).map((tab) => {
+              const isActive = searchCategory === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setSearchCategory(tab.key)}
+                  className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    isActive
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {searchCategory === "movies" && addToLabel && (
             <p className="text-xs text-muted-foreground">
               Füge einen Titel zu &bdquo;{addToLabel}&ldquo; hinzu
             </p>
           )}
-          <div className="relative w-full">
-            <Input
-              ref={searchInputRef}
-              type="text"
-              placeholder="Titel eingeben…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              autoFocus
-              className={query ? "pr-8" : undefined}
-            />
-            {query && (
-              <button
-                type="button"
-                aria-label="Suche zurücksetzen"
-                className="absolute right-2 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => {
-                  setQuery("");
-                  searchInputRef.current?.focus();
-                }}
-              >
-                <X className="size-4" />
-              </button>
-            )}
-          </div>
+          {searchCategory === "movies" && (
+            <div className="relative w-full">
+              <Input
+                ref={searchInputRef}
+                type="text"
+                placeholder="Titel eingeben…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                autoFocus
+                className={query ? "pr-8" : undefined}
+              />
+              {query && (
+                <button
+                  type="button"
+                  aria-label="Suche zurücksetzen"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => {
+                    setQuery("");
+                    searchInputRef.current?.focus();
+                  }}
+                >
+                  <X className="size-4" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
-        {!query.trim() && (
+        {searchCategory === "orte" && <OrteSearchPanel />}
+
+        {searchCategory === "movies" && !query.trim() && (
           <div className="w-full flex flex-col gap-3">
             <div className="w-full flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {user && (
@@ -518,17 +554,19 @@ export default function SearchPage() {
           </div>
         )}
 
-        {isLoading && (
+        {searchCategory === "movies" && isLoading && (
           <p className="w-full text-sm text-muted-foreground">Suche läuft…</p>
         )}
-        {error && <p className="w-full text-sm text-destructive">{error}</p>}
-        {noResultsAtAll && (
+        {searchCategory === "movies" && error && (
+          <p className="w-full text-sm text-destructive">{error}</p>
+        )}
+        {searchCategory === "movies" && noResultsAtAll && (
           <p className="w-full text-sm text-muted-foreground">
             Keine Ergebnisse gefunden.
           </p>
         )}
 
-        {otherPeople.length > 0 && (
+        {searchCategory === "movies" && otherPeople.length > 0 && (
           <PersonSelector
             people={otherPeople}
             onSelect={loadPersonCredits}
@@ -536,7 +574,7 @@ export default function SearchPage() {
           />
         )}
 
-        {selectedPerson && (
+        {searchCategory === "movies" && selectedPerson && (
           <div className="w-full flex flex-col gap-3">
             <h2 className="text-sm font-medium text-muted-foreground">
               Filme & Serien mit {selectedPerson.name}
@@ -582,7 +620,7 @@ export default function SearchPage() {
           </div>
         )}
 
-        {results.length > 0 && (
+        {searchCategory === "movies" && results.length > 0 && (
           <div className="w-full flex flex-col gap-3">
             {hasPersonSection && (
               <h2 className="text-sm font-medium text-muted-foreground">

@@ -19,6 +19,7 @@ import {
 import {
   CATEGORY_ACTION_LABELS,
   CATEGORY_ICONS,
+  VISIBLE_SAVED_CATEGORIES,
   type SavedCategory,
 } from "@/lib/categories";
 import type { SocialProofBreakdown } from "@/lib/hooks/use-social-proof";
@@ -207,7 +208,7 @@ export function SwipeCard({
               title={result.title}
             />
             <div className="mt-auto flex items-center justify-between gap-2">
-              {(["dont_watch", "top_list", "watchlist"] as const).map(
+              {VISIBLE_SAVED_CATEGORIES.map(
                 (category) => {
                   const Icon = CATEGORY_ICONS[category];
                   return (

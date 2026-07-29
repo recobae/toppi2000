@@ -6,12 +6,14 @@ import {
   CATEGORY_ACTION_LABELS,
   CATEGORY_ICONS,
   SAVED_CATEGORIES,
+  VISIBLE_SAVED_CATEGORIES,
   type SavedCategory,
 } from "@/lib/categories";
 import { removeFromCategory, saveToCategory, type SavableItem } from "@/lib/saved-items";
 import type { SavedState } from "@/lib/hooks/use-saved-state";
 
-const CATEGORY_ORDER: SavedCategory[] = ["dont_watch", "top_list", "watchlist"];
+// Overrated (dont_watch) is hidden from the UI -- see VISIBLE_SAVED_CATEGORIES.
+const CATEGORY_ORDER: SavedCategory[] = VISIBLE_SAVED_CATEGORIES;
 
 const CATEGORY_ACTIVE_CLASSES: Record<SavedCategory, string> = {
   dont_watch: "bg-destructive text-destructive-foreground border-destructive",
@@ -20,9 +22,8 @@ const CATEGORY_ACTIVE_CLASSES: Record<SavedCategory, string> = {
 };
 
 /**
- * Tinder-style 3-button save row: Overrated (left, red), Top List
- * (center, highlighted), Watchlist (right, neutral). Clicking immediately
- * writes/removes the entry -- no confirmation step.
+ * Tinder-style save row: Top List (highlighted), Watchlist (neutral).
+ * Clicking immediately writes/removes the entry -- no confirmation step.
  */
 export function SaveButtons({
   isLoggedIn,

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Heart, MapPin, Plus, Settings } from "lucide-react";
+import { Heart, ListChecks, MapPin, Plus, Repeat2, Settings } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { ListTile } from "@/components/profile/list-tile";
@@ -16,10 +16,12 @@ import { ExpertiseBadges } from "@/components/profile/expertise-badges";
 import {
   CATEGORY_ICONS,
   CATEGORY_LABELS,
-  SAVED_CATEGORIES,
+  VISIBLE_SAVED_CATEGORIES,
   type SavedCategory,
 } from "@/lib/categories";
 import { resolveEarnedExpertiseLabels, resolvePlaceExpertiseLabels } from "@/lib/expertise";
+
+const STORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 async function getProfileUrl(username: string): Promise<string> {
   const headersList = await headers();
@@ -62,7 +64,7 @@ export default async function ProfilePage({
   const isGuest = !viewer;
 
   const previewByCategory = await Promise.all(
-    SAVED_CATEGORIES.map(async (category) => {
+    VISIBLE_SAVED_CATEGORIES.map(async (category) => {
       const [{ data: previewRows }, { count }] = await Promise.all([
         supabase
           .from(category)
@@ -87,7 +89,6 @@ export default async function ProfilePage({
   );
 
   const topListPreview = previewByCategory.find((p) => p.category === "top_list");
-  const likesCount = profile.total_likes_received ?? 0;
 
   const itemCountByCategory = Object.fromEntries(
     previewByCategory.map((entry) => [entry.category, entry.itemCount]),
@@ -130,6 +131,39 @@ export default async function ProfilePage({
     ...resolvePlaceExpertiseLabels(regions, profile.username),
   ];
 
+  // Two distinct stats: "Likes" (others liked something I recommended) is
+  // sourced live from item_interactions, the new generic model -- it no
+  // longer reads profiles.total_likes_received (that counter's history
+  // comes from the now-deprecated item_ratings trigger and isn't extended
+  // going forward). "Übernommen" counts how often my recommendations were
+  // adopted onto someone else's list, tracked via each list row's
+  // adopted_from provenance column.
+  const [{ count: likesCount }, topListAdoptions, watchlistAdoptions, placesAdoptions] =
+    await Promise.all([
+      supabase
+        .from("item_interactions")
+        .select("id", { count: "exact", head: true })
+        .eq("target_user_id", profile.id)
+        .eq("interaction_type", "like"),
+      supabase
+        .from("top_list")
+        .select("id", { count: "exact", head: true })
+        .eq("adopted_from", profile.id),
+      supabase
+        .from("watchlist")
+        .select("id", { count: "exact", head: true })
+        .eq("adopted_from", profile.id),
+      supabase
+        .from("places")
+        .select("id", { count: "exact", head: true })
+        .eq("adopted_from", profile.id),
+    ]);
+
+  const adoptionsCount =
+    (topListAdoptions.count ?? 0) +
+    (watchlistAdoptions.count ?? 0) +
+    (placesAdoptions.count ?? 0);
+
   const { count: followerCount } = await supabase
     .from("user_follows")
     .select("id", { count: "exact", head: true })
@@ -140,6 +174,7 @@ export default async function ProfilePage({
     username: string;
     avatarUrl: string | null;
     expertiseKeys: string[];
+    hasUnseenStory: boolean;
   };
 
   let followingProfiles: FollowingProfile[] = [];
@@ -151,15 +186,43 @@ export default async function ProfilePage({
     const followedIds = (followRows ?? []).map((row) => row.followed_id);
 
     if (followedIds.length > 0) {
-      const [{ data: friendProfiles }, { data: friendTopListItems }] =
-        await Promise.all([
-          supabase.from("profiles").select("id, username").in("id", followedIds),
-          supabase
-            .from("top_list")
-            .select("user_id, image_url")
-            .in("user_id", followedIds)
-            .order("position", { ascending: true }),
-        ]);
+      const since = new Date(Date.now() - STORY_WINDOW_MS).toISOString();
+
+      const [
+        { data: friendProfiles },
+        { data: friendTopListItems },
+        { data: recentTopList },
+        { data: recentWatchlist },
+        { data: recentPlaces },
+        { data: viewRows },
+      ] = await Promise.all([
+        supabase.from("profiles").select("id, username").in("id", followedIds),
+        supabase
+          .from("top_list")
+          .select("user_id, image_url")
+          .in("user_id", followedIds)
+          .order("position", { ascending: true }),
+        supabase
+          .from("top_list")
+          .select("user_id, created_at")
+          .in("user_id", followedIds)
+          .gte("created_at", since),
+        supabase
+          .from("watchlist")
+          .select("user_id, created_at")
+          .in("user_id", followedIds)
+          .gte("created_at", since),
+        supabase
+          .from("places")
+          .select("user_id, created_at")
+          .in("user_id", followedIds)
+          .gte("created_at", since),
+        supabase
+          .from("story_views")
+          .select("target_user_id, viewed_at")
+          .eq("viewer_id", profile.id)
+          .in("target_user_id", followedIds),
+      ]);
 
       const avatarByUserId = new Map<string, string>();
       // Currently every expertise label sources from "top_list", the same
@@ -177,10 +240,26 @@ export default async function ProfilePage({
         );
       }
 
+      const latestActivityByUserId = new Map<string, string>();
+      for (const rows of [recentTopList, recentWatchlist, recentPlaces]) {
+        for (const row of rows ?? []) {
+          const existing = latestActivityByUserId.get(row.user_id);
+          if (!existing || row.created_at > existing) {
+            latestActivityByUserId.set(row.user_id, row.created_at);
+          }
+        }
+      }
+      const viewedAtByUserId = new Map(
+        (viewRows ?? []).map((row) => [row.target_user_id, row.viewed_at]),
+      );
+
       followingProfiles = (friendProfiles ?? []).map((friend) => {
         const itemCounts: Partial<Record<SavedCategory, number>> = {
           top_list: topListCountByUserId.get(friend.id) ?? 0,
         };
+        const latestActivity = latestActivityByUserId.get(friend.id) ?? null;
+        const viewedAt = viewedAtByUserId.get(friend.id) ?? null;
+
         return {
           id: friend.id,
           username: friend.username,
@@ -189,6 +268,7 @@ export default async function ProfilePage({
             itemCounts,
             friend.username,
           ).map((entry) => entry.key),
+          hasUnseenStory: !!latestActivity && (!viewedAt || viewedAt < latestActivity),
         };
       });
     }
@@ -202,8 +282,8 @@ export default async function ProfilePage({
       <TrackLastVisitedProfile username={profile.username} />
       <div className="flex-1 w-full flex flex-col items-center gap-4 max-w-2xl p-5 pt-6">
         <Link
-          href="/vorschlag"
-          aria-label="Zur Inspiration"
+          href="/inspo"
+          aria-label="Zu Inspo"
           className="rounded-full p-[3px] bg-[conic-gradient(from_0deg,#f97316,#ec4899,#8b5cf6,#3b82f6,#10b981,#f97316)]"
         >
           <span className="block rounded-full bg-background p-[3px]">
@@ -235,10 +315,14 @@ export default async function ProfilePage({
 
         <ExpertiseBadges labels={earnedExpertiseLabels} />
 
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
           <div className="flex items-center gap-1.5">
             <Heart className="size-4 fill-current text-red-500" />
-            <span>{likesCount} Likes</span>
+            <span>{likesCount ?? 0} Likes</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Repeat2 className="size-4 text-primary" />
+            <span>{adoptionsCount} mal übernommen</span>
           </div>
           <FollowerCount targetUserId={profile.id} count={followerCount ?? 0} />
         </div>
@@ -250,6 +334,16 @@ export default async function ProfilePage({
           />
         )}
         {isGuest && <GuestProfileCta variant="button" />}
+
+        {isOwner && (
+          <Link
+            href="/meine-aktivitaet"
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ListChecks className="size-3.5" />
+            Meine Aktivität
+          </Link>
+        )}
 
         {isOwner && (
           <FollowingBar
