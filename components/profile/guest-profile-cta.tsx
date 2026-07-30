@@ -8,19 +8,19 @@ import { DEFAULT_POST_AUTH_PATH } from "@/lib/auth-redirect";
 const GUEST_CTA_MESSAGE =
   "Melde dich an, um eigene Listen zu erstellen und mit Freunden zu teilen.";
 
-export function GuestProfileCta({ variant }: { variant: "tile" | "button" }) {
+export function GuestProfileCta({ variant }: { variant: "row" | "button" }) {
   const [showModal, setShowModal] = useState(false);
 
   return (
     <>
-      {variant === "tile" ? (
+      {variant === "row" ? (
         <button
           type="button"
           onClick={() => setShowModal(true)}
-          className="flex flex-col items-center justify-center gap-2 aspect-[2/3] w-full rounded-lg border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+          className="flex items-center justify-center gap-2 h-14 w-full rounded-lg border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
         >
-          <Plus className="size-8" />
-          <span className="text-xs font-medium text-center">
+          <Plus className="size-5" />
+          <span className="text-sm font-medium">
             Jetzt eigene Listen erstellen
           </span>
         </button>

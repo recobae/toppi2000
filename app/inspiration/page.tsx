@@ -49,8 +49,12 @@ export default function InspirationPage() {
   }, []);
 
   useEffect(() => {
-    if (addToCategory || personId) setActiveTab("movies");
-  }, [addToCategory, personId]);
+    if (addToCategory || personId) {
+      setActiveTab("movies");
+    } else if (searchParams.get("tab") === "orte") {
+      setActiveTab("orte");
+    }
+  }, [addToCategory, personId, searchParams]);
 
   return (
     <main className="min-h-screen flex flex-col items-center">

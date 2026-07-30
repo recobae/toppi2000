@@ -20,6 +20,8 @@ export type SavablePlace = {
   utcOffsetMinutes?: number | null;
 };
 
+export type PlaceStatus = "recommended" | "want_to_visit";
+
 export type SavePlaceResult = {
   error: { message: string } | null;
   regionId?: string;
@@ -30,7 +32,10 @@ export type SavePlaceResult = {
 /**
  * Saves a place, auto-creating (find-or-create, keyed by the normalized
  * region name) the region list it belongs to. Mirrors saveToCategory's
- * "new items on top" ranking, scoped per region.
+ * "new items on top" ranking, scoped per region. `status` distinguishes an
+ * active recommendation from a "want to visit" bookmark within the same
+ * region list -- default "recommended" everywhere except the Inspiration
+ * Orte feed's explicit "Merken" action.
  */
 export async function savePlaceToRegion(
   supabase: SupabaseClient,
@@ -38,6 +43,7 @@ export async function savePlaceToRegion(
   regionName: string,
   place: SavablePlace,
   adoptedFrom?: string | null,
+  status: PlaceStatus = "recommended",
 ): Promise<SavePlaceResult> {
   const regionKey = normalizeRegionKey(regionName);
 
@@ -93,6 +99,7 @@ export async function savePlaceToRegion(
       opening_periods: place.openingPeriods ?? null,
       utc_offset_minutes: place.utcOffsetMinutes ?? null,
       position: nextPosition,
+      status,
       ...(adoptedFrom ? { adopted_from: adoptedFrom } : {}),
     },
     { onConflict: "user_id,google_place_id" },

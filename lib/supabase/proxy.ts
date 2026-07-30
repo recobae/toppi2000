@@ -58,7 +58,6 @@ export async function updateSession(request: NextRequest) {
     !request.nextUrl.pathname.startsWith("/vorschlag") &&
     !request.nextUrl.pathname.startsWith("/inspo") &&
     !request.nextUrl.pathname.startsWith("/inspiration") &&
-    !request.nextUrl.pathname.startsWith("/orte") &&
     !request.nextUrl.pathname.startsWith("/api")
   ) {
     // no user, potentially respond by redirecting the user to the login page

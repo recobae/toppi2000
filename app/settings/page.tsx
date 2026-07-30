@@ -23,6 +23,7 @@ import {
   isNotesVisibility,
   type NotesVisibility,
 } from "@/lib/notes";
+import { PLACES_EXPERTISE_MIN_ITEMS } from "@/lib/places";
 
 const UNIQUE_VIOLATION_CODE = "23505";
 
@@ -73,13 +74,14 @@ export default function SettingsPage() {
       setUser(currentUser);
       setEmail(currentUser.email ?? "");
 
-      const [{ data: profile }, { data: regionRows }] = await Promise.all([
+      const [{ data: profile }, { data: regionRows }, { data: placeRows }] = await Promise.all([
         supabase
           .from("profiles")
           .select("username, notes_visibility, home_city")
           .eq("id", currentUser.id)
           .maybeSingle(),
-        supabase.from("place_regions").select("region_name").eq("user_id", currentUser.id),
+        supabase.from("place_regions").select("id, region_name").eq("user_id", currentUser.id),
+        supabase.from("places").select("region_id").eq("user_id", currentUser.id),
       ]);
 
       setCurrentUsername(profile?.username ?? null);
@@ -89,7 +91,18 @@ export default function SettingsPage() {
       }
       setHomeCity(profile?.home_city ?? "");
       setCurrentHomeCity(profile?.home_city ?? "");
-      setCityLabels([...new Set((regionRows ?? []).map((r) => r.region_name))]);
+
+      // Only offer cities that actually show up as a tag under the username
+      // (same PLACES_EXPERTISE_MIN_ITEMS threshold as the tag row) -- picking
+      // a home city here always means picking one of those existing tags.
+      const itemCountByRegionId = new Map<string, number>();
+      for (const row of placeRows ?? []) {
+        itemCountByRegionId.set(row.region_id, (itemCountByRegionId.get(row.region_id) ?? 0) + 1);
+      }
+      const eligibleCities = (regionRows ?? [])
+        .filter((region) => (itemCountByRegionId.get(region.id) ?? 0) >= PLACES_EXPERTISE_MIN_ITEMS)
+        .map((region) => region.region_name);
+      setCityLabels([...new Set(eligibleCities)]);
       setIsLoading(false);
     })();
   }, [router]);
@@ -287,15 +300,16 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="text-lg">Heimatstadt</CardTitle>
             <CardDescription>
-              Erscheint als Pin neben der passenden Orte-Liste auf deinem Profil und bestimmt
-              den Orte-Feed in Inspiration.
+              Erscheint als Pin neben dem passenden Tag unter deinem Namen und bestimmt den
+              Orte-Feed in Inspiration.
             </CardDescription>
           </CardHeader>
           <CardContent>
             {cityLabels.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Lege zuerst eine Orte-Liste an (z. B. über „Ort hinzufügen“ auf deinem Profil),
-                dann kannst du hier eine Heimatstadt auswählen.
+                Lege zuerst genug Orte in einer Stadt an, damit dort ein Tag erscheint
+                (z. B. über „Ort hinzufügen“ auf deinem Profil), dann kannst du hier eine
+                Heimatstadt auswählen.
               </p>
             ) : (
               <form onSubmit={handleHomeCitySubmit} className="flex flex-col gap-3">

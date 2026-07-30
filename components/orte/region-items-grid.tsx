@@ -9,7 +9,7 @@ import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { NoteModal } from "@/components/lists/note-modal";
 import { PlaceDetailModal } from "@/components/orte/place-detail-modal";
 import { PlaceItemRow } from "@/components/items/list-item-row";
-import { removePlace, savePlaceToRegion, updatePlaceNote } from "@/lib/place-items";
+import { removePlace, savePlaceToRegion, updatePlaceNote, type PlaceStatus } from "@/lib/place-items";
 import { setInteractionWithCredits, removeInteractionWithCredits } from "@/lib/interaction-credits";
 import {
   PLACE_CATEGORIES,
@@ -38,18 +38,27 @@ export type RegionPlaceItem = {
   phoneNumber: string | null;
   websiteUri: string | null;
   openingStatus: OpeningStatus | null;
+  status: PlaceStatus;
 };
+
+const SAVED_DIVIDER_LABEL = "Möchte ich noch besuchen";
 
 function CategoryFilter({
   active,
   onChange,
   availableCategories,
+  showSavedFilter,
+  savedActive,
+  onToggleSaved,
 }: {
   active: PlaceCategory | null;
   onChange: (category: PlaceCategory | null) => void;
   availableCategories: PlaceCategory[];
+  showSavedFilter?: boolean;
+  savedActive?: boolean;
+  onToggleSaved?: () => void;
 }) {
-  if (availableCategories.length <= 1) return null;
+  if (availableCategories.length <= 1 && !showSavedFilter) return null;
 
   return (
     <div className="w-full flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -57,7 +66,7 @@ function CategoryFilter({
         type="button"
         onClick={() => onChange(null)}
         className={`shrink-0 whitespace-nowrap h-7 px-3 rounded-full border text-xs font-medium transition-colors ${
-          active === null
+          active === null && !savedActive
             ? "border-primary bg-primary/10 text-primary"
             : "border-input hover:bg-accent"
         }`}
@@ -67,7 +76,7 @@ function CategoryFilter({
       {PLACE_CATEGORIES.filter((category) => availableCategories.includes(category)).map(
         (category) => {
           const Icon = PLACE_CATEGORY_ICONS[category];
-          const isActive = active === category;
+          const isActive = active === category && !savedActive;
           return (
             <button
               key={category}
@@ -85,6 +94,19 @@ function CategoryFilter({
           );
         },
       )}
+      {showSavedFilter && (
+        <button
+          type="button"
+          onClick={onToggleSaved}
+          className={`shrink-0 whitespace-nowrap h-7 px-3 rounded-full border text-xs font-medium transition-colors ${
+            savedActive
+              ? "border-primary bg-primary/10 text-primary"
+              : "border-input hover:bg-accent"
+          }`}
+        >
+          Gemerkt
+        </button>
+      )}
     </div>
   );
 }
@@ -92,7 +114,7 @@ function CategoryFilter({
 function AddPlaceRow() {
   return (
     <Link
-      href="/orte"
+      href="/inspiration?tab=orte"
       className="flex items-center justify-center gap-2 h-14 w-full rounded-lg border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
     >
       <Plus className="size-5" />
@@ -155,12 +177,12 @@ function PlaceSuggestionsStrip({ userId, regionName }: { userId: string; regionN
     });
   }, [recommendations, visibleSuggestions.length, exhausted, load]);
 
-  const handleAdd = async (placeId: string) => {
+  const handleAdd = async (placeId: string, status: PlaceStatus) => {
     const place = allSuggestions.find((p) => p.placeId === placeId);
     if (!place) return;
     setPendingId(placeId);
     const supabase = createClient();
-    const { error } = await savePlaceToRegion(supabase, userId, regionName, place);
+    const { error } = await savePlaceToRegion(supabase, userId, regionName, place, undefined, status);
     if (!error) setDismissedIds((prev) => new Set(prev).add(placeId));
     setPendingId(null);
   };
@@ -195,9 +217,9 @@ function PlaceSuggestionsStrip({ userId, regionName }: { userId: string; regionN
             actions={{
               variant: "rate",
               pending: pendingId === place.placeId,
-              onLike: () => handleAdd(place.placeId),
+              onLike: () => handleAdd(place.placeId, "recommended"),
               onDislike: () => handleDislike(place.placeId),
-              onAdd: () => handleAdd(place.placeId),
+              onAdd: () => handleAdd(place.placeId, "want_to_visit"),
               addLabel: "Merken",
             }}
           />
@@ -219,6 +241,7 @@ function OwnerRegionList({
   const [items, setItems] = useState(initialItems);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<PlaceCategory | null>(null);
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [showNoteModalFor, setShowNoteModalFor] = useState<RegionPlaceItem | null>(null);
   const [showDetailsFor, setShowDetailsFor] = useState<RegionPlaceItem | null>(null);
 
@@ -241,9 +264,35 @@ function OwnerRegionList({
   };
 
   const availableCategories = [...new Set(items.map((item) => item.category))];
-  const visibleItems = activeCategory
+  const categoryFiltered = activeCategory
     ? items.filter((item) => item.category === activeCategory)
     : items;
+  const recommendedItems = categoryFiltered.filter((item) => item.status !== "want_to_visit");
+  const savedItems = categoryFiltered.filter((item) => item.status === "want_to_visit");
+
+  const renderRow = (item: RegionPlaceItem) => (
+    <PlaceItemRow
+      key={item.id}
+      imageUrl={item.photoUrl}
+      name={item.name}
+      category={item.category}
+      address={item.address}
+      rating={item.rating}
+      userRatingCount={item.userRatingCount}
+      openingStatus={item.openingStatus}
+      priceLevel={item.priceLevel}
+      phoneNumber={item.phoneNumber}
+      websiteUri={item.websiteUri}
+      note={item.note}
+      onOpenDetails={() => setShowDetailsFor(item)}
+      actions={{
+        variant: "owned",
+        onEditNote: () => setShowNoteModalFor(item),
+        onRemove: () => handleRemove(item),
+        isRemoving: removingId === item.id,
+      }}
+    />
+  );
 
   return (
     <div className="w-full flex flex-col gap-3">
@@ -251,6 +300,9 @@ function OwnerRegionList({
         active={activeCategory}
         onChange={setActiveCategory}
         availableCategories={availableCategories}
+        showSavedFilter={items.some((item) => item.status === "want_to_visit")}
+        savedActive={showSavedOnly}
+        onToggleSaved={() => setShowSavedOnly((prev) => !prev)}
       />
 
       {items.length === 0 && (
@@ -259,31 +311,30 @@ function OwnerRegionList({
         </p>
       )}
 
-      {visibleItems.map((item) => (
-        <PlaceItemRow
-          key={item.id}
-          imageUrl={item.photoUrl}
-          name={item.name}
-          category={item.category}
-          address={item.address}
-          rating={item.rating}
-          userRatingCount={item.userRatingCount}
-          openingStatus={item.openingStatus}
-          priceLevel={item.priceLevel}
-          phoneNumber={item.phoneNumber}
-          websiteUri={item.websiteUri}
-          note={item.note}
-          onOpenDetails={() => setShowDetailsFor(item)}
-          actions={{
-            variant: "owned",
-            onEditNote: () => setShowNoteModalFor(item),
-            onRemove: () => handleRemove(item),
-            isRemoving: removingId === item.id,
-          }}
-        />
-      ))}
-      {!activeCategory && <AddPlaceRow />}
-      {!activeCategory && <PlaceSuggestionsStrip userId={userId} regionName={regionName} />}
+      {showSavedOnly ? (
+        savedItems.map(renderRow)
+      ) : (
+        <>
+          {recommendedItems.map(renderRow)}
+
+          {recommendedItems.length > 0 && savedItems.length > 0 && (
+            <div className="w-full flex items-center gap-2 pt-2">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                {SAVED_DIVIDER_LABEL}
+              </span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+          )}
+
+          {savedItems.map(renderRow)}
+        </>
+      )}
+
+      {!showSavedOnly && !activeCategory && <AddPlaceRow />}
+      {!showSavedOnly && !activeCategory && (
+        <PlaceSuggestionsStrip userId={userId} regionName={regionName} />
+      )}
 
       {showDetailsFor && (
         <PlaceDetailModal
@@ -332,6 +383,7 @@ function VisitorRegionList({
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
   const [pendingPlaceId, setPendingPlaceId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<PlaceCategory | null>(null);
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [likedKeys, setLikedKeys] = useState<Set<string>>(new Set());
   const [notePrompt, setNotePrompt] = useState<RegionPlaceItem | null>(null);
   const [showDetailsFor, setShowDetailsFor] = useState<RegionPlaceItem | null>(null);
@@ -418,9 +470,11 @@ function VisitorRegionList({
   };
 
   const availableCategories = [...new Set(items.map((item) => item.category))];
-  const visibleItems = activeCategory
+  const categoryFiltered = activeCategory
     ? items.filter((item) => item.category === activeCategory)
     : items;
+  const recommendedItems = categoryFiltered.filter((item) => item.status !== "want_to_visit");
+  const savedItems = categoryFiltered.filter((item) => item.status === "want_to_visit");
 
   if (items.length === 0) {
     return (
@@ -443,15 +497,38 @@ function VisitorRegionList({
         active={activeCategory}
         onChange={setActiveCategory}
         availableCategories={availableCategories}
+        showSavedFilter={items.some((item) => item.status === "want_to_visit")}
+        savedActive={showSavedOnly}
+        onToggleSaved={() => setShowSavedOnly((prev) => !prev)}
       />
-      {visibleItems.map((item) => (
-        <PlaceItemRowForOwner key={item.id} item={item} />
-      ))}
+      {showSavedOnly ? (
+        savedItems.map((item) => <PlaceItemRowForOwner key={item.id} item={item} />)
+      ) : (
+        <>
+          {recommendedItems.map((item) => (
+            <PlaceItemRowForOwner key={item.id} item={item} />
+          ))}
+
+          {recommendedItems.length > 0 && savedItems.length > 0 && (
+            <div className="w-full flex items-center gap-2 pt-2">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                {SAVED_DIVIDER_LABEL}
+              </span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+          )}
+
+          {savedItems.map((item) => (
+            <PlaceItemRowForOwner key={item.id} item={item} />
+          ))}
+        </>
+      )}
 
       {showGuestPrompt && (
         <GuestSignupModal
           message="Melde dich an, um Orte zu deinen eigenen Listen hinzuzufügen."
-          next="/orte"
+          next="/inspiration?tab=orte"
           onClose={() => setShowGuestPrompt(false)}
         />
       )}

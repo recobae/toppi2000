@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
   const { data: rows, error } = await supabase
     .from("places")
     .select(
-      "id, google_place_id, name, address, lat, lng, places_category, photo_url, note, position, google_maps_uri, rating, user_rating_count, price_level, phone_number, website_uri, opening_periods, utc_offset_minutes",
+      "id, google_place_id, name, address, lat, lng, places_category, photo_url, note, position, status, google_maps_uri, rating, user_rating_count, price_level, phone_number, website_uri, opening_periods, utc_offset_minutes",
     )
     .eq("region_id", region.id)
     .order("position", { ascending: true });
@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
     category: row.places_category,
     photoUrl: row.photo_url,
     note: canViewNotes ? (row.note ?? null) : null,
+    status: (row.status ?? "recommended") as "recommended" | "want_to_visit",
     googleMapsUri: row.google_maps_uri,
     rating: row.rating,
     userRatingCount: row.user_rating_count,

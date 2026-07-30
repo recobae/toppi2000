@@ -17,10 +17,10 @@ import type { PlaceSearchResult } from "@/lib/google-places";
 type Toast = { id: number; message: string };
 
 /**
- * The Orte search experience (input, results grid, save flow) as a
- * self-contained panel -- used both by the standalone /orte page and
- * embedded in /search's category-aware switcher, so there's exactly one
- * implementation of "search Google Places and save a result".
+ * The Orte search experience (input, results, save flow) as a
+ * self-contained panel embedded in the Inspiration page's Orte tab -- the
+ * one implementation of "search Google Places and save a result" (the old
+ * standalone /orte page duplicating this has been removed).
  */
 export function OrteSearchPanel() {
   const [query, setQuery] = useState("");
@@ -249,7 +249,7 @@ export function OrteSearchPanel() {
       {showGuestModal && (
         <GuestSignupModal
           message="Melde dich an, um Orte zu deinen eigenen Listen hinzuzufügen."
-          next="/orte"
+          next="/inspiration?tab=orte"
           onClose={() => setShowGuestModal(false)}
         />
       )}

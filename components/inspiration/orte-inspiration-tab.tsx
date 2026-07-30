@@ -9,7 +9,7 @@ import { PlaceDetailModal } from "@/components/orte/place-detail-modal";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { NoteModal } from "@/components/lists/note-modal";
 import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
-import { savePlaceToRegion, updatePlaceNote } from "@/lib/place-items";
+import { savePlaceToRegion, updatePlaceNote, type PlaceStatus } from "@/lib/place-items";
 import type { PlaceSearchResult } from "@/lib/google-places";
 import type { CityPlaceRecommendations } from "@/lib/recommendations";
 import { CURATED_CITY_LABELS } from "@/lib/places";
@@ -111,12 +111,23 @@ export function OrteInspirationTab({
     });
   }, [recommendations, selectedCity, isLoadingCity, exhausted, loadCityRecommendations]);
 
-  const handleAdd = async (place: PlaceSearchResult, recommendedByUsernames: string[]) => {
+  const handleAdd = async (
+    place: PlaceSearchResult,
+    recommendedByUsernames: string[],
+    status: PlaceStatus,
+  ) => {
     if (!user || pendingPlaceId || !selectedCity) return;
     setPendingPlaceId(place.placeId);
     const supabase = createClient();
     try {
-      const { error } = await savePlaceToRegion(supabase, user.id, selectedCity, place);
+      const { error } = await savePlaceToRegion(
+        supabase,
+        user.id,
+        selectedCity,
+        place,
+        undefined,
+        status,
+      );
       if (!error) {
         if (recommendedByUsernames.length > 0) {
           // The recommenders' user ids aren't carried on the place row
@@ -183,9 +194,9 @@ export function OrteInspirationTab({
         actions={{
           variant: "rate",
           pending: pendingPlaceId === place.placeId,
-          onLike: () => handleAdd(place, recommendedBy),
+          onLike: () => handleAdd(place, recommendedBy, "recommended"),
           onDislike: () => handleDislike(place),
-          onAdd: () => handleAdd(place, recommendedBy),
+          onAdd: () => handleAdd(place, recommendedBy, "want_to_visit"),
           addLabel: "Merken",
         }}
       />
