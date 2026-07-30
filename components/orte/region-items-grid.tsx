@@ -1,22 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
-import { Check, Pencil, Plus, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { NoteModal } from "@/components/lists/note-modal";
 import { PlaceDetailModal } from "@/components/orte/place-detail-modal";
-import { PlaceResultCard } from "@/components/orte/place-result-card";
+import { PlaceItemRow } from "@/components/items/list-item-row";
 import { removePlace, savePlaceToRegion, updatePlaceNote } from "@/lib/place-items";
-import { setInteractionWithCredits } from "@/lib/interaction-credits";
-import { usePlaceSavedState } from "@/lib/hooks/use-place-saved-state";
-import type { CityPlaceRecommendations } from "@/lib/recommendations";
-import { PlaceDetailsRow } from "@/components/orte/place-details-row";
+import { setInteractionWithCredits, removeInteractionWithCredits } from "@/lib/interaction-credits";
 import {
   PLACE_CATEGORIES,
   PLACE_CATEGORY_ICONS,
@@ -24,8 +18,8 @@ import {
   type PlaceCategory,
   type PlacePriceLevel,
 } from "@/lib/places";
-import { truncateNote } from "@/lib/notes";
 import type { OpeningStatus } from "@/lib/opening-hours";
+import type { CityPlaceRecommendations } from "@/lib/recommendations";
 
 export type RegionPlaceItem = {
   id: string;
@@ -45,24 +39,6 @@ export type RegionPlaceItem = {
   websiteUri: string | null;
   openingStatus: OpeningStatus | null;
 };
-
-type Toast = { id: number; message: string };
-
-function ToastStack({ toasts }: { toasts: Toast[] }) {
-  if (toasts.length === 0) return null;
-  return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
-      {toasts.map((toast) => (
-        <div
-          key={toast.id}
-          className="rounded-md bg-foreground text-background px-4 py-2 text-sm shadow-lg"
-        >
-          {toast.message}
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function CategoryFilter({
   active,
@@ -113,128 +89,6 @@ function CategoryFilter({
   );
 }
 
-/** Row layout shared with movie/tv lists -- reference layout is the
- * friend-feed "Von deinen Freunden" cards. Thumbnail left, info + actions
- * right, no more poster-grid tiles. */
-function OwnerPlaceRow({
-  item,
-  onRemove,
-  isRemoving,
-  onNoteSaved,
-}: {
-  item: RegionPlaceItem;
-  onRemove: (item: RegionPlaceItem) => void;
-  isRemoving: boolean;
-  onNoteSaved: (item: RegionPlaceItem, note: string | null) => void;
-}) {
-  const [showDetails, setShowDetails] = useState(false);
-  const [showNoteModal, setShowNoteModal] = useState(false);
-  const Icon = PLACE_CATEGORY_ICONS[item.category];
-
-  const handleSaveNote = async (note: string | null) => {
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-    const { error } = await updatePlaceNote(supabase, user.id, item.placeId, note);
-    if (!error) onNoteSaved(item, note);
-  };
-
-  return (
-    <>
-      <Card className="overflow-hidden flex gap-3 p-3">
-        <button
-          type="button"
-          onClick={() => setShowDetails(true)}
-          aria-label={`Details zu ${item.name} anzeigen`}
-          className="relative w-16 aspect-[4/3] shrink-0 rounded-md overflow-hidden bg-muted"
-        >
-          {item.photoUrl ? (
-            <Image src={item.photoUrl} alt={item.name} fill sizes="64px" className="object-cover" />
-          ) : (
-            <div className="flex h-full items-center justify-center text-muted-foreground">
-              <Icon className="size-5" />
-            </div>
-          )}
-        </button>
-        <div className="flex-1 min-w-0 flex flex-col gap-1">
-          <p className="text-sm font-medium leading-tight line-clamp-2">{item.name}</p>
-          <span className="inline-flex w-fit items-center gap-1 text-[10px] font-medium rounded bg-secondary text-secondary-foreground px-1.5 py-0.5">
-            <Icon className="size-3" />
-            {PLACE_CATEGORY_LABELS[item.category]}
-          </span>
-          <p className="text-[11px] text-muted-foreground line-clamp-1">{item.address}</p>
-          <PlaceDetailsRow
-            rating={item.rating}
-            userRatingCount={item.userRatingCount}
-            openingStatus={item.openingStatus}
-            priceLevel={item.priceLevel}
-            phoneNumber={item.phoneNumber}
-            websiteUri={item.websiteUri}
-          />
-          {item.note && (
-            <p className="text-[11px] italic text-muted-foreground line-clamp-2">
-              „{truncateNote(item.note)}“
-            </p>
-          )}
-          <div className="mt-auto pt-2 flex items-center gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              aria-label={item.note ? "Notiz bearbeiten" : "Notiz hinzufügen"}
-              onClick={() => setShowNoteModal(true)}
-            >
-              <Pencil />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="ml-auto"
-              disabled={isRemoving}
-              onClick={() => onRemove(item)}
-            >
-              <X />
-              {isRemoving ? "Wird entfernt…" : "Entfernen"}
-            </Button>
-          </div>
-        </div>
-      </Card>
-
-      {showDetails && (
-        <PlaceDetailModal
-          name={item.name}
-          address={item.address}
-          category={item.category}
-          photoUrl={item.photoUrl}
-          lat={item.lat}
-          lng={item.lng}
-          googleMapsUri={item.googleMapsUri}
-          rating={item.rating}
-          userRatingCount={item.userRatingCount}
-          priceLevel={item.priceLevel}
-          phoneNumber={item.phoneNumber}
-          websiteUri={item.websiteUri}
-          openingStatus={item.openingStatus}
-          note={item.note}
-          onClose={() => setShowDetails(false)}
-        />
-      )}
-
-      {showNoteModal && (
-        <NoteModal
-          title={item.name}
-          posterUrl={item.photoUrl}
-          initialNote={item.note}
-          placeholder="Was macht diesen Ort besonders?"
-          onSave={handleSaveNote}
-          onClose={() => setShowNoteModal(false)}
-        />
-      )}
-    </>
-  );
-}
-
 function AddPlaceRow() {
   return (
     <Link
@@ -251,11 +105,11 @@ function AddPlaceRow() {
  * Compact suggestion strip under the owner's own Orte-region list -- exact
  * same query (lib/recommendations.ts) as the Inspiration Orte tab's per-city
  * feed: friends who added something here first, then generic popular
- * places. Rating happens right here via Ja (hinzufügen)/Nein.
+ * places. Rating happens right here via Ja/Nein/Merken, same as everywhere.
  */
 function PlaceSuggestionsStrip({ userId, regionName }: { userId: string; regionName: string }) {
   const [recommendations, setRecommendations] = useState<CityPlaceRecommendations | null>(null);
-  const { savedIds, markSaved } = usePlaceSavedState(userId);
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -276,6 +130,22 @@ function PlaceSuggestionsStrip({ userId, regionName }: { userId: string; regionN
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const visibleSuggestions = allSuggestions.filter((place) => !dismissedIds.has(place.placeId));
 
+  const handleAdd = async (placeId: string) => {
+    const place = allSuggestions.find((p) => p.placeId === placeId);
+    if (!place) return;
+    setPendingId(placeId);
+    const supabase = createClient();
+    const { error } = await savePlaceToRegion(supabase, userId, regionName, place);
+    if (!error) setDismissedIds((prev) => new Set(prev).add(placeId));
+    setPendingId(null);
+  };
+
+  const handleDislike = async (placeId: string) => {
+    setDismissedIds((prev) => new Set(prev).add(placeId));
+    const supabase = createClient();
+    await setInteractionWithCredits(supabase, userId, { itemId: placeId, mediaType: "place" }, "dislike");
+  };
+
   if (visibleSuggestions.length === 0) return null;
 
   return (
@@ -283,28 +153,27 @@ function PlaceSuggestionsStrip({ userId, regionName }: { userId: string; regionN
       <h2 className="text-xs font-medium text-muted-foreground">
         Weitere Empfehlungen für {regionName}
       </h2>
-      <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="w-full flex flex-col gap-3">
         {visibleSuggestions.map((place) => (
-          <PlaceResultCard
+          <PlaceItemRow
             key={place.placeId}
-            place={place}
-            isLoggedIn
-            isSaved={savedIds.has(place.placeId)}
-            isSaving={false}
-            onToggleSave={async () => {
-              const supabase = createClient();
-              const { error } = await savePlaceToRegion(supabase, userId, regionName, place);
-              if (!error) markSaved(place.placeId, true);
-            }}
-            onDislike={async () => {
-              setDismissedIds((prev) => new Set(prev).add(place.placeId));
-              const supabase = createClient();
-              await setInteractionWithCredits(
-                supabase,
-                userId,
-                { itemId: place.placeId, mediaType: "place" },
-                "dislike",
-              );
+            imageUrl={place.photoUrl}
+            name={place.name}
+            category={place.category}
+            address={place.address}
+            rating={place.rating}
+            userRatingCount={place.userRatingCount}
+            openingStatus={place.openingStatus}
+            priceLevel={place.priceLevel}
+            phoneNumber={place.phoneNumber}
+            websiteUri={place.websiteUri}
+            actions={{
+              variant: "rate",
+              pending: pendingId === place.placeId,
+              onLike: () => handleAdd(place.placeId),
+              onDislike: () => handleDislike(place.placeId),
+              onAdd: () => handleAdd(place.placeId),
+              addLabel: "Merken",
             }}
           />
         ))}
@@ -325,6 +194,8 @@ function OwnerRegionList({
   const [items, setItems] = useState(initialItems);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<PlaceCategory | null>(null);
+  const [showNoteModalFor, setShowNoteModalFor] = useState<RegionPlaceItem | null>(null);
+  const [showDetailsFor, setShowDetailsFor] = useState<RegionPlaceItem | null>(null);
 
   const handleRemove = async (item: RegionPlaceItem) => {
     setRemovingId(item.id);
@@ -336,10 +207,12 @@ function OwnerRegionList({
     setRemovingId(null);
   };
 
-  const handleNoteSaved = (item: RegionPlaceItem, note: string | null) => {
-    setItems((prev) =>
-      prev.map((existing) => (existing.id === item.id ? { ...existing, note } : existing)),
-    );
+  const handleSaveNote = async (item: RegionPlaceItem, note: string | null) => {
+    const supabase = createClient();
+    const { error } = await updatePlaceNote(supabase, userId, item.placeId, note);
+    if (!error) {
+      setItems((prev) => prev.map((existing) => (existing.id === item.id ? { ...existing, note } : existing)));
+    }
   };
 
   const availableCategories = [...new Set(items.map((item) => item.category))];
@@ -362,127 +235,86 @@ function OwnerRegionList({
       )}
 
       {visibleItems.map((item) => (
-        <OwnerPlaceRow
+        <PlaceItemRow
           key={item.id}
-          item={item}
-          onRemove={handleRemove}
-          isRemoving={removingId === item.id}
-          onNoteSaved={handleNoteSaved}
+          imageUrl={item.photoUrl}
+          name={item.name}
+          category={item.category}
+          address={item.address}
+          rating={item.rating}
+          userRatingCount={item.userRatingCount}
+          openingStatus={item.openingStatus}
+          priceLevel={item.priceLevel}
+          phoneNumber={item.phoneNumber}
+          websiteUri={item.websiteUri}
+          note={item.note}
+          onOpenDetails={() => setShowDetailsFor(item)}
+          actions={{
+            variant: "owned",
+            onEditNote: () => setShowNoteModalFor(item),
+            onRemove: () => handleRemove(item),
+            isRemoving: removingId === item.id,
+          }}
         />
       ))}
       {!activeCategory && <AddPlaceRow />}
       {!activeCategory && <PlaceSuggestionsStrip userId={userId} regionName={regionName} />}
+
+      {showDetailsFor && (
+        <PlaceDetailModal
+          name={showDetailsFor.name}
+          address={showDetailsFor.address}
+          category={showDetailsFor.category}
+          photoUrl={showDetailsFor.photoUrl}
+          lat={showDetailsFor.lat}
+          lng={showDetailsFor.lng}
+          googleMapsUri={showDetailsFor.googleMapsUri}
+          rating={showDetailsFor.rating}
+          userRatingCount={showDetailsFor.userRatingCount}
+          priceLevel={showDetailsFor.priceLevel}
+          phoneNumber={showDetailsFor.phoneNumber}
+          websiteUri={showDetailsFor.websiteUri}
+          openingStatus={showDetailsFor.openingStatus}
+          note={showDetailsFor.note}
+          onClose={() => setShowDetailsFor(null)}
+        />
+      )}
+
+      {showNoteModalFor && (
+        <NoteModal
+          title={showNoteModalFor.name}
+          posterUrl={showNoteModalFor.photoUrl}
+          initialNote={showNoteModalFor.note}
+          placeholder="Was macht diesen Ort besonders?"
+          onSave={(note) => handleSaveNote(showNoteModalFor, note)}
+          onClose={() => setShowNoteModalFor(null)}
+        />
+      )}
     </div>
   );
 }
 
-function VisitorPlaceRow({
-  item,
-  isLoggedIn,
-  isSaved,
-  isSaving,
-  onToggleSave,
-  onGuestClick,
+function VisitorRegionList({
+  initialItems,
+  ownerId,
 }: {
-  item: RegionPlaceItem;
-  isLoggedIn: boolean;
-  isSaved: boolean;
-  isSaving: boolean;
-  onToggleSave: () => void;
-  onGuestClick: () => void;
+  initialItems: RegionPlaceItem[];
+  ownerId: string;
 }) {
-  const [showDetails, setShowDetails] = useState(false);
-  const Icon = PLACE_CATEGORY_ICONS[item.category];
-
-  const handleSaveClick = () => {
-    if (!isLoggedIn) {
-      onGuestClick();
-      return;
-    }
-    onToggleSave();
-  };
-
-  return (
-    <>
-      <Card className="overflow-hidden flex gap-3 p-3">
-        <button
-          type="button"
-          onClick={() => setShowDetails(true)}
-          aria-label={`Details zu ${item.name} anzeigen`}
-          className="relative w-16 aspect-[4/3] shrink-0 rounded-md overflow-hidden bg-muted"
-        >
-          {item.photoUrl ? (
-            <Image src={item.photoUrl} alt={item.name} fill sizes="64px" className="object-cover" />
-          ) : (
-            <div className="flex h-full items-center justify-center text-muted-foreground">
-              <Icon className="size-5" />
-            </div>
-          )}
-        </button>
-        <div className="flex-1 min-w-0 flex flex-col gap-1">
-          <p className="text-sm font-medium leading-tight line-clamp-2">{item.name}</p>
-          <span className="inline-flex w-fit items-center gap-1 text-[10px] font-medium rounded bg-secondary text-secondary-foreground px-1.5 py-0.5">
-            <Icon className="size-3" />
-            {PLACE_CATEGORY_LABELS[item.category]}
-          </span>
-          <p className="text-[11px] text-muted-foreground line-clamp-1">{item.address}</p>
-          <PlaceDetailsRow
-            rating={item.rating}
-            userRatingCount={item.userRatingCount}
-            openingStatus={item.openingStatus}
-            priceLevel={item.priceLevel}
-            phoneNumber={item.phoneNumber}
-            websiteUri={item.websiteUri}
-          />
-          {item.note && (
-            <p className="text-[11px] italic text-muted-foreground line-clamp-2">
-              „{truncateNote(item.note)}“
-            </p>
-          )}
-          <div className="mt-auto pt-2">
-            <Button
-              variant={isSaved ? "outline" : "default"}
-              size="sm"
-              disabled={isSaving}
-              onClick={handleSaveClick}
-            >
-              {isSaved ? <Check /> : <Plus />}
-              {isSaved ? "Gespeichert" : "Hinzufügen"}
-            </Button>
-          </div>
-        </div>
-      </Card>
-
-      {showDetails && (
-        <PlaceDetailModal
-          name={item.name}
-          address={item.address}
-          category={item.category}
-          photoUrl={item.photoUrl}
-          lat={item.lat}
-          lng={item.lng}
-          googleMapsUri={item.googleMapsUri}
-          rating={item.rating}
-          userRatingCount={item.userRatingCount}
-          priceLevel={item.priceLevel}
-          phoneNumber={item.phoneNumber}
-          websiteUri={item.websiteUri}
-          openingStatus={item.openingStatus}
-          note={item.note}
-          onClose={() => setShowDetails(false)}
-        />
-      )}
-    </>
-  );
-}
-
-function VisitorRegionList({ initialItems }: { initialItems: RegionPlaceItem[] }) {
   const items = initialItems;
   const [user, setUser] = useState<User | null>(null);
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
   const [pendingPlaceId, setPendingPlaceId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<PlaceCategory | null>(null);
+  const [likedKeys, setLikedKeys] = useState<Set<string>>(new Set());
+  const [notePrompt, setNotePrompt] = useState<RegionPlaceItem | null>(null);
+  const [showDetailsFor, setShowDetailsFor] = useState<RegionPlaceItem | null>(null);
+
+  const showToast = useCallback((message: string) => {
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(null), 3000);
+  }, []);
 
   useEffect(() => {
     const supabase = createClient();
@@ -491,32 +323,46 @@ function VisitorRegionList({ initialItems }: { initialItems: RegionPlaceItem[] }
         data: { user: currentUser },
       } = await supabase.auth.getUser();
       setUser(currentUser);
+      if (!currentUser) return;
+      const { data } = await supabase
+        .from("item_interactions")
+        .select("item_id")
+        .eq("user_id", currentUser.id)
+        .eq("interaction_type", "like")
+        .eq("media_type", "place");
+      setLikedKeys(new Set((data ?? []).map((row) => row.item_id)));
     })();
   }, []);
 
-  const { savedIds, markSaved } = usePlaceSavedState(user?.id);
+  const handleToggleLike = async (item: RegionPlaceItem) => {
+    if (!user) return;
+    const supabase = createClient();
+    const isLiked = likedKeys.has(item.placeId);
+    if (isLiked) {
+      await removeInteractionWithCredits(supabase, user.id, { itemId: item.placeId, mediaType: "place" });
+      setLikedKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(item.placeId);
+        return next;
+      });
+    } else {
+      await setInteractionWithCredits(
+        supabase,
+        user.id,
+        { itemId: item.placeId, mediaType: "place" },
+        "like",
+        [ownerId],
+      );
+      setLikedKeys((prev) => new Set(prev).add(item.placeId));
+    }
+  };
 
-  const showToast = useCallback((message: string) => {
-    const id = Date.now() + Math.random();
-    setToasts((prev) => [...prev, { id, message }]);
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3000);
-  }, []);
-
-  const handleToggleSave = async (item: RegionPlaceItem) => {
+  const handleAdd = async (item: RegionPlaceItem) => {
     if (!user || pendingPlaceId) return;
     setPendingPlaceId(item.placeId);
     const supabase = createClient();
 
     try {
-      if (savedIds.has(item.placeId)) {
-        const { error } = await removePlace(supabase, user.id, item.placeId);
-        if (!error) {
-          markSaved(item.placeId, false);
-          showToast("Entfernt");
-        }
-        return;
-      }
-
       const geoResponse = await fetch(`/api/reverse-geocode?lat=${item.lat}&lng=${item.lng}`);
       const geoData: { region: string | null } = await geoResponse.json();
       const region = geoData.region ?? "Sonstige Orte";
@@ -538,8 +384,8 @@ function VisitorRegionList({ initialItems }: { initialItems: RegionPlaceItem[] }
       });
 
       if (!error) {
-        markSaved(item.placeId, true);
         showToast(`Zu „${region}“ hinzugefügt`);
+        setNotePrompt(item);
       }
     } finally {
       setPendingPlaceId(null);
@@ -561,22 +407,20 @@ function VisitorRegionList({ initialItems }: { initialItems: RegionPlaceItem[] }
 
   return (
     <div className="w-full flex flex-col gap-3">
-      <ToastStack toasts={toasts} />
+      {toastMessage && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <div className="rounded-md bg-foreground text-background px-4 py-2 text-sm shadow-lg">
+            {toastMessage}
+          </div>
+        </div>
+      )}
       <CategoryFilter
         active={activeCategory}
         onChange={setActiveCategory}
         availableCategories={availableCategories}
       />
       {visibleItems.map((item) => (
-        <VisitorPlaceRow
-          key={item.id}
-          item={item}
-          isLoggedIn={!!user}
-          isSaved={savedIds.has(item.placeId)}
-          isSaving={pendingPlaceId === item.placeId}
-          onToggleSave={() => handleToggleSave(item)}
-          onGuestClick={() => setShowGuestPrompt(true)}
-        />
+        <PlaceItemRowForOwner key={item.id} item={item} />
       ))}
 
       {showGuestPrompt && (
@@ -586,8 +430,69 @@ function VisitorRegionList({ initialItems }: { initialItems: RegionPlaceItem[] }
           onClose={() => setShowGuestPrompt(false)}
         />
       )}
+
+      {showDetailsFor && (
+        <PlaceDetailModal
+          name={showDetailsFor.name}
+          address={showDetailsFor.address}
+          category={showDetailsFor.category}
+          photoUrl={showDetailsFor.photoUrl}
+          lat={showDetailsFor.lat}
+          lng={showDetailsFor.lng}
+          googleMapsUri={showDetailsFor.googleMapsUri}
+          rating={showDetailsFor.rating}
+          userRatingCount={showDetailsFor.userRatingCount}
+          priceLevel={showDetailsFor.priceLevel}
+          phoneNumber={showDetailsFor.phoneNumber}
+          websiteUri={showDetailsFor.websiteUri}
+          openingStatus={showDetailsFor.openingStatus}
+          note={showDetailsFor.note}
+          onClose={() => setShowDetailsFor(null)}
+        />
+      )}
+
+      {notePrompt && user && (
+        <NoteModal
+          title={notePrompt.name}
+          posterUrl={notePrompt.photoUrl}
+          initialNote={null}
+          placeholder="Was macht diesen Ort besonders?"
+          onSave={async (note) => {
+            const supabase = createClient();
+            await updatePlaceNote(supabase, user.id, notePrompt.placeId, note);
+          }}
+          onClose={() => setNotePrompt(null)}
+        />
+      )}
     </div>
   );
+
+  function PlaceItemRowForOwner({ item }: { item: RegionPlaceItem }) {
+    return (
+      <PlaceItemRow
+        imageUrl={item.photoUrl}
+        name={item.name}
+        category={item.category}
+        address={item.address}
+        rating={item.rating}
+        userRatingCount={item.userRatingCount}
+        openingStatus={item.openingStatus}
+        priceLevel={item.priceLevel}
+        phoneNumber={item.phoneNumber}
+        websiteUri={item.websiteUri}
+        onOpenDetails={() => setShowDetailsFor(item)}
+        isLoggedIn={!!user}
+        onGuestClick={() => setShowGuestPrompt(true)}
+        actions={{
+          variant: "foreign",
+          isLiked: likedKeys.has(item.placeId),
+          onToggleLike: () => handleToggleLike(item),
+          onAdd: () => handleAdd(item),
+          addLabel: "Hinzufügen",
+        }}
+      />
+    );
+  }
 }
 
 export function RegionItemsGrid({
@@ -630,6 +535,6 @@ export function RegionItemsGrid({
   return isOwner ? (
     <OwnerRegionList initialItems={items} userId={ownerId} regionName={regionName} />
   ) : (
-    <VisitorRegionList initialItems={items} />
+    <VisitorRegionList initialItems={items} ownerId={ownerId} />
   );
 }

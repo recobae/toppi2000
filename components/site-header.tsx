@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
@@ -47,30 +46,18 @@ export function SiteHeader() {
   // too would be a redundant link to the page you're already on.
   const onOwnProfile =
     pathname === `/u/${username}` || pathname.startsWith(`/u/${username}/`);
-  const onInspiration = pathname === "/inspiration";
 
-  if (onOwnProfile && onInspiration) return null;
+  if (onOwnProfile) return null;
 
   return (
     <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
-      {!onInspiration && (
-        <Link
-          href="/inspiration"
-          aria-label="Inspiration"
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-background border shadow-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <Search className="size-4" />
-        </Link>
-      )}
-      {!onOwnProfile && (
-        <Link
-          href={`/u/${username}`}
-          aria-label="Zu meinem Profil"
-          className="rounded-full shadow-sm hover:opacity-90 transition-opacity"
-        >
-          <ProfileAvatar username={username} imageUrl={avatarUrl} size="sm" />
-        </Link>
-      )}
+      <Link
+        href={`/u/${username}`}
+        aria-label="Zu meinem Profil"
+        className="rounded-full shadow-sm hover:opacity-90 transition-opacity"
+      >
+        <ProfileAvatar username={username} imageUrl={avatarUrl} size="sm" />
+      </Link>
     </div>
   );
 }

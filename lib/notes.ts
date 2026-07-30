@@ -75,10 +75,10 @@ export const NOTE_PLACEHOLDERS: Record<SavedCategory, string> = {
   watchlist: "Was erwartest Du?",
 };
 
-// Watchlist entries keep full note support (add/edit/delete via the list's
-// edit option) -- they just don't interrupt the add flow with the prompt
-// the way Top-Liste/Overrated do.
-export const SKIP_ADD_NOTE_PROMPT: SavedCategory[] = ["watchlist"];
+// Every category shows the optional note prompt right after adding --
+// consistent behavior across Empfohlen/Watchlist/Orte, skippable but always
+// offered.
+export const SKIP_ADD_NOTE_PROMPT: SavedCategory[] = [];
 
 export function truncateNote(note: string, maxLength = 48): string {
   const trimmed = note.trim();

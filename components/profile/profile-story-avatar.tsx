@@ -7,10 +7,10 @@ import { STORY_RING_CLASS, STORY_RING_CLASS_INACTIVE } from "@/components/profil
 
 /**
  * The large avatar at the top of a profile page. Replaces the old
- * always-links-to-/inspo behavior: clicking opens this person's active
+ * always-links-to-/inspiration behavior: clicking opens this person's active
  * story (Instagram-style), with delete controls when it's your own. With no
  * active story, or as a guest who can't view/mark stories, it's inert --
- * the only remaining path into Inspo is the widget in the "Ich folge" bar.
+ * the only remaining path into Inspiration is the widget in the "Ich folge" bar.
  */
 export function ProfileStoryAvatar({
   username,

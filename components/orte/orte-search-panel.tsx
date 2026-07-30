@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { NoteModal } from "@/components/lists/note-modal";
-import { PlaceResultCard } from "@/components/orte/place-result-card";
+import { PlaceDetailModal } from "@/components/orte/place-detail-modal";
+import { PlaceItemRow } from "@/components/items/list-item-row";
 import { usePlaceSavedState } from "@/lib/hooks/use-place-saved-state";
 import { savePlaceToRegion, removePlace, updatePlaceNote } from "@/lib/place-items";
 import { PLACES_EXPERTISE_MIN_ITEMS } from "@/lib/places";
@@ -37,6 +38,7 @@ export function OrteSearchPanel() {
     place: PlaceSearchResult;
     region: string;
   } | null>(null);
+  const [showDetailsFor, setShowDetailsFor] = useState<PlaceSearchResult | null>(null);
 
   const { savedIds, markSaved } = usePlaceSavedState(user?.id);
 
@@ -197,19 +199,51 @@ export function OrteSearchPanel() {
       )}
 
       {results.length > 0 && (
-        <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div className="w-full flex flex-col gap-3">
           {results.map((place) => (
-            <PlaceResultCard
+            <PlaceItemRow
               key={place.placeId}
-              place={place}
+              imageUrl={place.photoUrl}
+              name={place.name}
+              category={place.category}
+              address={place.address}
+              rating={place.rating}
+              userRatingCount={place.userRatingCount}
+              openingStatus={place.openingStatus}
+              priceLevel={place.priceLevel}
+              phoneNumber={place.phoneNumber}
+              websiteUri={place.websiteUri}
+              onOpenDetails={() => setShowDetailsFor(place)}
               isLoggedIn={!!user}
-              isSaved={savedIds.has(place.placeId)}
-              isSaving={pendingPlaceId === place.placeId}
-              onToggleSave={() => handleToggleSave(place)}
               onGuestClick={() => setShowGuestModal(true)}
+              actions={{
+                variant: "simple",
+                isSaved: savedIds.has(place.placeId),
+                pending: pendingPlaceId === place.placeId,
+                onToggleSave: () => handleToggleSave(place),
+              }}
             />
           ))}
         </div>
+      )}
+
+      {showDetailsFor && (
+        <PlaceDetailModal
+          name={showDetailsFor.name}
+          address={showDetailsFor.address}
+          category={showDetailsFor.category}
+          photoUrl={showDetailsFor.photoUrl}
+          lat={showDetailsFor.lat}
+          lng={showDetailsFor.lng}
+          googleMapsUri={showDetailsFor.googleMapsUri}
+          rating={showDetailsFor.rating}
+          userRatingCount={showDetailsFor.userRatingCount}
+          priceLevel={showDetailsFor.priceLevel}
+          phoneNumber={showDetailsFor.phoneNumber}
+          websiteUri={showDetailsFor.websiteUri}
+          openingStatus={showDetailsFor.openingStatus}
+          onClose={() => setShowDetailsFor(null)}
+        />
       )}
 
       {showGuestModal && (

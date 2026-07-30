@@ -247,12 +247,32 @@ export async function getCityPlaceRecommendations(
   const remaining = Math.max(0, limit - fromFriends.length);
   let generic: PlaceSearchResult[] = [];
   if (remaining > 0) {
-    const results = await searchPlaces(`Beliebte Sehenswürdigkeiten in ${city}`, apiKey);
     const friendPlaceIds = new Set(fromFriends.map((entry) => entry.place.placeId));
-    generic = results
-      .filter((place) => !excludedPlaceIds.has(place.placeId) && !friendPlaceIds.has(place.placeId))
+    const isNew = (place: PlaceSearchResult) =>
+      !excludedPlaceIds.has(place.placeId) && !friendPlaceIds.has(place.placeId);
+
+    // ~80% restaurants/bars, ~20% sightseeing -- two separate searches
+    // mixed by quota, rather than one generic "sights" query dominating
+    // (Google's text search otherwise skews heavily toward landmarks).
+    const restaurantQuota = Math.round(remaining * 0.8);
+    const sightseeingQuota = remaining - restaurantQuota;
+
+    const [restaurantResults, sightResults] = await Promise.all([
+      searchPlaces(`Beliebte Restaurants und Bars in ${city}`, apiKey),
+      searchPlaces(`Beliebte Sehenswürdigkeiten in ${city}`, apiKey),
+    ]);
+
+    const restaurants = restaurantResults
+      .filter(isNew)
       .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
-      .slice(0, remaining);
+      .slice(0, restaurantQuota);
+    const usedIds = new Set(restaurants.map((place) => place.placeId));
+    const sights = sightResults
+      .filter((place) => isNew(place) && !usedIds.has(place.placeId))
+      .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
+      .slice(0, sightseeingQuota);
+
+    generic = [...restaurants, ...sights];
   }
 
   return { fromFriends, generic };

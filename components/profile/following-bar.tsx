@@ -32,15 +32,15 @@ function ExpertiseCornerBadge({ expertiseKeys }: { expertiseKeys: string[] }) {
 function InspoWidget() {
   return (
     <Link
-      href="/inspo"
-      aria-label="Inspo"
+      href="/inspiration"
+      aria-label="Inspiration"
       className="shrink-0 flex flex-col items-center gap-1 w-14"
     >
       <span className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/60 text-primary-foreground">
         <Compass className="size-6" />
       </span>
       <span className="w-full text-center text-[10px] font-medium truncate">
-        Inspo
+        Inspiration
       </span>
     </Link>
   );

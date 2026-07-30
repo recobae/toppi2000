@@ -4,10 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { OrteSearchPanel } from "@/components/orte/orte-search-panel";
-import { PlaceResultCard } from "@/components/orte/place-result-card";
+import { PlaceItemRow, type ListItemRowAttribution } from "@/components/items/list-item-row";
+import { PlaceDetailModal } from "@/components/orte/place-detail-modal";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { NoteModal } from "@/components/lists/note-modal";
-import { usePlaceSavedState } from "@/lib/hooks/use-place-saved-state";
+import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
 import { savePlaceToRegion, updatePlaceNote } from "@/lib/place-items";
 import type { PlaceSearchResult } from "@/lib/google-places";
 import type { CityPlaceRecommendations } from "@/lib/recommendations";
@@ -15,6 +16,8 @@ import type { CityPlaceRecommendations } from "@/lib/recommendations";
 // Shown to guests (no account = no home city / own region lists yet) so the
 // Orte tab still has something browsable instead of sitting empty.
 const GUEST_DEFAULT_CITIES = ["Berlin", "London", "München", "New York"];
+
+type NotePrompt = { place: PlaceSearchResult; region: string };
 
 export function OrteInspirationTab({
   user,
@@ -30,14 +33,11 @@ export function OrteInspirationTab({
   const [isLoadingCity, setIsLoadingCity] = useState(false);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
   const [pendingPlaceId, setPendingPlaceId] = useState<string | null>(null);
-  const [notePrompt, setNotePrompt] = useState<{ place: PlaceSearchResult; region: string } | null>(null);
-
-  const { savedIds, markSaved } = usePlaceSavedState(user?.id);
+  const [notePrompt, setNotePrompt] = useState<NotePrompt | null>(null);
+  const [showDetailsFor, setShowDetailsFor] = useState<PlaceSearchResult | null>(null);
 
   useEffect(() => {
     if (!user) {
-      // Guests browse a small fixed set of popular cities -- no account
-      // means no home city or own region lists to default to.
       setSelectedCity(GUEST_DEFAULT_CITIES[0]);
       return;
     }
@@ -75,15 +75,39 @@ export function OrteInspirationTab({
     if (selectedCity) loadCityRecommendations(selectedCity);
   }, [selectedCity, loadCityRecommendations]);
 
-  const handleToggleSave = async (place: PlaceSearchResult) => {
+  const removeFromRecommendations = (placeId: string) => {
+    setRecommendations((prev) =>
+      prev
+        ? {
+            fromFriends: prev.fromFriends.filter((entry) => entry.place.placeId !== placeId),
+            generic: prev.generic.filter((place) => place.placeId !== placeId),
+          }
+        : prev,
+    );
+  };
+
+  const handleAdd = async (place: PlaceSearchResult, recommendedByUsernames: string[]) => {
     if (!user || pendingPlaceId || !selectedCity) return;
     setPendingPlaceId(place.placeId);
     const supabase = createClient();
     try {
       const { error } = await savePlaceToRegion(supabase, user.id, selectedCity, place);
       if (!error) {
-        markSaved(place.placeId, true);
+        if (recommendedByUsernames.length > 0) {
+          // The recommenders' user ids aren't carried on the place row
+          // itself -- resolve them so the inspired-credit lands correctly.
+          const { data: profiles } = await supabase
+            .from("profiles")
+            .select("id")
+            .in("username", recommendedByUsernames);
+          const ownerIds = (profiles ?? []).map((p) => p.id);
+          await recordInspiredCredits(supabase, user.id, ownerIds, {
+            itemId: place.placeId,
+            mediaType: "place",
+          });
+        }
         showToast(`Zu „${selectedCity}“ hinzugefügt`);
+        removeFromRecommendations(place.placeId);
         setNotePrompt({ place, region: selectedCity });
       }
     } finally {
@@ -91,9 +115,49 @@ export function OrteInspirationTab({
     }
   };
 
+  const handleDislike = async (place: PlaceSearchResult) => {
+    if (!user) return;
+    removeFromRecommendations(place.placeId);
+    const supabase = createClient();
+    await setInteractionWithCredits(supabase, user.id, { itemId: place.placeId, mediaType: "place" }, "dislike");
+    showToast("Nicht dein Geschmack? Notiert.");
+  };
+
   const allCityLabels = user
     ? [...new Set([homeCity, ...cityLabels].filter((c): c is string => !!c))]
     : GUEST_DEFAULT_CITIES;
+
+  const renderPlaceRow = (place: PlaceSearchResult, recommendedBy: string[] = []) => {
+    const attribution: ListItemRowAttribution[] | undefined =
+      recommendedBy.length > 0 ? [{ label: "Empfohlen von", names: recommendedBy }] : undefined;
+    return (
+      <PlaceItemRow
+        key={place.placeId}
+        imageUrl={place.photoUrl}
+        name={place.name}
+        category={place.category}
+        address={place.address}
+        rating={place.rating}
+        userRatingCount={place.userRatingCount}
+        openingStatus={place.openingStatus}
+        priceLevel={place.priceLevel}
+        phoneNumber={place.phoneNumber}
+        websiteUri={place.websiteUri}
+        attribution={attribution}
+        onOpenDetails={() => setShowDetailsFor(place)}
+        isLoggedIn={!!user}
+        onGuestClick={() => setShowGuestPrompt(true)}
+        actions={{
+          variant: "rate",
+          pending: pendingPlaceId === place.placeId,
+          onLike: () => handleAdd(place, recommendedBy),
+          onDislike: () => handleDislike(place),
+          onAdd: () => handleAdd(place, recommendedBy),
+          addLabel: "Merken",
+        }}
+      />
+    );
+  };
 
   return (
     <div className="w-full flex flex-col gap-4">
@@ -126,21 +190,10 @@ export function OrteInspirationTab({
               {recommendations && recommendations.fromFriends.length > 0 && (
                 <div className="w-full flex flex-col gap-3">
                   <h2 className="text-sm font-medium text-muted-foreground">Von deinen Freunden</h2>
-                  <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                    {recommendations.fromFriends.map(({ place, recommendedBy }) => (
-                      <PlaceResultCard
-                        key={place.placeId}
-                        place={place}
-                        isLoggedIn={!!user}
-                        isSaved={savedIds.has(place.placeId)}
-                        isSaving={pendingPlaceId === place.placeId}
-                        onToggleSave={() => handleToggleSave(place)}
-                        onGuestClick={() => setShowGuestPrompt(true)}
-                        note={
-                          recommendedBy.length > 0 ? `Empfohlen von ${recommendedBy.join(", ")}` : null
-                        }
-                      />
-                    ))}
+                  <div className="w-full flex flex-col gap-3">
+                    {recommendations.fromFriends.map(({ place, recommendedBy }) =>
+                      renderPlaceRow(place, recommendedBy),
+                    )}
                   </div>
                 </div>
               )}
@@ -150,18 +203,8 @@ export function OrteInspirationTab({
                   <h2 className="text-sm font-medium text-muted-foreground">
                     Beliebt in {selectedCity}
                   </h2>
-                  <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                    {recommendations.generic.map((place) => (
-                      <PlaceResultCard
-                        key={place.placeId}
-                        place={place}
-                        isLoggedIn={!!user}
-                        isSaved={savedIds.has(place.placeId)}
-                        isSaving={pendingPlaceId === place.placeId}
-                        onToggleSave={() => handleToggleSave(place)}
-                        onGuestClick={() => setShowGuestPrompt(true)}
-                      />
-                    ))}
+                  <div className="w-full flex flex-col gap-3">
+                    {recommendations.generic.map((place) => renderPlaceRow(place))}
                   </div>
                 </div>
               )}
@@ -189,6 +232,25 @@ export function OrteInspirationTab({
           message="Melde dich an, um Orte zu deinen eigenen Listen hinzuzufügen."
           next="/inspiration"
           onClose={() => setShowGuestPrompt(false)}
+        />
+      )}
+
+      {showDetailsFor && (
+        <PlaceDetailModal
+          name={showDetailsFor.name}
+          address={showDetailsFor.address}
+          category={showDetailsFor.category}
+          photoUrl={showDetailsFor.photoUrl}
+          lat={showDetailsFor.lat}
+          lng={showDetailsFor.lng}
+          googleMapsUri={showDetailsFor.googleMapsUri}
+          rating={showDetailsFor.rating}
+          userRatingCount={showDetailsFor.userRatingCount}
+          priceLevel={showDetailsFor.priceLevel}
+          phoneNumber={showDetailsFor.phoneNumber}
+          websiteUri={showDetailsFor.websiteUri}
+          openingStatus={showDetailsFor.openingStatus}
+          onClose={() => setShowDetailsFor(null)}
         />
       )}
 

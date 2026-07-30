@@ -1,0 +1,406 @@
+"use client";
+
+import Image from "next/image";
+import type { ReactNode } from "react";
+import { Ban, Check, Heart, Pencil, Plus, Star, X } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { MovieMetaBadges, SocialProofIcons } from "@/components/movie-info";
+import { WatchProviderBadges } from "@/components/watch-provider-badges";
+import { PlaceDetailsRow } from "@/components/orte/place-details-row";
+import {
+  PLACE_CATEGORY_ICONS,
+  PLACE_CATEGORY_LABELS,
+  type PlaceCategory,
+  type PlacePriceLevel,
+} from "@/lib/places";
+import { truncateNote } from "@/lib/notes";
+import type { SocialProofBreakdown } from "@/lib/hooks/use-social-proof";
+import type { MovieDetails, WatchProviderGroups } from "@/lib/tmdb";
+import type { OpeningStatus } from "@/lib/opening-hours";
+
+/**
+ * The single row layout used everywhere an item (movie/tv or place) is
+ * listed: Inspiration (both tabs), a user's own Empfohlen/Watchlist/Orte
+ * lists, the suggestion strips under those lists, and foreign profiles.
+ * Only the action bar on the right changes -- via `actions` -- image,
+ * title, meta content and friend-attribution lines are always identical.
+ */
+
+export type ListItemRowAttribution = { label: string; names: string[]; className?: string };
+
+export type ListItemRowActions =
+  | {
+      /** Unrated feed item: Ja / Nein / Watchlist (movies) or Ja / Nein / Merken (places). */
+      variant: "rate";
+      onLike: () => void;
+      onDislike: () => void;
+      onAdd: () => void;
+      addLabel: string;
+      pending?: boolean;
+    }
+  | {
+      /** Item already on one of the viewer's own lists. */
+      variant: "owned";
+      onEditNote: () => void;
+      onRemove: () => void;
+      isRemoving?: boolean;
+      favorite?: { isFavorite: boolean; onToggle: () => void; pending?: boolean };
+    }
+  | {
+      /** Item shown on someone else's profile/list. */
+      variant: "foreign";
+      isLiked: boolean;
+      onToggleLike: () => void;
+      onAdd: () => void;
+      addLabel?: string;
+      likePending?: boolean;
+    }
+  | {
+      /** Plain search results with no owner/friend context (e.g. Orte search) -- a single save toggle. */
+      variant: "simple";
+      isSaved: boolean;
+      onToggleSave: () => void;
+      pending?: boolean;
+    };
+
+function AttributionLines({ attribution }: { attribution?: ListItemRowAttribution[] }) {
+  if (!attribution) return null;
+  return (
+    <>
+      {attribution.map((entry) =>
+        entry.names.length === 0 ? null : (
+          <p key={entry.label} className={`text-[11px] text-muted-foreground ${entry.className ?? ""}`}>
+            <span className="font-medium text-foreground">{entry.label}:</span> {entry.names.join(", ")}
+          </p>
+        ),
+      )}
+    </>
+  );
+}
+
+function ActionBar({ actions, guard }: { actions: ListItemRowActions; guard: (fn: () => void) => void }) {
+  if (actions.variant === "rate") {
+    return (
+      <div className="mt-auto pt-2 flex items-center gap-1.5">
+        <button
+          type="button"
+          aria-label="Ja"
+          disabled={actions.pending}
+          onClick={() => guard(actions.onLike)}
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-green-600 hover:bg-green-600/10 transition-colors disabled:opacity-50"
+        >
+          <Heart className="size-4" />
+        </button>
+        <button
+          type="button"
+          aria-label="Nein"
+          disabled={actions.pending}
+          onClick={() => guard(actions.onDislike)}
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+        >
+          <Ban className="size-4" />
+        </button>
+        <button
+          type="button"
+          disabled={actions.pending}
+          onClick={() => guard(actions.onAdd)}
+          className="ml-auto flex items-center gap-1 h-8 px-2.5 rounded-full bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+        >
+          <Plus className="size-3.5" />
+          {actions.addLabel}
+        </button>
+      </div>
+    );
+  }
+
+  if (actions.variant === "owned") {
+    return (
+      <div className="mt-auto pt-2 flex items-center gap-1.5">
+        {actions.favorite && (
+          <button
+            type="button"
+            aria-label={actions.favorite.isFavorite ? "Favorit entfernen" : "Als Favorit markieren"}
+            disabled={actions.favorite.pending}
+            onClick={actions.favorite.onToggle}
+            className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors disabled:opacity-50 ${
+              actions.favorite.isFavorite
+                ? "border-amber-500 text-amber-500"
+                : "border-input text-muted-foreground hover:bg-accent"
+            }`}
+          >
+            <Star className={`size-4 ${actions.favorite.isFavorite ? "fill-current" : ""}`} />
+          </button>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label="Notiz bearbeiten"
+          onClick={actions.onEditNote}
+        >
+          <Pencil />
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="ml-auto"
+          disabled={actions.isRemoving}
+          onClick={actions.onRemove}
+        >
+          <X />
+          {actions.isRemoving ? "Wird entfernt…" : "Entfernen"}
+        </Button>
+      </div>
+    );
+  }
+
+  if (actions.variant === "foreign") {
+    return (
+      <div className="mt-auto pt-2 flex items-center gap-1.5">
+        <button
+          type="button"
+          aria-label={actions.isLiked ? "Gefällt mir entfernen" : "Gefällt mir"}
+          disabled={actions.likePending}
+          onClick={() => guard(actions.onToggleLike)}
+          className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors disabled:opacity-50 ${
+            actions.isLiked
+              ? "border-green-600 bg-green-600/10 text-green-600"
+              : "border-input text-green-600 hover:bg-green-600/10"
+          }`}
+        >
+          <Heart className={`size-4 ${actions.isLiked ? "fill-current" : ""}`} />
+        </button>
+        <button
+          type="button"
+          onClick={() => guard(actions.onAdd)}
+          className="ml-auto flex items-center gap-1 h-8 px-2.5 rounded-full bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+        >
+          <Plus className="size-3.5" />
+          {actions.addLabel ?? "Hinzufügen"}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-auto pt-2">
+      <button
+        type="button"
+        disabled={actions.pending}
+        onClick={() => guard(actions.onToggleSave)}
+        className={`w-full flex items-center justify-center gap-1.5 h-9 rounded-md text-sm font-medium transition-colors disabled:opacity-50 ${
+          actions.isSaved
+            ? "border border-input hover:bg-accent"
+            : "bg-primary text-primary-foreground hover:bg-primary/90"
+        }`}
+      >
+        {actions.isSaved ? <Check className="size-4" /> : <Plus className="size-4" />}
+        {actions.isSaved ? "Gespeichert" : "Hinzufügen"}
+      </button>
+    </div>
+  );
+}
+
+export function ListItemRow({
+  imageUrl,
+  imageAlt,
+  imageAspect = "2/3",
+  imageFallback,
+  onOpenDetails,
+  title,
+  meta,
+  note,
+  attribution,
+  actions,
+  onGuestClick,
+  isLoggedIn = true,
+}: {
+  imageUrl: string | null;
+  imageAlt: string;
+  imageAspect?: "2/3" | "4/3";
+  imageFallback?: ReactNode;
+  onOpenDetails?: () => void;
+  title: ReactNode;
+  meta?: ReactNode;
+  note?: string | null;
+  attribution?: ListItemRowAttribution[];
+  actions: ListItemRowActions;
+  /** Guests get redirected to sign-up instead of running the interactive action. */
+  onGuestClick?: () => void;
+  isLoggedIn?: boolean;
+}) {
+  const guard = (fn: () => void) => {
+    if (!isLoggedIn) {
+      onGuestClick?.();
+      return;
+    }
+    fn();
+  };
+
+  return (
+    <Card className="overflow-hidden flex gap-3 p-3">
+      <button
+        type="button"
+        onClick={onOpenDetails}
+        aria-label={`Details zu ${imageAlt} anzeigen`}
+        disabled={!onOpenDetails}
+        className={`relative w-16 shrink-0 rounded-md overflow-hidden bg-muted ${
+          imageAspect === "4/3" ? "aspect-[4/3]" : "aspect-[2/3]"
+        }`}
+      >
+        {imageUrl ? (
+          <Image src={imageUrl} alt={imageAlt} fill sizes="64px" className="object-cover" />
+        ) : (
+          imageFallback
+        )}
+      </button>
+      <div className="flex-1 min-w-0 flex flex-col gap-1">
+        <p className="text-sm font-medium leading-tight line-clamp-2">{title}</p>
+        {meta}
+        <AttributionLines attribution={attribution} />
+        {note && (
+          <p className="text-[11px] italic text-muted-foreground line-clamp-2">
+            „{truncateNote(note)}“
+          </p>
+        )}
+        <ActionBar actions={actions} guard={guard} />
+      </div>
+    </Card>
+  );
+}
+
+export function MovieItemRow({
+  imageUrl,
+  title,
+  year,
+  movieDetails,
+  watchProviders,
+  note,
+  socialProof,
+  onOpenDetails,
+  attribution,
+  actions,
+  onGuestClick,
+  isLoggedIn = true,
+}: {
+  imageUrl: string | null;
+  title: string;
+  year: string | null;
+  movieDetails?: MovieDetails;
+  watchProviders?: WatchProviderGroups;
+  note?: string | null;
+  socialProof?: SocialProofBreakdown;
+  onOpenDetails?: () => void;
+  attribution?: ListItemRowAttribution[];
+  actions: ListItemRowActions;
+  onGuestClick?: () => void;
+  isLoggedIn?: boolean;
+}) {
+  return (
+    <ListItemRow
+      imageUrl={imageUrl}
+      imageAlt={title}
+      imageAspect="2/3"
+      imageFallback={
+        <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground p-1 text-center">
+          Kein Poster
+        </div>
+      }
+      onOpenDetails={onOpenDetails}
+      title={
+        <>
+          {title}
+          {year && <span className="text-muted-foreground font-normal"> · {year}</span>}
+        </>
+      }
+      meta={
+        <>
+          {movieDetails && <MovieMetaBadges details={movieDetails} year={year} />}
+          {socialProof && (
+            <SocialProofIcons breakdown={socialProof} onClick={onOpenDetails} className="mt-0.5" />
+          )}
+          {watchProviders && <WatchProviderBadges providers={watchProviders} title={title} />}
+        </>
+      }
+      note={note}
+      attribution={attribution}
+      actions={actions}
+      onGuestClick={onGuestClick}
+      isLoggedIn={isLoggedIn}
+    />
+  );
+}
+
+export function PlaceItemRow({
+  imageUrl,
+  name,
+  category,
+  address,
+  rating,
+  userRatingCount,
+  openingStatus,
+  priceLevel,
+  phoneNumber,
+  websiteUri,
+  note,
+  onOpenDetails,
+  attribution,
+  actions,
+  onGuestClick,
+  isLoggedIn = true,
+}: {
+  imageUrl: string | null;
+  name: string;
+  category: PlaceCategory;
+  address?: string | null;
+  rating?: number | null;
+  userRatingCount?: number | null;
+  openingStatus?: OpeningStatus | null;
+  priceLevel?: PlacePriceLevel | null;
+  phoneNumber?: string | null;
+  websiteUri?: string | null;
+  note?: string | null;
+  onOpenDetails?: () => void;
+  attribution?: ListItemRowAttribution[];
+  actions: ListItemRowActions;
+  onGuestClick?: () => void;
+  isLoggedIn?: boolean;
+}) {
+  const Icon = PLACE_CATEGORY_ICONS[category];
+  return (
+    <ListItemRow
+      imageUrl={imageUrl}
+      imageAlt={name}
+      imageAspect="4/3"
+      imageFallback={
+        <div className="flex h-full items-center justify-center text-muted-foreground">
+          <Icon className="size-5" />
+        </div>
+      }
+      onOpenDetails={onOpenDetails}
+      title={name}
+      meta={
+        <>
+          <span className="inline-flex w-fit items-center gap-1 text-[10px] font-medium rounded bg-secondary text-secondary-foreground px-1.5 py-0.5">
+            <Icon className="size-3" />
+            {PLACE_CATEGORY_LABELS[category]}
+          </span>
+          {address && <p className="text-[11px] text-muted-foreground line-clamp-1">{address}</p>}
+          <PlaceDetailsRow
+            rating={rating}
+            userRatingCount={userRatingCount}
+            openingStatus={openingStatus}
+            priceLevel={priceLevel}
+            phoneNumber={phoneNumber}
+            websiteUri={websiteUri}
+          />
+        </>
+      }
+      note={note}
+      attribution={attribution}
+      actions={actions}
+      onGuestClick={onGuestClick}
+      isLoggedIn={isLoggedIn}
+    />
+  );
+}

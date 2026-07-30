@@ -6,23 +6,49 @@ import { X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
-import { SearchResultCard } from "@/components/search/search-result-card";
-import { FriendFeedMovieCard, type FriendFeedMovieItem } from "@/components/inspo/friend-feed-movie-card";
+import { MovieItemRow, type ListItemRowAttribution } from "@/components/items/list-item-row";
+import { MovieDetailModal } from "@/components/movie-info";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { PersonSelector } from "@/components/search/person-selector";
 import { useSocialProof, getSocialProofBreakdown } from "@/lib/hooks/use-social-proof";
-import { useSavedState, getSavedState } from "@/lib/hooks/use-saved-state";
 import { saveToCategory, updateNote } from "@/lib/saved-items";
 import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
-import { CATEGORY_LABELS, type SavedCategory } from "@/lib/categories";
-import { NOTE_PLACEHOLDERS, SKIP_ADD_NOTE_PROMPT } from "@/lib/notes";
+import { CATEGORY_LABELS } from "@/lib/categories";
+import { NOTE_PLACEHOLDERS } from "@/lib/notes";
 import { NoteModal } from "@/components/lists/note-modal";
 import { SORT_FILTERS, GENRE_FILTERS } from "@/lib/movie-genres";
 import type { PersonSummary, SearchResult } from "@/lib/tmdb";
 import type { PersonCreditResult } from "@/app/api/person-credits/route";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
-const FRIENDS_LIKES_KEY = "__friends_likes__";
+
+export type FriendFeedMovieItem = {
+  itemId: string;
+  mediaType: "movie" | "tv";
+  title: string;
+  imageUrl: string | null;
+  year: string | null;
+  addedAt: string;
+  topList: { count: number; names: string[]; userIds: string[] };
+  liked: { count: number; names: string[]; userIds: string[] };
+  disliked: { count: number; names: string[]; userIds: string[] };
+};
+
+type NotePrompt = {
+  title: string;
+  imageUrl: string | null;
+  category: "top_list" | "watchlist";
+  itemId: number;
+  mediaType: "movie" | "tv";
+};
+
+function feedAttribution(item: FriendFeedMovieItem): ListItemRowAttribution[] {
+  return [
+    { label: "Empfohlen von", names: item.topList.names },
+    { label: "Geliked von", names: item.liked.names, className: "text-green-600" },
+    { label: "Nicht gemocht von", names: item.disliked.names, className: "text-destructive" },
+  ];
+}
 
 export function MoviesInspirationTab({
   user,
@@ -35,8 +61,9 @@ export function MoviesInspirationTab({
   addToLabel?: string | null;
   deepLinkPerson?: { id: string; name: string } | null;
 }) {
-  // ---- Friend feed (reuses the same cards/handlers as the old Inspo page) ----
+  // ---- Friend feed ----
   const [feedItems, setFeedItems] = useState<FriendFeedMovieItem[] | null>(null);
+  const [feedPendingKey, setFeedPendingKey] = useState<string | null>(null);
 
   const loadFeed = useCallback(async () => {
     const response = await fetch("/api/friend-feed?type=movies");
@@ -55,51 +82,83 @@ export function MoviesInspirationTab({
     );
   };
 
-  const handleFeedInteraction = async (
-    item: FriendFeedMovieItem,
-    type: "like" | "dislike" | "skip",
-  ) => {
+  const [notePrompt, setNotePrompt] = useState<NotePrompt | null>(null);
+
+  const handleFeedLike = async (item: FriendFeedMovieItem) => {
     if (!user) return;
+    setFeedPendingKey(`${item.mediaType}-${item.itemId}`);
+    const supabase = createClient();
+    const ownerUserIds = item.topList.userIds;
+    await setInteractionWithCredits(
+      supabase,
+      user.id,
+      { itemId: item.itemId, mediaType: item.mediaType },
+      "like",
+      ownerUserIds,
+    );
+    const { error } = await saveToCategory(
+      supabase,
+      "top_list",
+      user.id,
+      { itemId: Number(item.itemId), mediaType: item.mediaType, title: item.title, imageUrl: item.imageUrl, year: item.year },
+      ownerUserIds[0] ?? null,
+    );
+    if (!error) {
+      await recordInspiredCredits(supabase, user.id, ownerUserIds, { itemId: item.itemId, mediaType: item.mediaType });
+      showToast(`Zu ${CATEGORY_LABELS.top_list} hinzugefügt`);
+      setNotePrompt({
+        title: item.title,
+        imageUrl: item.imageUrl,
+        category: "top_list",
+        itemId: Number(item.itemId),
+        mediaType: item.mediaType,
+      });
+    }
     removeFeedItem(item.itemId, item.mediaType);
+    setFeedPendingKey(null);
+  };
+
+  const handleFeedDislike = async (item: FriendFeedMovieItem) => {
+    if (!user) return;
+    setFeedPendingKey(`${item.mediaType}-${item.itemId}`);
     const supabase = createClient();
     await setInteractionWithCredits(
       supabase,
       user.id,
       { itemId: item.itemId, mediaType: item.mediaType },
-      type,
+      "dislike",
       item.topList.userIds,
     );
-    if (type === "like") showToast("Gefällt mir gemerkt");
-    if (type === "dislike") showToast("Nicht dein Geschmack? Notiert.");
+    showToast("Nicht dein Geschmack? Notiert.");
+    removeFeedItem(item.itemId, item.mediaType);
+    setFeedPendingKey(null);
   };
 
-  const handleFeedAdd = async (item: FriendFeedMovieItem, category: SavedCategory) => {
+  const handleFeedWatchlist = async (item: FriendFeedMovieItem) => {
     if (!user) return;
-    removeFeedItem(item.itemId, item.mediaType);
+    setFeedPendingKey(`${item.mediaType}-${item.itemId}`);
     const supabase = createClient();
     const ownerUserIds = item.topList.userIds;
     const { error } = await saveToCategory(
       supabase,
-      category,
+      "watchlist",
       user.id,
-      {
-        itemId: Number(item.itemId),
-        mediaType: item.mediaType,
-        title: item.title,
-        imageUrl: item.imageUrl,
-        year: item.year,
-      },
+      { itemId: Number(item.itemId), mediaType: item.mediaType, title: item.title, imageUrl: item.imageUrl, year: item.year },
       ownerUserIds[0] ?? null,
     );
-    if (error) {
-      showToast("Aktion fehlgeschlagen");
-      return;
+    if (!error) {
+      await recordInspiredCredits(supabase, user.id, ownerUserIds, { itemId: item.itemId, mediaType: item.mediaType });
+      showToast(`Zu ${CATEGORY_LABELS.watchlist} hinzugefügt`);
+      setNotePrompt({
+        title: item.title,
+        imageUrl: item.imageUrl,
+        category: "watchlist",
+        itemId: Number(item.itemId),
+        mediaType: item.mediaType,
+      });
     }
-    await recordInspiredCredits(supabase, user.id, ownerUserIds, {
-      itemId: item.itemId,
-      mediaType: item.mediaType,
-    });
-    showToast(`Zu ${CATEGORY_LABELS[category]} hinzugefügt`);
+    removeFeedItem(item.itemId, item.mediaType);
+    setFeedPendingKey(null);
   };
 
   // ---- Search ----
@@ -112,6 +171,7 @@ export function MoviesInspirationTab({
   const [selectedPerson, setSelectedPerson] = useState<PersonSummary | null>(null);
   const [personResults, setPersonResults] = useState<PersonCreditResult[]>([]);
   const [isLoadingPersonResults, setIsLoadingPersonResults] = useState(false);
+  const [showDetailsFor, setShowDetailsFor] = useState<SearchResult | null>(null);
 
   const loadPersonCredits = useCallback(async (person: PersonSummary) => {
     setSelectedPerson(person);
@@ -192,12 +252,10 @@ export function MoviesInspirationTab({
   const [isLoadingFriendsLikes, setIsLoadingFriendsLikes] = useState(false);
   const [browseItems, setBrowseItems] = useState<SearchResult[]>([]);
   const [isLoadingBrowse, setIsLoadingBrowse] = useState(true);
+  const [browsePendingKey, setBrowsePendingKey] = useState<string | null>(null);
   const hasActiveFilter = sortFilter !== null || genreFilter !== null;
 
   const [showGuestModal, setShowGuestModal] = useState(false);
-  const [notePrompt, setNotePrompt] = useState<{ result: SearchResult; category: SavedCategory } | null>(
-    null,
-  );
 
   const fetchBrowse = useCallback(async () => {
     setIsLoadingBrowse(true);
@@ -252,12 +310,37 @@ export function MoviesInspirationTab({
     setBrowseItems((prev) => prev.filter((r) => !(r.id === result.id && r.mediaType === result.mediaType)));
   };
 
-  const handleTrendingDislike = async (result: SearchResult) => {
-    if (!user) {
-      setShowGuestModal(true);
-      return;
+  const genericLike = async (result: SearchResult, removeAfter?: (r: SearchResult) => void) => {
+    if (!user) return;
+    const key = `${result.mediaType}-${result.id}`;
+    setBrowsePendingKey(key);
+    const supabase = createClient();
+    const posterUrl = result.posterPath ? `${POSTER_BASE_URL}${result.posterPath}` : null;
+    const { error } = await saveToCategory(supabase, "top_list", user.id, {
+      itemId: result.id,
+      mediaType: result.mediaType,
+      title: result.title,
+      imageUrl: posterUrl,
+      year: result.year,
+    });
+    if (!error) {
+      showToast(`Zu ${CATEGORY_LABELS.top_list} hinzugefügt`);
+      setNotePrompt({
+        title: result.title,
+        imageUrl: posterUrl,
+        category: "top_list",
+        itemId: result.id,
+        mediaType: result.mediaType,
+      });
+      removeAfter?.(result);
     }
-    removeFromBrowse(result);
+    setBrowsePendingKey(null);
+  };
+
+  const genericDislike = async (result: SearchResult, removeAfter?: (r: SearchResult) => void) => {
+    if (!user) return;
+    const key = `${result.mediaType}-${result.id}`;
+    setBrowsePendingKey(key);
     const supabase = createClient();
     await setInteractionWithCredits(
       supabase,
@@ -266,30 +349,72 @@ export function MoviesInspirationTab({
       "dislike",
     );
     showToast("Nicht dein Geschmack? Notiert.");
+    removeAfter?.(result);
+    setBrowsePendingKey(null);
+  };
+
+  const genericWatchlist = async (result: SearchResult, removeAfter?: (r: SearchResult) => void) => {
+    if (!user) return;
+    const key = `${result.mediaType}-${result.id}`;
+    setBrowsePendingKey(key);
+    const supabase = createClient();
+    const posterUrl = result.posterPath ? `${POSTER_BASE_URL}${result.posterPath}` : null;
+    const { error } = await saveToCategory(supabase, "watchlist", user.id, {
+      itemId: result.id,
+      mediaType: result.mediaType,
+      title: result.title,
+      imageUrl: posterUrl,
+      year: result.year,
+    });
+    if (!error) {
+      showToast(`Zu ${CATEGORY_LABELS.watchlist} hinzugefügt`);
+      setNotePrompt({
+        title: result.title,
+        imageUrl: posterUrl,
+        category: "watchlist",
+        itemId: result.id,
+        mediaType: result.mediaType,
+      });
+      removeAfter?.(result);
+    }
+    setBrowsePendingKey(null);
   };
 
   const socialProofItems = [...browseItems, ...friendsLikes, ...results, ...personResults];
   const socialProofMap = useSocialProof(
     socialProofItems.map((r) => ({ id: r.id, mediaType: r.mediaType })),
   );
-  const { stateMap, markSaved } = useSavedState(
-    socialProofItems.map((r) => ({ id: r.id, mediaType: r.mediaType })),
-  );
-
-  const handleSavedChange = (result: SearchResult, category: SavedCategory, value: boolean) => {
-    markSaved(result.id, result.mediaType, category, value);
-    if (value) removeFromBrowse(result);
-    showToast(
-      value ? `Zu ${CATEGORY_LABELS[category]} hinzugefügt` : `Aus ${CATEGORY_LABELS[category]} entfernt`,
-    );
-    if (value && !SKIP_ADD_NOTE_PROMPT.includes(category)) {
-      setNotePrompt({ result, category });
-    }
-  };
 
   const hasFeedItems = (feedItems?.length ?? 0) > 0;
   const isSearchActive = query.trim().length > 0 || !!selectedPerson;
   const otherPeople = people.filter((p) => p.id !== selectedPerson?.id);
+
+  const renderResultRow = (result: SearchResult, removeAfter?: (r: SearchResult) => void) => {
+    const key = `${result.mediaType}-${result.id}`;
+    const posterUrl = result.posterPath ? `${POSTER_BASE_URL}${result.posterPath}` : null;
+    return (
+      <MovieItemRow
+        key={key}
+        imageUrl={posterUrl}
+        title={result.title}
+        year={result.year}
+        movieDetails={result.movieDetails}
+        watchProviders={result.watchProviders}
+        socialProof={getSocialProofBreakdown(socialProofMap, result.id, result.mediaType)}
+        onOpenDetails={() => setShowDetailsFor(result)}
+        isLoggedIn={!!user}
+        onGuestClick={() => setShowGuestModal(true)}
+        actions={{
+          variant: "rate",
+          pending: browsePendingKey === key,
+          onLike: () => genericLike(result, removeAfter),
+          onDislike: () => genericDislike(result, removeAfter),
+          onAdd: () => genericWatchlist(result, removeAfter),
+          addLabel: "Watchlist",
+        }}
+      />
+    );
+  };
 
   return (
     <div className="w-full flex flex-col gap-4">
@@ -337,20 +462,8 @@ export function MoviesInspirationTab({
               {isLoadingPersonResults ? (
                 <p className="text-sm text-muted-foreground">Werke werden geladen…</p>
               ) : (
-                <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                  {personResults.map((result) => (
-                    <SearchResultCard
-                      key={`${result.mediaType}-${result.id}`}
-                      result={result}
-                      isLoggedIn={!!user}
-                      userId={user?.id}
-                      savedState={getSavedState(stateMap, result.id, result.mediaType)}
-                      onSavedChange={(category, value) => handleSavedChange(result, category, value)}
-                      onGuestClick={() => setShowGuestModal(true)}
-                      jobTags={result.jobs}
-                      socialProof={getSocialProofBreakdown(socialProofMap, result.id, result.mediaType)}
-                    />
-                  ))}
+                <div className="w-full flex flex-col gap-3">
+                  {personResults.map((result) => renderResultRow(result))}
                 </div>
               )}
             </div>
@@ -359,19 +472,8 @@ export function MoviesInspirationTab({
             <p className="text-sm text-muted-foreground">Keine Ergebnisse gefunden.</p>
           )}
           {results.length > 0 && (
-            <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              {results.map((result) => (
-                <SearchResultCard
-                  key={`${result.mediaType}-${result.id}`}
-                  result={result}
-                  isLoggedIn={!!user}
-                  userId={user?.id}
-                  savedState={getSavedState(stateMap, result.id, result.mediaType)}
-                  onSavedChange={(category, value) => handleSavedChange(result, category, value)}
-                  onGuestClick={() => setShowGuestModal(true)}
-                  socialProof={getSocialProofBreakdown(socialProofMap, result.id, result.mediaType)}
-                />
-              ))}
+            <div className="w-full flex flex-col gap-3">
+              {results.map((result) => renderResultRow(result))}
             </div>
           )}
         </div>
@@ -381,16 +483,28 @@ export function MoviesInspirationTab({
             <div className="w-full flex flex-col gap-3">
               <h2 className="text-sm font-medium text-muted-foreground">Von deinen Freunden</h2>
               <div className="w-full flex flex-col gap-3">
-                {feedItems!.map((item) => (
-                  <FriendFeedMovieCard
-                    key={`${item.mediaType}-${item.itemId}`}
-                    item={item}
-                    isLoggedIn={!!user}
-                    onInteraction={(type) => handleFeedInteraction(item, type)}
-                    onAdd={(category) => handleFeedAdd(item, category)}
-                    onGuestClick={() => setShowGuestModal(true)}
-                  />
-                ))}
+                {feedItems!.map((item) => {
+                  const key = `${item.mediaType}-${item.itemId}`;
+                  return (
+                    <MovieItemRow
+                      key={key}
+                      imageUrl={item.imageUrl}
+                      title={item.title}
+                      year={item.year}
+                      attribution={feedAttribution(item)}
+                      isLoggedIn={!!user}
+                      onGuestClick={() => setShowGuestModal(true)}
+                      actions={{
+                        variant: "rate",
+                        pending: feedPendingKey === key,
+                        onLike: () => handleFeedLike(item),
+                        onDislike: () => handleFeedDislike(item),
+                        onAdd: () => handleFeedWatchlist(item),
+                        addLabel: "Watchlist",
+                      }}
+                    />
+                  );
+                })}
               </div>
             </div>
           )}
@@ -456,19 +570,8 @@ export function MoviesInspirationTab({
                   Noch keine Likes von Freunden, denen du folgst.
                 </p>
               ) : (
-                <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                  {friendsLikes.map((result) => (
-                    <SearchResultCard
-                      key={`${FRIENDS_LIKES_KEY}-${result.mediaType}-${result.id}`}
-                      result={result}
-                      isLoggedIn={!!user}
-                      userId={user?.id}
-                      savedState={getSavedState(stateMap, result.id, result.mediaType)}
-                      onSavedChange={(category, value) => handleSavedChange(result, category, value)}
-                      onGuestClick={() => setShowGuestModal(true)}
-                      socialProof={getSocialProofBreakdown(socialProofMap, result.id, result.mediaType)}
-                    />
-                  ))}
+                <div className="w-full flex flex-col gap-3">
+                  {friendsLikes.map((result) => renderResultRow(result))}
                 </div>
               )}
             </div>
@@ -482,20 +585,10 @@ export function MoviesInspirationTab({
               ) : browseItems.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Keine Titel gefunden.</p>
               ) : (
-                <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                  {browseItems.map((result) => (
-                    <SearchResultCard
-                      key={`${result.mediaType}-${result.id}`}
-                      result={result}
-                      isLoggedIn={!!user}
-                      userId={user?.id}
-                      savedState={getSavedState(stateMap, result.id, result.mediaType)}
-                      onSavedChange={(category, value) => handleSavedChange(result, category, value)}
-                      onGuestClick={() => setShowGuestModal(true)}
-                      socialProof={getSocialProofBreakdown(socialProofMap, result.id, result.mediaType)}
-                      onDislike={!hasActiveFilter ? () => handleTrendingDislike(result) : undefined}
-                    />
-                  ))}
+                <div className="w-full flex flex-col gap-3">
+                  {browseItems.map((result) =>
+                    renderResultRow(result, !hasActiveFilter ? removeFromBrowse : undefined),
+                  )}
                 </div>
               )}
               {!hasActiveFilter && !isLoadingBrowse && browseItems.length > 0 && (
@@ -521,10 +614,23 @@ export function MoviesInspirationTab({
         />
       )}
 
+      {showDetailsFor && (
+        <MovieDetailModal
+          title={showDetailsFor.title}
+          posterUrl={showDetailsFor.posterPath ? `${POSTER_BASE_URL}${showDetailsFor.posterPath}` : null}
+          year={showDetailsFor.year}
+          details={showDetailsFor.movieDetails}
+          tmdbId={showDetailsFor.id}
+          mediaType={showDetailsFor.mediaType}
+          socialProof={getSocialProofBreakdown(socialProofMap, showDetailsFor.id, showDetailsFor.mediaType)}
+          onClose={() => setShowDetailsFor(null)}
+        />
+      )}
+
       {notePrompt && user && (
         <NoteModal
-          title={notePrompt.result.title}
-          posterUrl={notePrompt.result.posterPath ? `${POSTER_BASE_URL}${notePrompt.result.posterPath}` : null}
+          title={notePrompt.title}
+          posterUrl={notePrompt.imageUrl}
           initialNote={null}
           placeholder={NOTE_PLACEHOLDERS[notePrompt.category]}
           onSave={async (note) => {
@@ -533,8 +639,8 @@ export function MoviesInspirationTab({
               supabase,
               notePrompt.category,
               user.id,
-              notePrompt.result.id,
-              notePrompt.result.mediaType,
+              notePrompt.itemId,
+              notePrompt.mediaType,
               note,
             );
           }}
