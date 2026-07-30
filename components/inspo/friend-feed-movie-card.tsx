@@ -78,7 +78,7 @@ export function FriendFeedMovieCard({
           {item.title}
           {item.year && <span className="text-muted-foreground font-normal"> · {item.year}</span>}
         </p>
-        <AttributionLine label="Auf Top-Liste von" group={item.topList} />
+        <AttributionLine label="Empfohlen von" group={item.topList} />
         <AttributionLine label="Geliked von" group={item.liked} className="text-green-600" />
         <AttributionLine label="Nicht gemocht von" group={item.disliked} className="text-destructive" />
 

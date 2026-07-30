@@ -12,23 +12,25 @@ export const SAVED_CATEGORIES: SavedCategory[] = [
   "dont_watch",
 ];
 
-// "dont_watch" stays the internal key (matches the DB table name) -- only
-// the user-facing label changed from "Don't Watch" to "Overrated".
+// "top_list"/"dont_watch" stay the internal keys (match the DB table names)
+// -- only the user-facing label changed ("Top-Liste" -> "Empfohlen",
+// "Don't Watch" -> "Overrated"). Renaming the physical tables would touch
+// every query in the project for no functional gain.
 export const CATEGORY_LABELS: Record<SavedCategory, string> = {
-  top_list: "Top-Liste",
+  top_list: "Empfohlen",
   watchlist: "Watchlist",
   dont_watch: "Overrated",
 };
 
 // Subheading shown on the full-page list view (app/u/[username]/[category]).
 export const CATEGORY_PAGE_SUBTITLES: Record<SavedCategory, string> = {
-  top_list: "Meine Top Filme & Serien",
+  top_list: "Meine Empfehlungen",
   watchlist: "Meine Watchlist",
   dont_watch: "Absoluter Schrott",
 };
 
 export const CATEGORY_ACTION_LABELS: Record<SavedCategory, string> = {
-  top_list: "Top List",
+  top_list: "Empfohlen",
   watchlist: "Watchlist",
   dont_watch: "Overrated",
 };

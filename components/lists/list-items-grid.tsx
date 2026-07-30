@@ -3,32 +3,16 @@
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Pencil, ThumbsDown, ThumbsUp, GripVertical, Plus, X } from "lucide-react";
+import { Pencil, Plus, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
-import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  rectSortingStrategy,
-  useSortable,
-  arrayMove,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { WatchProviderBadges } from "@/components/watch-provider-badges";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
-import { MovieMetaBadges, MovieDetailModal } from "@/components/movie-info";
-import { SearchResultCard } from "@/components/search/search-result-card";
-import { removeFromCategory, updateNote } from "@/lib/saved-items";
+import { MovieMetaBadges, MovieDetailModal, SocialProofIcons } from "@/components/movie-info";
+import { SaveButtons } from "@/components/search/save-buttons";
+import { removeFromCategory, setFavorite, updateNote } from "@/lib/saved-items";
 import { CATEGORY_LABELS, type SavedCategory } from "@/lib/categories";
 import { NOTE_PLACEHOLDERS, SKIP_ADD_NOTE_PROMPT, truncateNote } from "@/lib/notes";
 import { NoteModal } from "@/components/lists/note-modal";
@@ -47,6 +31,7 @@ export type CategoryListItem = {
   note: string | null;
   watchProviders: WatchProviderGroups;
   movieDetails: MovieDetails;
+  isFavorite: boolean;
 };
 
 type Toast = { id: number; message: string };
@@ -80,13 +65,19 @@ function ToastStack({ toasts }: { toasts: Toast[] }) {
   );
 }
 
-function OwnerListItemCard({
+/**
+ * Row layout shared by every list surface (Empfohlen/Watchlist and, via
+ * region-items-grid.tsx, Orte) -- reference layout is the friend-feed cards
+ * under "Von deinen Freunden". Poster thumbnail left, info + actions right.
+ */
+function OwnerListItemRow({
   item,
   category,
   userId,
   onRemove,
   isRemoving,
   onNoteSaved,
+  onFavoriteToggled,
 }: {
   item: CategoryListItem;
   category: SavedCategory;
@@ -94,93 +85,75 @@ function OwnerListItemCard({
   onRemove: (item: CategoryListItem) => void;
   isRemoving: boolean;
   onNoteSaved: (item: CategoryListItem, note: string | null) => void;
+  onFavoriteToggled: (item: CategoryListItem, isFavorite: boolean) => void;
 }) {
-  const sortable = useSortable({ id: item.id });
-  const style = {
-    transform: CSS.Transform.toString(sortable.transform),
-    transition: sortable.transition,
-  };
   const [showDetails, setShowDetails] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
+  const [togglingFavorite, setTogglingFavorite] = useState(false);
 
   const handleSaveNote = async (note: string | null) => {
     const supabase = createClient();
-    const { error } = await updateNote(
-      supabase,
-      category,
-      userId,
-      item.itemId,
-      item.mediaType,
-      note,
-    );
+    const { error } = await updateNote(supabase, category, userId, item.itemId, item.mediaType, note);
     if (!error) onNoteSaved(item, note);
   };
 
+  const handleToggleFavorite = async () => {
+    if (togglingFavorite) return;
+    setTogglingFavorite(true);
+    try {
+      const supabase = createClient();
+      const nextFavorite = !item.isFavorite;
+      const { error } = await setFavorite(supabase, userId, item.itemId, item.mediaType, nextFavorite);
+      if (!error) onFavoriteToggled(item, nextFavorite);
+    } finally {
+      setTogglingFavorite(false);
+    }
+  };
+
   return (
-    <div
-      ref={sortable.setNodeRef}
-      style={style}
-      className={sortable.isDragging ? "opacity-40" : ""}
-    >
-      <Card className="overflow-hidden flex flex-col">
-        <div className="relative aspect-[2/3] w-full bg-muted">
-          <button
-            type="button"
-            aria-label="Ziehen zum Sortieren"
-            className="absolute top-2 left-2 z-10 flex h-11 w-11 items-center justify-center rounded-md bg-background/80 backdrop-blur touch-none cursor-grab active:cursor-grabbing"
-            {...sortable.attributes}
-            {...sortable.listeners}
-          >
-            <GripVertical className="size-5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowDetails(true)}
-            aria-label={`Details zu ${item.title} anzeigen`}
-            className="absolute inset-0"
-          >
-            {item.imageUrl ? (
-              <Image
-                src={item.imageUrl}
-                alt={item.title}
-                fill
-                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 20vw"
-                className="object-cover"
-              />
-            ) : (
-              <div className="flex h-full items-center justify-center text-xs text-muted-foreground p-2 text-center">
-                Kein Poster
-              </div>
-            )}
-          </button>
-        </div>
-        <CardContent className="p-3 flex-1 flex flex-col gap-2">
-          <div>
-            <p className="text-sm font-medium leading-tight line-clamp-2">
-              {item.title}
+    <>
+      <Card className="overflow-hidden flex gap-3 p-3">
+        <button
+          type="button"
+          onClick={() => setShowDetails(true)}
+          aria-label={`Details zu ${item.title} anzeigen`}
+          className="relative w-16 aspect-[2/3] shrink-0 rounded-md overflow-hidden bg-muted"
+        >
+          {item.imageUrl ? (
+            <Image src={item.imageUrl} alt={item.title} fill sizes="64px" className="object-cover" />
+          ) : (
+            <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground p-1 text-center">
+              Kein Poster
+            </div>
+          )}
+        </button>
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
+          <p className="text-sm font-medium leading-tight line-clamp-2">
+            {item.title}
+          </p>
+          <MovieMetaBadges details={item.movieDetails} year={item.year} />
+          {item.note && (
+            <p className="text-[11px] italic text-muted-foreground line-clamp-2">
+              „{truncateNote(item.note)}“
             </p>
-            <MovieMetaBadges details={item.movieDetails} year={item.year} />
-            {item.note && (
-              <p className="mt-1 text-[11px] italic text-muted-foreground line-clamp-2">
-                „{truncateNote(item.note)}“
-              </p>
+          )}
+          <WatchProviderBadges providers={item.watchProviders} title={item.title} />
+          <div className="mt-auto pt-2 flex items-center gap-1.5">
+            {category === "top_list" && (
+              <button
+                type="button"
+                aria-label={item.isFavorite ? "Favorit entfernen" : "Als Favorit markieren"}
+                disabled={togglingFavorite}
+                onClick={handleToggleFavorite}
+                className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors disabled:opacity-50 ${
+                  item.isFavorite
+                    ? "border-amber-500 text-amber-500"
+                    : "border-input text-muted-foreground hover:bg-accent"
+                }`}
+              >
+                <Star className={`size-4 ${item.isFavorite ? "fill-current" : ""}`} />
+              </button>
             )}
-          </div>
-          <WatchProviderBadges
-            providers={item.watchProviders}
-            title={item.title}
-          />
-          <div className="mt-auto flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              disabled={isRemoving}
-              onClick={() => onRemove(item)}
-            >
-              <X />
-              {isRemoving ? "Wird entfernt…" : "Entfernen"}
-            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -189,8 +162,18 @@ function OwnerListItemCard({
             >
               <Pencil />
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              disabled={isRemoving}
+              onClick={() => onRemove(item)}
+            >
+              <X />
+              {isRemoving ? "Wird entfernt…" : "Entfernen"}
+            </Button>
           </div>
-        </CardContent>
+        </div>
       </Card>
 
       {showDetails && (
@@ -216,23 +199,23 @@ function OwnerListItemCard({
           onClose={() => setShowNoteModal(false)}
         />
       )}
-    </div>
+    </>
   );
 }
 
-function AddItemTile({ category }: { category: SavedCategory }) {
+function AddItemRow({ category }: { category: SavedCategory }) {
   return (
     <Link
       href={`/search?addTo=${category}`}
-      className="flex flex-col items-center justify-center gap-2 aspect-[2/3] w-full rounded-lg border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+      className="flex items-center justify-center gap-2 h-14 w-full rounded-lg border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
     >
-      <Plus className="size-8" />
-      <span className="text-xs font-medium">Hinzufügen</span>
+      <Plus className="size-5" />
+      <span className="text-sm font-medium">Hinzufügen</span>
     </Link>
   );
 }
 
-function OwnerCategoryGrid({
+function OwnerCategoryList({
   initialItems,
   category,
   userId,
@@ -244,23 +227,10 @@ function OwnerCategoryGrid({
   const [items, setItems] = useState(initialItems);
   const [removingId, setRemovingId] = useState<string | null>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 200, tolerance: 8 },
-    }),
-  );
-
   const handleRemove = async (item: CategoryListItem) => {
     setRemovingId(item.id);
     const supabase = createClient();
-    const { error } = await removeFromCategory(
-      supabase,
-      category,
-      userId,
-      item.itemId,
-      item.mediaType,
-    );
+    const { error } = await removeFromCategory(supabase, category, userId, item.itemId, item.mediaType);
 
     if (!error) {
       setItems((prev) => prev.filter((existing) => existing.id !== item.id));
@@ -268,72 +238,43 @@ function OwnerCategoryGrid({
     setRemovingId(null);
   };
 
-  const persistOrder = async (reordered: CategoryListItem[]) => {
-    const supabase = createClient();
-    try {
-      await Promise.all(
-        reordered.map((item, index) =>
-          supabase.from(category).update({ position: index }).eq("id", item.id),
-        ),
-      );
-    } catch {
-      // reorder failed to persist; local order stays as the optimistic result
-    }
-  };
-
   const handleNoteSaved = (item: CategoryListItem, note: string | null) => {
     setItems((prev) =>
-      prev.map((existing) =>
-        existing.id === item.id ? { ...existing, note } : existing,
-      ),
+      prev.map((existing) => (existing.id === item.id ? { ...existing, note } : existing)),
     );
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
+  const handleFavoriteToggled = (item: CategoryListItem, isFavorite: boolean) => {
     setItems((prev) => {
-      const oldIndex = prev.findIndex((item) => item.id === active.id);
-      const newIndex = prev.findIndex((item) => item.id === over.id);
-      if (oldIndex === -1 || newIndex === -1) return prev;
-
-      const reordered = arrayMove(prev, oldIndex, newIndex);
-      persistOrder(reordered);
-      return reordered;
+      const updated = prev.map((existing) =>
+        existing.id === item.id ? { ...existing, isFavorite } : existing,
+      );
+      // Mirrors the server sort (favorites first, newest star on top) so the
+      // row jumps immediately instead of waiting for a refetch.
+      return [...updated].sort((a, b) => Number(b.isFavorite) - Number(a.isFavorite));
     });
   };
 
   return (
-    <div className="w-full flex flex-col gap-4">
+    <div className="w-full flex flex-col gap-3">
       {items.length === 0 && (
         <p className="w-full text-sm text-muted-foreground">
           {CATEGORY_LABELS[category]} enthält noch keine Einträge.
         </p>
       )}
-      <DndContext
-        id="category-items-dnd-context"
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext items={items.map((item) => item.id)} strategy={rectSortingStrategy}>
-          <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {items.map((item) => (
-              <OwnerListItemCard
-                key={item.id}
-                item={item}
-                category={category}
-                userId={userId}
-                onRemove={handleRemove}
-                isRemoving={removingId === item.id}
-                onNoteSaved={handleNoteSaved}
-              />
-            ))}
-            <AddItemTile category={category} />
-          </div>
-        </SortableContext>
-      </DndContext>
+      {items.map((item) => (
+        <OwnerListItemRow
+          key={item.id}
+          item={item}
+          category={category}
+          userId={userId}
+          onRemove={handleRemove}
+          isRemoving={removingId === item.id}
+          onNoteSaved={handleNoteSaved}
+          onFavoriteToggled={handleFavoriteToggled}
+        />
+      ))}
+      <AddItemRow category={category} />
     </div>
   );
 }
@@ -360,14 +301,7 @@ function RatingButtons({
     setPending(true);
     try {
       const supabase = createClient();
-      const { error } = await rateItem(
-        supabase,
-        ownerId,
-        viewerId,
-        itemId,
-        mediaType,
-        vote,
-      );
+      const { error } = await rateItem(supabase, ownerId, viewerId, itemId, mediaType, vote);
       if (!error) onVoted(vote);
     } finally {
       setPending(false);
@@ -402,7 +336,106 @@ function RatingButtons({
   );
 }
 
-function VisitorCategoryGrid({
+function VisitorListItemRow({
+  item,
+  ownerId,
+  user,
+  savedState,
+  onSavedChange,
+  onGuestClick,
+  socialProof,
+  ratingCounts,
+  onVoted,
+}: {
+  item: CategoryListItem;
+  ownerId: string;
+  user: User | null;
+  savedState: ReturnType<typeof getSavedState>;
+  onSavedChange: (category: "top_list" | "watchlist" | "dont_watch", value: boolean) => void;
+  onGuestClick: () => void;
+  socialProof: ReturnType<typeof getSocialProofBreakdown>;
+  ratingCounts: { up: number; down: number; myVote: boolean | null };
+  onVoted: (vote: boolean) => void;
+}) {
+  const [showDetails, setShowDetails] = useState(false);
+
+  return (
+    <>
+      <Card className="overflow-hidden flex gap-3 p-3">
+        <button
+          type="button"
+          onClick={() => setShowDetails(true)}
+          aria-label={`Details zu ${item.title} anzeigen`}
+          className="relative w-16 aspect-[2/3] shrink-0 rounded-md overflow-hidden bg-muted"
+        >
+          {item.imageUrl ? (
+            <Image src={item.imageUrl} alt={item.title} fill sizes="64px" className="object-cover" />
+          ) : (
+            <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground p-1 text-center">
+              Kein Poster
+            </div>
+          )}
+        </button>
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
+          <p className="text-sm font-medium leading-tight line-clamp-2">
+            {item.title}
+          </p>
+          <MovieMetaBadges details={item.movieDetails} year={item.year} />
+          <SocialProofIcons breakdown={socialProof} onClick={() => setShowDetails(true)} className="mt-0.5" />
+          {item.note && (
+            <p className="text-[11px] italic text-muted-foreground line-clamp-2">
+              „{truncateNote(item.note)}“
+            </p>
+          )}
+          <WatchProviderBadges providers={item.watchProviders} title={item.title} />
+          <div className="mt-auto pt-2 flex flex-wrap items-center gap-2">
+            <SaveButtons
+              isLoggedIn={!!user}
+              userId={user?.id}
+              item={{
+                itemId: item.itemId,
+                mediaType: item.mediaType,
+                title: item.title,
+                imageUrl: item.imageUrl,
+                year: item.year,
+              }}
+              savedState={savedState}
+              onChange={onSavedChange}
+              onGuestClick={onGuestClick}
+              size="compact"
+            />
+            {user && (
+              <RatingButtons
+                ownerId={ownerId}
+                viewerId={user.id}
+                itemId={item.itemId}
+                mediaType={item.mediaType}
+                counts={ratingCounts}
+                onVoted={onVoted}
+              />
+            )}
+          </div>
+        </div>
+      </Card>
+
+      {showDetails && (
+        <MovieDetailModal
+          title={item.title}
+          posterUrl={item.imageUrl}
+          year={item.year}
+          details={item.movieDetails}
+          tmdbId={item.itemId}
+          mediaType={item.mediaType}
+          socialProof={socialProof}
+          note={item.note}
+          onClose={() => setShowDetails(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function VisitorCategoryList({
   initialItems,
   ownerId,
   ownerUsername,
@@ -467,75 +500,53 @@ function VisitorCategoryGrid({
   }
 
   return (
-    <div className="w-full flex flex-col gap-4">
+    <div className="w-full flex flex-col gap-3">
       <ToastStack toasts={toasts} />
-      <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-        {items.map((item) => {
-          const result = itemToSearchResult(item);
-          const counts = ratings[`${item.mediaType}-${item.itemId}`] ?? {
-            up: 0,
-            down: 0,
-            myVote: null,
-          };
-          return (
-            <SearchResultCard
-              key={item.id}
-              result={result}
-              isLoggedIn={!!user}
-              userId={user?.id}
-              savedState={getSavedState(stateMap, item.itemId, item.mediaType)}
-              onSavedChange={(category, value) => {
-                markSaved(item.itemId, item.mediaType, category, value);
-                showToast(
-                  value
-                    ? `Zu ${CATEGORY_LABELS[category]} hinzugefügt`
-                    : `Aus ${CATEGORY_LABELS[category]} entfernt`,
-                );
-                if (value && !SKIP_ADD_NOTE_PROMPT.includes(category)) {
-                  setNotePrompt({ result, category });
-                }
-              }}
-              onGuestClick={() => setShowGuestPrompt(true)}
-              socialProof={getSocialProofBreakdown(
-                socialProofMap,
-                item.itemId,
-                item.mediaType,
-              )}
-              note={item.note}
-              extraFooter={
-                user ? (
-                  <RatingButtons
-                    ownerId={ownerId}
-                    viewerId={user.id}
-                    itemId={item.itemId}
-                    mediaType={item.mediaType}
-                    counts={counts}
-                    onVoted={(vote) => {
-                      setRatings((prev) => {
-                        const key = `${item.mediaType}-${item.itemId}`;
-                        const prevCounts = prev[key] ?? {
-                          up: 0,
-                          down: 0,
-                          myVote: null,
-                        };
-                        const next = { ...prevCounts };
-                        if (prevCounts.myVote !== null) {
-                          if (prevCounts.myVote) next.up -= 1;
-                          else next.down -= 1;
-                        }
-                        if (vote) next.up += 1;
-                        else next.down += 1;
-                        next.myVote = vote;
-                        return { ...prev, [key]: next };
-                      });
-                    }}
-                  />
-                ) : undefined
+      {items.map((item) => {
+        const counts = ratings[`${item.mediaType}-${item.itemId}`] ?? {
+          up: 0,
+          down: 0,
+          myVote: null,
+        };
+        return (
+          <VisitorListItemRow
+            key={item.id}
+            item={item}
+            ownerId={ownerId}
+            user={user}
+            savedState={getSavedState(stateMap, item.itemId, item.mediaType)}
+            onSavedChange={(category, value) => {
+              markSaved(item.itemId, item.mediaType, category, value);
+              showToast(
+                value
+                  ? `Zu ${CATEGORY_LABELS[category]} hinzugefügt`
+                  : `Aus ${CATEGORY_LABELS[category]} entfernt`,
+              );
+              if (value && !SKIP_ADD_NOTE_PROMPT.includes(category)) {
+                setNotePrompt({ result: itemToSearchResult(item), category });
               }
-            />
-          );
-        })}
-      </div>
+            }}
+            onGuestClick={() => setShowGuestPrompt(true)}
+            socialProof={getSocialProofBreakdown(socialProofMap, item.itemId, item.mediaType)}
+            ratingCounts={counts}
+            onVoted={(vote) => {
+              setRatings((prev) => {
+                const key = `${item.mediaType}-${item.itemId}`;
+                const prevCounts = prev[key] ?? { up: 0, down: 0, myVote: null };
+                const next = { ...prevCounts };
+                if (prevCounts.myVote !== null) {
+                  if (prevCounts.myVote) next.up -= 1;
+                  else next.down -= 1;
+                }
+                if (vote) next.up += 1;
+                else next.down += 1;
+                next.myVote = vote;
+                return { ...prev, [key]: next };
+              });
+            }}
+          />
+        );
+      })}
 
       {showGuestPrompt && (
         <GuestSignupModal
@@ -609,12 +620,8 @@ export function CategoryItemsGrid({
   const isOwner = currentUserId === ownerId;
 
   return isOwner ? (
-    <OwnerCategoryGrid initialItems={items} category={category} userId={ownerId} />
+    <OwnerCategoryList initialItems={items} category={category} userId={ownerId} />
   ) : (
-    <VisitorCategoryGrid
-      initialItems={items}
-      ownerId={ownerId}
-      ownerUsername={username}
-    />
+    <VisitorCategoryList initialItems={items} ownerId={ownerId} ownerUsername={username} />
   );
 }

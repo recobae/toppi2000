@@ -55,7 +55,7 @@ async function clearLikeCredits(supabase: SupabaseClient, actorUserId: string, i
  * Records the actor's own like/dislike/skip stance on an item, and keeps
  * "X Likes" credits for every followed owner of that item in sync: a fresh
  * like credits all `ownerUserIds` (typically the people the item's card
- * showed as "Auf Top-Liste von" / "Empfohlen von"), while switching away
+ * showed as "Empfohlen von"), while switching away
  * from like (dislike/skip) or liking an item with no known owner clears any
  * credit this actor previously handed out for it.
  */

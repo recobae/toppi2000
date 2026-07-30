@@ -63,11 +63,28 @@ export async function GET(request: NextRequest) {
     notesVisibility,
   });
 
-  const { data: rows, error } = await supabase
-    .from(category)
-    .select("id, item_id, media_type, title, image_url, metadata, position, note")
-    .eq("user_id", profile.id)
-    .order("position", { ascending: true });
+  // Empfohlen (top_list) sorts favorites first (most recently starred on
+  // top), then newest-first -- manual drag-reordering is hidden project-wide
+  // now, so `position` no longer drives display order here. Other
+  // categories keep the existing position order (unaffected by this round).
+  // Two fully separate query chains (rather than a shared builder fed a
+  // ternary select string) so each keeps its own literal select type.
+  const { data: rows, error } =
+    category === "top_list"
+      ? await supabase
+          .from(category)
+          .select(
+            "id, item_id, media_type, title, image_url, metadata, position, note, is_favorite, favorited_at, created_at",
+          )
+          .eq("user_id", profile.id)
+          .order("is_favorite", { ascending: false })
+          .order("favorited_at", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false })
+      : await supabase
+          .from(category)
+          .select("id, item_id, media_type, title, image_url, metadata, position, note")
+          .eq("user_id", profile.id)
+          .order("position", { ascending: true });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -100,6 +117,7 @@ export async function GET(request: NextRequest) {
         note: canViewNotes ? (row.note ?? null) : null,
         watchProviders,
         movieDetails,
+        isFavorite: "is_favorite" in row ? !!row.is_favorite : false,
       };
     }),
   );

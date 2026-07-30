@@ -64,13 +64,20 @@ export default async function ProfilePage({
 
   const previewByCategory = await Promise.all(
     VISIBLE_SAVED_CATEGORIES.map(async (category) => {
+      // Empfohlen (top_list) preview posters follow the same favorite-first,
+      // then-newest order as the full list -- manual position no longer
+      // drives display anywhere.
+      let previewQuery = supabase.from(category).select("image_url").eq("user_id", profile.id);
+      previewQuery =
+        category === "top_list"
+          ? previewQuery
+              .order("is_favorite", { ascending: false })
+              .order("favorited_at", { ascending: false, nullsFirst: false })
+              .order("created_at", { ascending: false })
+          : previewQuery.order("position", { ascending: true });
+
       const [{ data: previewRows }, { count }] = await Promise.all([
-        supabase
-          .from(category)
-          .select("image_url")
-          .eq("user_id", profile.id)
-          .order("position", { ascending: true })
-          .limit(4),
+        previewQuery.limit(4),
         supabase
           .from(category)
           .select("id", { count: "exact", head: true })

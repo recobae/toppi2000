@@ -65,6 +65,31 @@ export async function updateNote(
     .eq("media_type", mediaType);
 }
 
+/**
+ * Toggles the "Favorit" star on an Empfohlen-list (top_list) entry.
+ * Favoriting is a top_list-only concept -- watchlist/dont_watch have no
+ * star. Setting favorited_at to now() on every favorite (and clearing it on
+ * unfavorite) is what drives "newest star first" sorting; see
+ * app/api/category-items/route.ts.
+ */
+export async function setFavorite(
+  supabase: SupabaseClient,
+  userId: string,
+  itemId: number,
+  mediaType: "movie" | "tv",
+  isFavorite: boolean,
+) {
+  return supabase
+    .from("top_list")
+    .update({
+      is_favorite: isFavorite,
+      favorited_at: isFavorite ? new Date().toISOString() : null,
+    })
+    .eq("user_id", userId)
+    .eq("item_id", itemId)
+    .eq("media_type", mediaType);
+}
+
 export async function removeFromCategory(
   supabase: SupabaseClient,
   category: SavedCategory,
