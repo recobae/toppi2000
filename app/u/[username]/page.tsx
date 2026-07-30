@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Heart, ListChecks, MapPin, Plus, Repeat2, Settings } from "lucide-react";
+import { Heart, ListChecks, MapPin, Plus, Repeat2, Settings, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileStoryAvatar } from "@/components/profile/profile-story-avatar";
 import { ListTile } from "@/components/profile/list-tile";
@@ -21,6 +21,11 @@ import {
 } from "@/lib/categories";
 import { resolveEarnedExpertiseLabels, resolvePlaceExpertiseLabels } from "@/lib/expertise";
 import { hasActiveStory as checkHasActiveStory, storyWindowSince } from "@/lib/story-activity";
+import { computeTasteMatch, TASTE_MATCH_MIN_SHARED } from "@/lib/taste-match";
+
+// "X Likes"/"X mal inspiriert" are replaced by Taste Match below -- kept
+// computed (not deleted) in case they come back, just not rendered.
+const SHOW_LEGACY_LIKE_STATS = false;
 
 async function getProfileUrl(username: string): Promise<string> {
   const headersList = await headers();
@@ -157,6 +162,9 @@ export default async function ProfilePage({
   ]);
 
   const hasActiveStory = await checkHasActiveStory(supabase, profile.id);
+
+  const tasteMatch =
+    !isOwner && viewer ? await computeTasteMatch(supabase, profile.id, viewer.id) : null;
 
   const { count: followerCount } = await supabase
     .from("user_follows")
@@ -308,14 +316,28 @@ export default async function ProfilePage({
         <ExpertiseBadges labels={earnedExpertiseLabels} />
 
         <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-          <div className="flex items-center gap-1.5">
-            <Heart className="size-4 fill-current text-red-500" />
-            <span>{likesCount ?? 0} Likes</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Repeat2 className="size-4 text-primary" />
-            <span>{inspiredCount ?? 0} mal inspiriert</span>
-          </div>
+          {SHOW_LEGACY_LIKE_STATS && (
+            <>
+              <div className="flex items-center gap-1.5">
+                <Heart className="size-4 fill-current text-red-500" />
+                <span>{likesCount ?? 0} Likes</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Repeat2 className="size-4 text-primary" />
+                <span>{inspiredCount ?? 0} mal inspiriert</span>
+              </div>
+            </>
+          )}
+          {tasteMatch && (
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="size-4 text-primary" />
+              <span>
+                {tasteMatch.percentage !== null
+                  ? `${tasteMatch.percentage}% Taste Match aus ${tasteMatch.sharedCount} Bewertungen`
+                  : `Noch nicht genug Daten (${tasteMatch.sharedCount}/${TASTE_MATCH_MIN_SHARED} gemeinsame Bewertungen)`}
+              </span>
+            </div>
+          )}
           <FollowerCount targetUserId={profile.id} count={followerCount ?? 0} />
         </div>
 
