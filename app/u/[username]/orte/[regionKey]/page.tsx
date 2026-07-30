@@ -77,6 +77,7 @@ export default async function RegionListPage({
         <RegionItemsGrid
           username={profile.username}
           regionKey={regionKey}
+          regionName={region.region_name}
           ownerId={profile.id}
           currentUserId={viewer?.id ?? null}
         />

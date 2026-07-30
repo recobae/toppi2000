@@ -47,16 +47,16 @@ export function SiteHeader() {
   // too would be a redundant link to the page you're already on.
   const onOwnProfile =
     pathname === `/u/${username}` || pathname.startsWith(`/u/${username}/`);
-  const onSearch = pathname === "/search";
+  const onInspiration = pathname === "/inspiration";
 
-  if (onOwnProfile && onSearch) return null;
+  if (onOwnProfile && onInspiration) return null;
 
   return (
     <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
-      {!onSearch && (
+      {!onInspiration && (
         <Link
-          href="/search"
-          aria-label="Suche"
+          href="/inspiration"
+          aria-label="Inspiration"
           className="flex h-9 w-9 items-center justify-center rounded-full bg-background border shadow-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <Search className="size-4" />

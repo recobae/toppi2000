@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { Ban } from "lucide-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { WatchProviderBadges } from "@/components/watch-provider-badges";
 import {
@@ -35,6 +36,7 @@ export function SearchResultCard({
   socialProof,
   note,
   extraFooter,
+  onDislike,
 }: {
   result: SearchResult;
   isLoggedIn: boolean;
@@ -49,6 +51,8 @@ export function SearchResultCard({
   socialProof?: SocialProofBreakdown;
   note?: string | null;
   extraFooter?: React.ReactNode;
+  /** "Nein" -- records a dislike (item_interactions), used on browsable feeds like trending. */
+  onDislike?: () => void;
 }) {
   const [showDetails, setShowDetails] = useState(false);
   const posterUrl = result.posterPath
@@ -112,21 +116,39 @@ export function SearchResultCard({
         />
       </CardContent>
       <CardFooter className="p-3 pt-0 flex flex-col gap-2 items-stretch">
-        <SaveButtons
-          isLoggedIn={isLoggedIn}
-          userId={userId}
-          item={{
-            itemId: result.id,
-            mediaType: result.mediaType,
-            title: result.title,
-            imageUrl: posterUrl,
-            year: result.year,
-          }}
-          savedState={savedState ?? EMPTY_SAVED_STATE}
-          onChange={(category, value) => onSavedChange?.(category, value)}
-          onGuestClick={onGuestClick}
-          size="compact"
-        />
+        <div className="flex items-center gap-1.5">
+          {onDislike && (
+            <button
+              type="button"
+              aria-label="Nicht mein Geschmack"
+              onClick={() => {
+                if (!isLoggedIn) {
+                  onGuestClick?.();
+                  return;
+                }
+                onDislike();
+              }}
+              className="flex size-8 items-center justify-center rounded-full border border-input text-destructive hover:bg-destructive/10 transition-colors"
+            >
+              <Ban className="size-4" />
+            </button>
+          )}
+          <SaveButtons
+            isLoggedIn={isLoggedIn}
+            userId={userId}
+            item={{
+              itemId: result.id,
+              mediaType: result.mediaType,
+              title: result.title,
+              imageUrl: posterUrl,
+              year: result.year,
+            }}
+            savedState={savedState ?? EMPTY_SAVED_STATE}
+            onChange={(category, value) => onSavedChange?.(category, value)}
+            onGuestClick={onGuestClick}
+            size="compact"
+          />
+        </div>
         {extraFooter}
       </CardFooter>
 

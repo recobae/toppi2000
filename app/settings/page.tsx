@@ -48,6 +48,11 @@ export default function SettingsPage() {
   const [notesVisibility, setNotesVisibility] = useState<NotesVisibility>("all");
   const [isSavingNotesVisibility, setIsSavingNotesVisibility] = useState(false);
 
+  const [homeCity, setHomeCity] = useState("");
+  const [currentHomeCity, setCurrentHomeCity] = useState("");
+  const [homeCityMessage, setHomeCityMessage] = useState<string | null>(null);
+  const [isSavingHomeCity, setIsSavingHomeCity] = useState(false);
+
   const usernameStatus = useUsernameAvailability(username, currentUsername);
   const isEmailProvider = user?.app_metadata?.provider === "email";
 
@@ -69,7 +74,7 @@ export default function SettingsPage() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("username, notes_visibility")
+        .select("username, notes_visibility, home_city")
         .eq("id", currentUser.id)
         .maybeSingle();
 
@@ -78,6 +83,8 @@ export default function SettingsPage() {
       if (profile?.notes_visibility && isNotesVisibility(profile.notes_visibility)) {
         setNotesVisibility(profile.notes_visibility);
       }
+      setHomeCity(profile?.home_city ?? "");
+      setCurrentHomeCity(profile?.home_city ?? "");
       setIsLoading(false);
     })();
   }, [router]);
@@ -159,6 +166,31 @@ export default function SettingsPage() {
       setRepeatPassword("");
     }
     setIsSavingPassword(false);
+  };
+
+  const handleHomeCitySubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!user || homeCity.trim() === currentHomeCity) return;
+
+    setIsSavingHomeCity(true);
+    setHomeCityMessage(null);
+
+    const supabase = createClient();
+    const trimmed = homeCity.trim();
+    const { error } = await supabase
+      .from("profiles")
+      .update({ home_city: trimmed || null })
+      .eq("id", user.id);
+
+    if (error) {
+      setHomeCityMessage("Heimatstadt konnte nicht gespeichert werden.");
+    } else {
+      setCurrentHomeCity(trimmed);
+      setHomeCity(trimmed);
+      setHomeCityMessage("Gespeichert!");
+      router.refresh();
+    }
+    setIsSavingHomeCity(false);
   };
 
   const handleNotesVisibilityChange = async (value: NotesVisibility) => {
@@ -243,6 +275,38 @@ export default function SettingsPage() {
                 }
               >
                 {isSavingUsername ? "Wird gespeichert…" : "Speichern"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Heimatstadt</CardTitle>
+            <CardDescription>
+              Wird als Pin auf deinem Profil angezeigt und bestimmt den Orte-Feed in Inspiration.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleHomeCitySubmit} className="flex flex-col gap-3">
+              <Input
+                value={homeCity}
+                onChange={(e) => {
+                  setHomeCity(e.target.value);
+                  setHomeCityMessage(null);
+                }}
+                placeholder="z. B. Düsseldorf"
+              />
+              {homeCityMessage && (
+                <p className="text-xs text-muted-foreground">{homeCityMessage}</p>
+              )}
+              <Button
+                type="submit"
+                size="sm"
+                className="w-fit"
+                disabled={homeCity.trim() === currentHomeCity || isSavingHomeCity}
+              >
+                {isSavingHomeCity ? "Wird gespeichert…" : "Speichern"}
               </Button>
             </form>
           </CardContent>

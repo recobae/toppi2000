@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Check, Plus } from "lucide-react";
+import { Ban, Check, Plus } from "lucide-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PlaceDetailModal } from "@/components/orte/place-detail-modal";
@@ -36,6 +36,7 @@ export function PlaceResultCard({
   onToggleSave,
   onGuestClick,
   note,
+  onDislike,
 }: {
   place: PlaceCardData;
   isLoggedIn: boolean;
@@ -44,6 +45,8 @@ export function PlaceResultCard({
   onToggleSave: () => void;
   onGuestClick?: () => void;
   note?: string | null;
+  /** "Nein" -- records a dislike (item_interactions), used on suggestion feeds. */
+  onDislike?: () => void;
 }) {
   const [showDetails, setShowDetails] = useState(false);
   const Icon = PLACE_CATEGORY_ICONS[place.category];
@@ -103,11 +106,27 @@ export function PlaceResultCard({
           </p>
         )}
       </CardContent>
-      <CardFooter className="p-3 pt-0">
+      <CardFooter className="p-3 pt-0 flex items-center gap-1.5">
+        {onDislike && !isSaved && (
+          <button
+            type="button"
+            aria-label="Nicht mein Geschmack"
+            onClick={() => {
+              if (!isLoggedIn) {
+                onGuestClick?.();
+                return;
+              }
+              onDislike();
+            }}
+            className="flex size-8 shrink-0 items-center justify-center rounded-full border border-input text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <Ban className="size-4" />
+          </button>
+        )}
         <Button
           variant={isSaved ? "outline" : "default"}
           size="sm"
-          className="w-full"
+          className="flex-1"
           disabled={isSaving}
           onClick={handleSaveClick}
         >

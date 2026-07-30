@@ -13,7 +13,7 @@ import type {
 const PROFILE_BASE_URL = "https://image.tmdb.org/t/p/w185";
 
 function personHref(id: number, name: string) {
-  return `/search?person=${id}&name=${encodeURIComponent(name)}`;
+  return `/inspiration?person=${id}&name=${encodeURIComponent(name)}`;
 }
 
 export function SocialProofIcons({

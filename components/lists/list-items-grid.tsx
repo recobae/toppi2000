@@ -12,7 +12,9 @@ import { WatchProviderBadges } from "@/components/watch-provider-badges";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { MovieMetaBadges, MovieDetailModal, SocialProofIcons } from "@/components/movie-info";
 import { SaveButtons } from "@/components/search/save-buttons";
+import { SearchResultCard } from "@/components/search/search-result-card";
 import { removeFromCategory, setFavorite, updateNote } from "@/lib/saved-items";
+import { setInteractionWithCredits } from "@/lib/interaction-credits";
 import { CATEGORY_LABELS, type SavedCategory } from "@/lib/categories";
 import { NOTE_PLACEHOLDERS, SKIP_ADD_NOTE_PROMPT, truncateNote } from "@/lib/notes";
 import { NoteModal } from "@/components/lists/note-modal";
@@ -206,12 +208,87 @@ function OwnerListItemRow({
 function AddItemRow({ category }: { category: SavedCategory }) {
   return (
     <Link
-      href={`/search?addTo=${category}`}
+      href={`/inspiration?addTo=${category}`}
       className="flex items-center justify-center gap-2 h-14 w-full rounded-lg border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
     >
       <Plus className="size-5" />
       <span className="text-sm font-medium">Hinzufügen</span>
     </Link>
+  );
+}
+
+/**
+ * Compact suggestion strip under the owner's own Empfohlen-list, fed by the
+ * same shared engine (lib/recommendations.ts) as the Inspiration page --
+ * here specifically the genre-profile variant, derived from what the user
+ * already rated/liked. Subtly set apart with a border + smaller heading;
+ * rating happens right here via Ja (Empfohlen)/Nein/Watchlist.
+ */
+function MovieSuggestionsStrip({ userId }: { userId: string }) {
+  const [suggestions, setSuggestions] = useState<SearchResult[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const response = await fetch("/api/movie-suggestions");
+      if (!response.ok || cancelled) return;
+      const data: { results: SearchResult[] } = await response.json();
+      if (!cancelled) setSuggestions(data.results);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const { stateMap, markSaved } = useSavedState(
+    (suggestions ?? []).map((r) => ({ id: r.id, mediaType: r.mediaType })),
+  );
+  const socialProofMap = useSocialProof(
+    (suggestions ?? []).map((r) => ({ id: r.id, mediaType: r.mediaType })),
+  );
+
+  const removeSuggestion = (result: SearchResult) => {
+    setSuggestions((prev) =>
+      (prev ?? []).filter((r) => !(r.id === result.id && r.mediaType === result.mediaType)),
+    );
+  };
+
+  const handleDislike = async (result: SearchResult) => {
+    removeSuggestion(result);
+    const supabase = createClient();
+    await setInteractionWithCredits(
+      supabase,
+      userId,
+      { itemId: String(result.id), mediaType: result.mediaType },
+      "dislike",
+    );
+  };
+
+  if (!suggestions || suggestions.length === 0) return null;
+
+  return (
+    <div className="w-full flex flex-col gap-3 mt-2 pt-4 border-t border-dashed">
+      <h2 className="text-xs font-medium text-muted-foreground">
+        Passend zu deinem Geschmack
+      </h2>
+      <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {suggestions.map((result) => (
+          <SearchResultCard
+            key={`${result.mediaType}-${result.id}`}
+            result={result}
+            isLoggedIn
+            userId={userId}
+            savedState={getSavedState(stateMap, result.id, result.mediaType)}
+            onSavedChange={(category, value) => {
+              markSaved(result.id, result.mediaType, category, value);
+              if (value) removeSuggestion(result);
+            }}
+            socialProof={getSocialProofBreakdown(socialProofMap, result.id, result.mediaType)}
+            onDislike={() => handleDislike(result)}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -275,6 +352,7 @@ function OwnerCategoryList({
         />
       ))}
       <AddItemRow category={category} />
+      {category === "top_list" && <MovieSuggestionsStrip userId={userId} />}
     </div>
   );
 }

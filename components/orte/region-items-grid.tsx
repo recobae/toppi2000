@@ -11,8 +11,11 @@ import { createClient } from "@/lib/supabase/client";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { NoteModal } from "@/components/lists/note-modal";
 import { PlaceDetailModal } from "@/components/orte/place-detail-modal";
+import { PlaceResultCard } from "@/components/orte/place-result-card";
 import { removePlace, savePlaceToRegion, updatePlaceNote } from "@/lib/place-items";
+import { setInteractionWithCredits } from "@/lib/interaction-credits";
 import { usePlaceSavedState } from "@/lib/hooks/use-place-saved-state";
+import type { CityPlaceRecommendations } from "@/lib/recommendations";
 import { PlaceDetailsRow } from "@/components/orte/place-details-row";
 import {
   PLACE_CATEGORIES,
@@ -244,12 +247,80 @@ function AddPlaceRow() {
   );
 }
 
+/**
+ * Compact suggestion strip under the owner's own Orte-region list -- exact
+ * same query (lib/recommendations.ts) as the Inspiration Orte tab's per-city
+ * feed: friends who added something here first, then generic popular
+ * places. Rating happens right here via Ja (hinzufügen)/Nein.
+ */
+function PlaceSuggestionsStrip({ userId, regionName }: { userId: string; regionName: string }) {
+  const [recommendations, setRecommendations] = useState<CityPlaceRecommendations | null>(null);
+  const { savedIds, markSaved } = usePlaceSavedState(userId);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const response = await fetch(`/api/city-places?city=${encodeURIComponent(regionName)}`);
+      if (!response.ok || cancelled) return;
+      const data: CityPlaceRecommendations = await response.json();
+      if (!cancelled) setRecommendations(data);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [regionName]);
+
+  const allSuggestions = recommendations
+    ? [...recommendations.fromFriends.map((entry) => entry.place), ...recommendations.generic]
+    : [];
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const visibleSuggestions = allSuggestions.filter((place) => !dismissedIds.has(place.placeId));
+
+  if (visibleSuggestions.length === 0) return null;
+
+  return (
+    <div className="w-full flex flex-col gap-3 mt-2 pt-4 border-t border-dashed">
+      <h2 className="text-xs font-medium text-muted-foreground">
+        Weitere Empfehlungen für {regionName}
+      </h2>
+      <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {visibleSuggestions.map((place) => (
+          <PlaceResultCard
+            key={place.placeId}
+            place={place}
+            isLoggedIn
+            isSaved={savedIds.has(place.placeId)}
+            isSaving={false}
+            onToggleSave={async () => {
+              const supabase = createClient();
+              const { error } = await savePlaceToRegion(supabase, userId, regionName, place);
+              if (!error) markSaved(place.placeId, true);
+            }}
+            onDislike={async () => {
+              setDismissedIds((prev) => new Set(prev).add(place.placeId));
+              const supabase = createClient();
+              await setInteractionWithCredits(
+                supabase,
+                userId,
+                { itemId: place.placeId, mediaType: "place" },
+                "dislike",
+              );
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function OwnerRegionList({
   initialItems,
   userId,
+  regionName,
 }: {
   initialItems: RegionPlaceItem[];
   userId: string;
+  regionName: string;
 }) {
   const [items, setItems] = useState(initialItems);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -300,6 +371,7 @@ function OwnerRegionList({
         />
       ))}
       {!activeCategory && <AddPlaceRow />}
+      {!activeCategory && <PlaceSuggestionsStrip userId={userId} regionName={regionName} />}
     </div>
   );
 }
@@ -521,11 +593,13 @@ function VisitorRegionList({ initialItems }: { initialItems: RegionPlaceItem[] }
 export function RegionItemsGrid({
   username,
   regionKey,
+  regionName,
   ownerId,
   currentUserId,
 }: {
   username: string;
   regionKey: string;
+  regionName: string;
   ownerId: string;
   currentUserId?: string | null;
 }) {
@@ -554,7 +628,7 @@ export function RegionItemsGrid({
   const isOwner = currentUserId === ownerId;
 
   return isOwner ? (
-    <OwnerRegionList initialItems={items} userId={ownerId} />
+    <OwnerRegionList initialItems={items} userId={ownerId} regionName={regionName} />
   ) : (
     <VisitorRegionList initialItems={items} />
   );

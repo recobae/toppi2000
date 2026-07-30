@@ -53,7 +53,7 @@ export default async function ProfilePage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, username, total_likes_received")
+    .select("id, username, total_likes_received, home_city")
     .eq("username", username)
     .single();
 
@@ -312,6 +312,13 @@ export default async function ProfilePage({
             />
           )}
         </div>
+
+        {profile.home_city && (
+          <p className="flex items-center gap-1 text-xs text-muted-foreground">
+            <MapPin className="size-3.5" />
+            {profile.home_city}
+          </p>
+        )}
 
         <ExpertiseBadges labels={earnedExpertiseLabels} />
 
