@@ -4,6 +4,8 @@ import {
   type SearchResult,
   type TmdbTitleLike,
 } from "@/lib/tmdb";
+import { createClient } from "@/lib/supabase/server";
+import { getExcludedMovieKeys } from "@/lib/exclusions";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 
@@ -58,6 +60,12 @@ export async function GET(request: NextRequest) {
     url.searchParams.set("with_genres", genre);
   }
 
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const excludedKeys = user ? await getExcludedMovieKeys(supabase, user.id) : new Set<string>();
+
   try {
     const response = await fetch(url, {
       headers: { Accept: "application/json" },
@@ -70,10 +78,9 @@ export async function GET(request: NextRequest) {
     }
 
     const data: { results: TmdbTitleLike[] } = await response.json();
-    const withMediaType = data.results.map((item) => ({
-      ...item,
-      media_type: "movie" as const,
-    }));
+    const withMediaType = data.results
+      .map((item) => ({ ...item, media_type: "movie" as const }))
+      .filter((item) => !excludedKeys.has(`movie-${item.id}`));
     const results: SearchResult[] = await buildSearchResults(
       withMediaType,
       apiKey,

@@ -313,13 +313,6 @@ export default async function ProfilePage({
           )}
         </div>
 
-        {profile.home_city && (
-          <p className="flex items-center gap-1 text-xs text-muted-foreground">
-            <MapPin className="size-3.5" />
-            {profile.home_city}
-          </p>
-        )}
-
         <ExpertiseBadges labels={earnedExpertiseLabels} />
 
         <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
@@ -401,6 +394,7 @@ export default async function ProfilePage({
                   itemCount={region.itemCount}
                   href={`/u/${profile.username}/orte/${region.key}`}
                   shareUrl={`/u/${profile.username}/orte/${region.key}`}
+                  isHomeCity={!!profile.home_city && region.name === profile.home_city}
                 />
               ))}
               {isOwner && (

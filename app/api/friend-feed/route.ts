@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getExcludedMovieKeys, getExcludedPlaceIds } from "@/lib/exclusions";
 
 const FEED_LIMIT = 20;
 const PER_LIST_FETCH_LIMIT = 60;
@@ -38,13 +39,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (type === "movies") {
-    const [
-      { data: topListRows },
-      { data: watchlistRows },
-      { data: myInteractions },
-      { data: myTopList },
-      { data: myWatchlist },
-    ] = await Promise.all([
+    const [{ data: topListRows }, { data: watchlistRows }, excluded] = await Promise.all([
       supabase
         .from("top_list")
         .select("user_id, item_id, media_type, title, image_url, metadata, created_at")
@@ -57,18 +52,10 @@ export async function GET(request: NextRequest) {
         .in("user_id", followedIds)
         .order("created_at", { ascending: false })
         .limit(PER_LIST_FETCH_LIMIT),
-      supabase.from("item_interactions").select("item_id, media_type").eq("user_id", viewer.id),
-      supabase.from("top_list").select("item_id, media_type").eq("user_id", viewer.id),
-      supabase.from("watchlist").select("item_id, media_type").eq("user_id", viewer.id),
+      getExcludedMovieKeys(supabase, viewer.id),
     ]);
 
     const key = (itemId: number | string, mediaType: string) => `${mediaType}-${itemId}`;
-    const excluded = new Set<string>([
-      ...(myInteractions ?? []).map((r) => key(r.item_id, r.media_type)),
-      ...(myTopList ?? []).map((r) => key(r.item_id, r.media_type)),
-      ...(myWatchlist ?? []).map((r) => key(r.item_id, r.media_type)),
-    ]);
-
     const allRows = [...(topListRows ?? []), ...(watchlistRows ?? [])];
     type CandidateRow = (typeof allRows)[number];
     const candidateByKey = new Map<string, CandidateRow>();
@@ -143,7 +130,7 @@ export async function GET(request: NextRequest) {
   }
 
   // type === "places"
-  const [{ data: placeRows }, { data: myInteractions }, { data: myPlaces }] = await Promise.all([
+  const [{ data: placeRows }, excludedPlaceIds] = await Promise.all([
     supabase
       .from("places")
       .select(
@@ -152,13 +139,7 @@ export async function GET(request: NextRequest) {
       .in("user_id", followedIds)
       .order("created_at", { ascending: false })
       .limit(PER_LIST_FETCH_LIMIT),
-    supabase.from("item_interactions").select("item_id").eq("user_id", viewer.id),
-    supabase.from("places").select("google_place_id").eq("user_id", viewer.id),
-  ]);
-
-  const excludedPlaceIds = new Set<string>([
-    ...(myInteractions ?? []).map((r) => r.item_id),
-    ...(myPlaces ?? []).map((r) => r.google_place_id),
+    getExcludedPlaceIds(supabase, viewer.id),
   ]);
 
   const candidateByPlaceId = new Map<string, NonNullable<typeof placeRows>[number]>();

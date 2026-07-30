@@ -80,6 +80,34 @@ export const PRICE_LEVEL_LABELS: Record<PlacePriceLevel, string> = {
   very_expensive: "€€€€",
 };
 
+// Editorial fallback shown after the user's own dynamic city labels in the
+// Inspiration Orte tab -- top 10 German cities by population plus common
+// international travel destinations, so there's always something to browse
+// beyond whatever regions the user (or their friends) already have lists
+// for.
+export const CURATED_CITY_LABELS: string[] = [
+  "Berlin",
+  "Hamburg",
+  "München",
+  "Köln",
+  "Frankfurt am Main",
+  "Stuttgart",
+  "Düsseldorf",
+  "Leipzig",
+  "Dortmund",
+  "Essen",
+  "Paris",
+  "London",
+  "New York",
+  "Barcelona",
+  "Rom",
+  "Amsterdam",
+  "Wien",
+  "Lissabon",
+  "Istanbul",
+  "Dubai",
+];
+
 // A user needs at least this many saved places in a region before it counts
 // as "expertise" -- deliberately higher than the 1-item threshold for
 // Filme & Serien, since a single restaurant tip doesn't make someone the

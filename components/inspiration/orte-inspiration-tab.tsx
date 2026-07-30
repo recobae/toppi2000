@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { OrteSearchPanel } from "@/components/orte/orte-search-panel";
@@ -12,10 +12,7 @@ import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interact
 import { savePlaceToRegion, updatePlaceNote } from "@/lib/place-items";
 import type { PlaceSearchResult } from "@/lib/google-places";
 import type { CityPlaceRecommendations } from "@/lib/recommendations";
-
-// Shown to guests (no account = no home city / own region lists yet) so the
-// Orte tab still has something browsable instead of sitting empty.
-const GUEST_DEFAULT_CITIES = ["Berlin", "London", "München", "New York"];
+import { CURATED_CITY_LABELS } from "@/lib/places";
 
 type NotePrompt = { place: PlaceSearchResult; region: string };
 
@@ -35,10 +32,13 @@ export function OrteInspirationTab({
   const [pendingPlaceId, setPendingPlaceId] = useState<string | null>(null);
   const [notePrompt, setNotePrompt] = useState<NotePrompt | null>(null);
   const [showDetailsFor, setShowDetailsFor] = useState<PlaceSearchResult | null>(null);
+  const [exhausted, setExhausted] = useState(false);
+  const cityLimitRef = useRef(12);
+  const isReloadingRef = useRef(false);
 
   useEffect(() => {
     if (!user) {
-      setSelectedCity(GUEST_DEFAULT_CITIES[0]);
+      setSelectedCity(CURATED_CITY_LABELS[0]);
       return;
     }
     const supabase = createClient();
@@ -56,23 +56,28 @@ export function OrteInspirationTab({
     })();
   }, [user]);
 
-  const loadCityRecommendations = useCallback(async (city: string) => {
+  const loadCityRecommendations = useCallback(async (city: string, limit: number) => {
     setIsLoadingCity(true);
     try {
-      const response = await fetch(`/api/city-places?city=${encodeURIComponent(city)}`);
+      const response = await fetch(
+        `/api/city-places?city=${encodeURIComponent(city)}&limit=${limit}`,
+      );
       if (!response.ok) {
         setRecommendations({ fromFriends: [], generic: [] });
         return;
       }
       const data: CityPlaceRecommendations = await response.json();
       setRecommendations(data);
+      return data;
     } finally {
       setIsLoadingCity(false);
     }
   }, []);
 
   useEffect(() => {
-    if (selectedCity) loadCityRecommendations(selectedCity);
+    cityLimitRef.current = 12;
+    setExhausted(false);
+    if (selectedCity) loadCityRecommendations(selectedCity, cityLimitRef.current);
   }, [selectedCity, loadCityRecommendations]);
 
   const removeFromRecommendations = (placeId: string) => {
@@ -85,6 +90,26 @@ export function OrteInspirationTab({
         : prev,
     );
   };
+
+  // Every visible suggestion rated -> automatically pull in a bigger batch
+  // (rather than leaving the section empty) as long as this city still has
+  // more places to surface; once a reload comes back empty too, it's a
+  // genuine dead end and stays empty with a clear message instead of
+  // retrying forever.
+  useEffect(() => {
+    if (!recommendations || !selectedCity || isLoadingCity || isReloadingRef.current) return;
+    const total = recommendations.fromFriends.length + recommendations.generic.length;
+    if (total > 0 || exhausted) return;
+
+    isReloadingRef.current = true;
+    const nextLimit = cityLimitRef.current + 24;
+    loadCityRecommendations(selectedCity, nextLimit).then((data) => {
+      cityLimitRef.current = nextLimit;
+      const stillEmpty = !data || data.fromFriends.length + data.generic.length === 0;
+      if (stillEmpty) setExhausted(true);
+      isReloadingRef.current = false;
+    });
+  }, [recommendations, selectedCity, isLoadingCity, exhausted, loadCityRecommendations]);
 
   const handleAdd = async (place: PlaceSearchResult, recommendedByUsernames: string[]) => {
     if (!user || pendingPlaceId || !selectedCity) return;
@@ -123,9 +148,17 @@ export function OrteInspirationTab({
     showToast("Nicht dein Geschmack? Notiert.");
   };
 
-  const allCityLabels = user
+  // Personalized labels (home city + the user's own region lists) always
+  // come first, then the curated fallback fills in the rest -- deduped so a
+  // city the user already has doesn't show up twice.
+  const personalizedLabels = user
     ? [...new Set([homeCity, ...cityLabels].filter((c): c is string => !!c))]
-    : GUEST_DEFAULT_CITIES;
+    : [];
+  const personalizedSet = new Set(personalizedLabels);
+  const allCityLabels = [
+    ...personalizedLabels,
+    ...CURATED_CITY_LABELS.filter((city) => !personalizedSet.has(city)),
+  ];
 
   const renderPlaceRow = (place: PlaceSearchResult, recommendedBy: string[] = []) => {
     const attribution: ListItemRowAttribution[] | undefined =
@@ -213,18 +246,14 @@ export function OrteInspirationTab({
                 recommendations.fromFriends.length === 0 &&
                 recommendations.generic.length === 0 && (
                   <p className="text-sm text-muted-foreground">
-                    Keine Orte-Vorschläge für {selectedCity} gefunden.
+                    {exhausted
+                      ? `Keine weiteren Orte-Vorschläge für ${selectedCity} verfügbar.`
+                      : "Lädt weitere Vorschläge…"}
                   </p>
                 )}
             </>
           )}
         </div>
-      )}
-
-      {allCityLabels.length === 0 && user && (
-        <p className="text-sm text-muted-foreground border-t pt-4">
-          Hinterlege eine Heimatstadt in den Einstellungen, um hier populäre Orte zu sehen.
-        </p>
       )}
 
       {showGuestPrompt && (

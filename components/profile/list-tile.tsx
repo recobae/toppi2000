@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import type { LucideIcon } from "lucide-react";
+import { MapPin, type LucideIcon } from "lucide-react";
 import { ShareListButton } from "@/components/lists/share-list-button";
 
 const SIZES = "(max-width: 640px) 33vw, 20vw";
@@ -12,6 +12,7 @@ export function ListTile({
   itemCount,
   href,
   shareUrl,
+  isHomeCity,
 }: {
   label: string;
   icon: LucideIcon;
@@ -19,6 +20,8 @@ export function ListTile({
   itemCount: number;
   href: string;
   shareUrl: string;
+  /** Marks this tile's list as the user's home city -- shows a pin next to the label instead of a separate line of text elsewhere on the profile. */
+  isHomeCity?: boolean;
 }) {
   const posters = posterUrls.slice(0, 4);
 
@@ -64,6 +67,12 @@ export function ListTile({
           <p className="text-sm font-medium leading-tight line-clamp-1">
             {label}
           </p>
+          {isHomeCity && (
+            <MapPin
+              aria-label="Heimatstadt"
+              className="size-3.5 text-primary shrink-0 fill-current"
+            />
+          )}
           <span className="relative z-10">
             <ShareListButton shareTitle={label} url={shareUrl} iconOnly />
           </span>

@@ -52,6 +52,7 @@ export default function SettingsPage() {
   const [currentHomeCity, setCurrentHomeCity] = useState("");
   const [homeCityMessage, setHomeCityMessage] = useState<string | null>(null);
   const [isSavingHomeCity, setIsSavingHomeCity] = useState(false);
+  const [cityLabels, setCityLabels] = useState<string[]>([]);
 
   const usernameStatus = useUsernameAvailability(username, currentUsername);
   const isEmailProvider = user?.app_metadata?.provider === "email";
@@ -72,11 +73,14 @@ export default function SettingsPage() {
       setUser(currentUser);
       setEmail(currentUser.email ?? "");
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("username, notes_visibility, home_city")
-        .eq("id", currentUser.id)
-        .maybeSingle();
+      const [{ data: profile }, { data: regionRows }] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("username, notes_visibility, home_city")
+          .eq("id", currentUser.id)
+          .maybeSingle(),
+        supabase.from("place_regions").select("region_name").eq("user_id", currentUser.id),
+      ]);
 
       setCurrentUsername(profile?.username ?? null);
       setUsername(profile?.username ?? "");
@@ -85,6 +89,7 @@ export default function SettingsPage() {
       }
       setHomeCity(profile?.home_city ?? "");
       setCurrentHomeCity(profile?.home_city ?? "");
+      setCityLabels([...new Set((regionRows ?? []).map((r) => r.region_name))]);
       setIsLoading(false);
     })();
   }, [router]);
@@ -170,23 +175,21 @@ export default function SettingsPage() {
 
   const handleHomeCitySubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!user || homeCity.trim() === currentHomeCity) return;
+    if (!user || homeCity === currentHomeCity) return;
 
     setIsSavingHomeCity(true);
     setHomeCityMessage(null);
 
     const supabase = createClient();
-    const trimmed = homeCity.trim();
     const { error } = await supabase
       .from("profiles")
-      .update({ home_city: trimmed || null })
+      .update({ home_city: homeCity || null })
       .eq("id", user.id);
 
     if (error) {
       setHomeCityMessage("Heimatstadt konnte nicht gespeichert werden.");
     } else {
-      setCurrentHomeCity(trimmed);
-      setHomeCity(trimmed);
+      setCurrentHomeCity(homeCity);
       setHomeCityMessage("Gespeichert!");
       router.refresh();
     }
@@ -284,31 +287,46 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="text-lg">Heimatstadt</CardTitle>
             <CardDescription>
-              Wird als Pin auf deinem Profil angezeigt und bestimmt den Orte-Feed in Inspiration.
+              Erscheint als Pin neben der passenden Orte-Liste auf deinem Profil und bestimmt
+              den Orte-Feed in Inspiration.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleHomeCitySubmit} className="flex flex-col gap-3">
-              <Input
-                value={homeCity}
-                onChange={(e) => {
-                  setHomeCity(e.target.value);
-                  setHomeCityMessage(null);
-                }}
-                placeholder="z. B. Düsseldorf"
-              />
-              {homeCityMessage && (
-                <p className="text-xs text-muted-foreground">{homeCityMessage}</p>
-              )}
-              <Button
-                type="submit"
-                size="sm"
-                className="w-fit"
-                disabled={homeCity.trim() === currentHomeCity || isSavingHomeCity}
-              >
-                {isSavingHomeCity ? "Wird gespeichert…" : "Speichern"}
-              </Button>
-            </form>
+            {cityLabels.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Lege zuerst eine Orte-Liste an (z. B. über „Ort hinzufügen“ auf deinem Profil),
+                dann kannst du hier eine Heimatstadt auswählen.
+              </p>
+            ) : (
+              <form onSubmit={handleHomeCitySubmit} className="flex flex-col gap-3">
+                <select
+                  value={homeCity}
+                  onChange={(e) => {
+                    setHomeCity(e.target.value);
+                    setHomeCityMessage(null);
+                  }}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="">Keine</option>
+                  {cityLabels.map((city) => (
+                    <option key={city} value={city}>
+                      {city}
+                    </option>
+                  ))}
+                </select>
+                {homeCityMessage && (
+                  <p className="text-xs text-muted-foreground">{homeCityMessage}</p>
+                )}
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="w-fit"
+                  disabled={homeCity === currentHomeCity || isSavingHomeCity}
+                >
+                  {isSavingHomeCity ? "Wird gespeichert…" : "Speichern"}
+                </Button>
+              </form>
+            )}
           </CardContent>
         </Card>
 

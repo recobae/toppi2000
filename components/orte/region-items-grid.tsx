@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
@@ -110,25 +110,50 @@ function AddPlaceRow() {
 function PlaceSuggestionsStrip({ userId, regionName }: { userId: string; regionName: string }) {
   const [recommendations, setRecommendations] = useState<CityPlaceRecommendations | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const [exhausted, setExhausted] = useState(false);
+  const limitRef = useRef(12);
+  const isReloadingRef = useRef(false);
+
+  const load = useCallback(async (limit: number) => {
+    const response = await fetch(
+      `/api/city-places?city=${encodeURIComponent(regionName)}&limit=${limit}`,
+    );
+    if (!response.ok) return null;
+    const data: CityPlaceRecommendations = await response.json();
+    setRecommendations(data);
+    return data;
+  }, [regionName]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const response = await fetch(`/api/city-places?city=${encodeURIComponent(regionName)}`);
-      if (!response.ok || cancelled) return;
-      const data: CityPlaceRecommendations = await response.json();
-      if (!cancelled) setRecommendations(data);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [regionName]);
+    limitRef.current = 12;
+    setExhausted(false);
+    setDismissedIds(new Set());
+    load(limitRef.current);
+  }, [load]);
 
   const allSuggestions = recommendations
     ? [...recommendations.fromFriends.map((entry) => entry.place), ...recommendations.generic]
     : [];
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const visibleSuggestions = allSuggestions.filter((place) => !dismissedIds.has(place.placeId));
+
+  // Every visible suggestion rated -> automatically fetch a bigger batch
+  // instead of leaving the strip empty; a reload that's still empty is a
+  // genuine dead end and the strip just hides.
+  useEffect(() => {
+    if (!recommendations || visibleSuggestions.length > 0 || exhausted || isReloadingRef.current) {
+      return;
+    }
+    isReloadingRef.current = true;
+    const nextLimit = limitRef.current + 24;
+    load(nextLimit).then((data) => {
+      limitRef.current = nextLimit;
+      setDismissedIds(new Set());
+      const stillEmpty = !data || data.fromFriends.length + data.generic.length === 0;
+      if (stillEmpty) setExhausted(true);
+      isReloadingRef.current = false;
+    });
+  }, [recommendations, visibleSuggestions.length, exhausted, load]);
 
   const handleAdd = async (placeId: string) => {
     const place = allSuggestions.find((p) => p.placeId === placeId);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
@@ -63,19 +63,32 @@ function AddItemRow({ category }: { category: SavedCategory }) {
 function MovieSuggestionsStrip({ userId }: { userId: string }) {
   const [suggestions, setSuggestions] = useState<SearchResult[] | null>(null);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const [exhausted, setExhausted] = useState(false);
+  const isReloadingRef = useRef(false);
+
+  const loadSuggestions = useCallback(async () => {
+    const response = await fetch("/api/movie-suggestions");
+    if (!response.ok) return null;
+    const data: { results: SearchResult[] } = await response.json();
+    setSuggestions(data.results);
+    return data.results;
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const response = await fetch("/api/movie-suggestions");
-      if (!response.ok || cancelled) return;
-      const data: { results: SearchResult[] } = await response.json();
-      if (!cancelled) setSuggestions(data.results);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    loadSuggestions();
+  }, [loadSuggestions]);
+
+  // Every visible suggestion rated -> automatically fetch a fresh batch
+  // (exclusion already keeps rated titles out server-side) instead of
+  // leaving the strip empty; once a reload comes back empty too, hide it.
+  useEffect(() => {
+    if (!suggestions || suggestions.length > 0 || exhausted || isReloadingRef.current) return;
+    isReloadingRef.current = true;
+    loadSuggestions().then((fresh) => {
+      if (!fresh || fresh.length === 0) setExhausted(true);
+      isReloadingRef.current = false;
+    });
+  }, [suggestions, exhausted, loadSuggestions]);
 
   const socialProofMap = useSocialProof(
     (suggestions ?? []).map((r) => ({ id: r.id, mediaType: r.mediaType })),

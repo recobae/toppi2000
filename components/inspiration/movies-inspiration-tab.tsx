@@ -252,37 +252,82 @@ export function MoviesInspirationTab({
   const [isLoadingFriendsLikes, setIsLoadingFriendsLikes] = useState(false);
   const [browseItems, setBrowseItems] = useState<SearchResult[]>([]);
   const [isLoadingBrowse, setIsLoadingBrowse] = useState(true);
+  const [isLoadingMoreBrowse, setIsLoadingMoreBrowse] = useState(false);
   const [browsePendingKey, setBrowsePendingKey] = useState<string | null>(null);
   const hasActiveFilter = sortFilter !== null || genreFilter !== null;
 
   const [showGuestModal, setShowGuestModal] = useState(false);
 
-  const fetchBrowse = useCallback(async () => {
-    setIsLoadingBrowse(true);
-    try {
-      const params = new URLSearchParams({ page: "1" });
-      let url: string;
+  const browsePageRef = useRef(1);
+  const browseSeenKeysRef = useRef<Set<string>>(new Set());
+  const isFetchingBrowseRef = useRef(false);
+
+  const browseUrl = useCallback(
+    (page: number) => {
+      const params = new URLSearchParams({ page: String(page) });
       if (hasActiveFilter) {
         params.set("sort", sortFilter ?? "popular");
         if (genreFilter) params.set("genre", genreFilter);
-        url = `/api/discover-movies?${params.toString()}`;
-      } else {
-        url = `/api/trending?${params.toString()}`;
+        return `/api/discover-movies?${params.toString()}`;
       }
-      const response = await fetch(url);
+      return `/api/trending?${params.toString()}`;
+    },
+    [hasActiveFilter, sortFilter, genreFilter],
+  );
+
+  const fetchMoreBrowse = useCallback(async () => {
+    if (isFetchingBrowseRef.current) return;
+    isFetchingBrowseRef.current = true;
+    setIsLoadingMoreBrowse(true);
+    try {
+      const nextPage = browsePageRef.current + 1;
+      const response = await fetch(browseUrl(nextPage));
       if (!response.ok) throw new Error("failed");
       const data: { results: SearchResult[] } = await response.json();
+      browsePageRef.current = nextPage;
+      const fresh = data.results.filter((r) => {
+        const key = `${r.mediaType}-${r.id}`;
+        if (browseSeenKeysRef.current.has(key)) return false;
+        browseSeenKeysRef.current.add(key);
+        return true;
+      });
+      setBrowseItems((prev) => [...prev, ...fresh]);
+    } catch {
+      // leave whatever is already loaded in place
+    } finally {
+      isFetchingBrowseRef.current = false;
+      setIsLoadingMoreBrowse(false);
+    }
+  }, [browseUrl]);
+
+  const fetchBrowse = useCallback(async () => {
+    setIsLoadingBrowse(true);
+    browsePageRef.current = 1;
+    browseSeenKeysRef.current = new Set();
+    try {
+      const response = await fetch(browseUrl(1));
+      if (!response.ok) throw new Error("failed");
+      const data: { results: SearchResult[] } = await response.json();
+      for (const r of data.results) browseSeenKeysRef.current.add(`${r.mediaType}-${r.id}`);
       setBrowseItems(data.results);
     } catch {
       // leave whatever is already loaded in place
     } finally {
       setIsLoadingBrowse(false);
     }
-  }, [hasActiveFilter, sortFilter, genreFilter]);
+  }, [browseUrl]);
 
   useEffect(() => {
     fetchBrowse();
   }, [fetchBrowse]);
+
+  // Every visible suggestion rated -> pull in the next page automatically
+  // instead of leaving the feed empty while more unrated items exist.
+  useEffect(() => {
+    if (!isLoadingBrowse && browseItems.length === 0) {
+      fetchMoreBrowse();
+    }
+  }, [browseItems.length, isLoadingBrowse, fetchMoreBrowse]);
 
   const loadFriendsLikes = useCallback(async () => {
     setIsLoadingFriendsLikes(true);
@@ -583,15 +628,18 @@ export function MoviesInspirationTab({
               {isLoadingBrowse ? (
                 <p className="text-sm text-muted-foreground">Lädt…</p>
               ) : browseItems.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Keine Titel gefunden.</p>
+                <p className="text-sm text-muted-foreground">
+                  {isLoadingMoreBrowse ? "Lädt weitere Vorschläge…" : "Keine Titel gefunden."}
+                </p>
               ) : (
                 <div className="w-full flex flex-col gap-3">
-                  {browseItems.map((result) =>
-                    renderResultRow(result, !hasActiveFilter ? removeFromBrowse : undefined),
-                  )}
+                  {browseItems.map((result) => renderResultRow(result, removeFromBrowse))}
                 </div>
               )}
-              {!hasActiveFilter && !isLoadingBrowse && browseItems.length > 0 && (
+              {isLoadingMoreBrowse && browseItems.length > 0 && (
+                <p className="text-xs text-muted-foreground text-center">Lädt weitere Vorschläge…</p>
+              )}
+              {!isLoadingBrowse && browseItems.length > 0 && (
                 <Button
                   variant="ghost"
                   size="sm"

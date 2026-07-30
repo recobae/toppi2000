@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildSearchResults, type SearchResult, type TmdbTitleLike } from "@/lib/tmdb";
 import { searchPlaces, type PlaceSearchResult } from "@/lib/google-places";
+import { getExcludedMovieKeys, getExcludedPlaceIds } from "@/lib/exclusions";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 const HISTORY_SAMPLE_LIMIT = 20;
@@ -11,31 +12,8 @@ const INFERRED_GENRE_LIMIT = 3;
  * the compact suggestion strips under a user's own Empfohlen-list / Orte-
  * region list -- each surface calls one of these instead of rolling its own
  * feed logic, so "friends first, then generic" and "exclude anything
- * already interacted with" only exist in one place.
+ * already interacted with" only exist in one place (lib/exclusions.ts).
  */
-
-async function getExcludedMovieKeys(
-  supabase: SupabaseClient,
-  userId: string,
-): Promise<Set<string>> {
-  const [{ data: interactions }, { data: topList }, { data: watchlist }] = await Promise.all([
-    supabase
-      .from("item_interactions")
-      .select("item_id, media_type")
-      .eq("user_id", userId)
-      .in("media_type", ["movie", "tv"]),
-    supabase.from("top_list").select("item_id, media_type").eq("user_id", userId),
-    supabase.from("watchlist").select("item_id, media_type").eq("user_id", userId),
-  ]);
-
-  const keys = new Set<string>();
-  for (const rows of [interactions, topList, watchlist]) {
-    for (const row of rows ?? []) {
-      keys.add(`${row.media_type}-${row.item_id}`);
-    }
-  }
-  return keys;
-}
 
 async function getFollowedIds(supabase: SupabaseClient, userId: string): Promise<string[]> {
   const { data } = await supabase
@@ -177,10 +155,8 @@ export async function getCityPlaceRecommendations(
 ): Promise<CityPlaceRecommendations> {
   const followedIds = userId ? await getFollowedIds(supabase, userId) : [];
 
-  const [{ data: myPlaces }, { data: regionRows }] = await Promise.all([
-    userId
-      ? supabase.from("places").select("google_place_id").eq("user_id", userId)
-      : Promise.resolve({ data: [] as { google_place_id: string }[] }),
+  const [excludedPlaceIds, { data: regionRows }] = await Promise.all([
+    userId ? getExcludedPlaceIds(supabase, userId) : Promise.resolve(new Set<string>()),
     followedIds.length > 0
       ? supabase
           .from("place_regions")
@@ -190,7 +166,6 @@ export async function getCityPlaceRecommendations(
       : Promise.resolve({ data: [] as { id: string; user_id: string }[] }),
   ]);
 
-  const excludedPlaceIds = new Set((myPlaces ?? []).map((row) => row.google_place_id));
   const regionIds = (regionRows ?? []).map((row) => row.id);
 
   let fromFriends: CityPlaceRecommendations["fromFriends"] = [];

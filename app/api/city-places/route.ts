@@ -12,6 +12,8 @@ export async function GET(request: NextRequest) {
   if (!city) {
     return NextResponse.json({ error: "Ungültige Anfrage" }, { status: 400 });
   }
+  const limitParam = request.nextUrl.searchParams.get("limit");
+  const limit = Math.min(60, Math.max(1, parseInt(limitParam ?? "12", 10) || 12));
 
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
   if (!apiKey) {
@@ -30,6 +32,7 @@ export async function GET(request: NextRequest) {
     user?.id ?? null,
     city,
     apiKey,
+    limit,
   );
   return NextResponse.json(recommendations);
 }
