@@ -12,6 +12,10 @@ import { savePlaceToRegion, updatePlaceNote } from "@/lib/place-items";
 import type { PlaceSearchResult } from "@/lib/google-places";
 import type { CityPlaceRecommendations } from "@/lib/recommendations";
 
+// Shown to guests (no account = no home city / own region lists yet) so the
+// Orte tab still has something browsable instead of sitting empty.
+const GUEST_DEFAULT_CITIES = ["Berlin", "London", "München", "New York"];
+
 export function OrteInspirationTab({
   user,
   showToast,
@@ -31,7 +35,12 @@ export function OrteInspirationTab({
   const { savedIds, markSaved } = usePlaceSavedState(user?.id);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      // Guests browse a small fixed set of popular cities -- no account
+      // means no home city or own region lists to default to.
+      setSelectedCity(GUEST_DEFAULT_CITIES[0]);
+      return;
+    }
     const supabase = createClient();
     (async () => {
       const [{ data: profile }, { data: regionRows }] = await Promise.all([
@@ -82,7 +91,9 @@ export function OrteInspirationTab({
     }
   };
 
-  const allCityLabels = [...new Set([homeCity, ...cityLabels].filter((c): c is string => !!c))];
+  const allCityLabels = user
+    ? [...new Set([homeCity, ...cityLabels].filter((c): c is string => !!c))]
+    : GUEST_DEFAULT_CITIES;
 
   return (
     <div className="w-full flex flex-col gap-4">

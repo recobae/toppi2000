@@ -31,7 +31,7 @@ export function GuestProfileCta({ variant }: { variant: "tile" | "button" }) {
           className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground text-sm font-medium px-4 py-2 hover:bg-primary/90 transition-colors min-h-11"
         >
           <UserPlus className="size-4" />
-          Erstelle dein eigenes Profil
+          Teile deine Empfehlungen
         </button>
       )}
 

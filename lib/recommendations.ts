@@ -164,19 +164,23 @@ export type CityPlaceRecommendations = {
  * Same query for the Inspiration Orte tab's per-city feed AND the compact
  * widget under a user's own region list: friends who already added
  * something in this city surface first, then generic popular places fill
- * the rest.
+ * the rest. `userId` is null for guests -- the app is browsable without an
+ * account, just without the "friends" half (there's no follow graph to draw
+ * on without an identity), so guests still get the generic listing.
  */
 export async function getCityPlaceRecommendations(
   supabase: SupabaseClient,
-  userId: string,
+  userId: string | null,
   city: string,
   apiKey: string,
   limit = 12,
 ): Promise<CityPlaceRecommendations> {
-  const followedIds = await getFollowedIds(supabase, userId);
+  const followedIds = userId ? await getFollowedIds(supabase, userId) : [];
 
   const [{ data: myPlaces }, { data: regionRows }] = await Promise.all([
-    supabase.from("places").select("google_place_id").eq("user_id", userId),
+    userId
+      ? supabase.from("places").select("google_place_id").eq("user_id", userId)
+      : Promise.resolve({ data: [] as { google_place_id: string }[] }),
     followedIds.length > 0
       ? supabase
           .from("place_regions")

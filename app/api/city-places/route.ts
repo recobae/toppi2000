@@ -22,10 +22,14 @@ export async function GET(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ fromFriends: [], generic: [] });
-  }
 
-  const recommendations = await getCityPlaceRecommendations(supabase, user.id, city, apiKey);
+  // Guests still get the generic half of the feed -- only "friends who
+  // added something here" needs an actual account/follow graph.
+  const recommendations = await getCityPlaceRecommendations(
+    supabase,
+    user?.id ?? null,
+    city,
+    apiKey,
+  );
   return NextResponse.json(recommendations);
 }
