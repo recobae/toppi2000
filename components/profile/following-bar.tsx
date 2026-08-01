@@ -59,6 +59,23 @@ export function FollowingBar({
   // the ring disappears immediately without waiting for a full page refetch.
   const [locallyViewedIds, setLocallyViewedIds] = useState<Set<string>>(new Set());
 
+  const markViewed = (username: string) => {
+    const friend = followingProfiles.find((f) => f.username === username);
+    if (friend) setLocallyViewedIds((prev) => new Set(prev).add(friend.id));
+  };
+
+  // Instagram-style: once a person's last slide finishes, jump straight to
+  // the next friend who still has an unseen story instead of closing the
+  // whole viewer, so everyone with an active story can be gone through in
+  // one pass.
+  const openNextStory = (afterUsername: string) => {
+    markViewed(afterUsername);
+    const next = followingProfiles.find(
+      (f) => f.hasUnseenStory && !locallyViewedIds.has(f.id) && f.username !== afterUsername,
+    );
+    setStoryUsername(next?.username ?? null);
+  };
+
   if (followingProfiles.length === 0) {
     return (
       <div className="w-full flex items-center gap-3">
@@ -133,12 +150,10 @@ export function FollowingBar({
         <StoryViewer
           username={storyUsername}
           onClose={() => {
-            const viewedFriend = followingProfiles.find((f) => f.username === storyUsername);
-            if (viewedFriend) {
-              setLocallyViewedIds((prev) => new Set(prev).add(viewedFriend.id));
-            }
+            markViewed(storyUsername);
             setStoryUsername(null);
           }}
+          onNext={() => openNextStory(storyUsername)}
         />
       )}
     </div>

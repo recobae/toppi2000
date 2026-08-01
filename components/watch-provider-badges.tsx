@@ -111,7 +111,10 @@ export function WatchProviderBadges({
         )}
         <button
           type="button"
-          onClick={() => setIsOpen(true)}
+          onClick={(event) => {
+            event.stopPropagation();
+            setIsOpen(true);
+          }}
           className="inline-flex items-center text-[11px] text-primary underline-offset-2 hover:underline min-h-[44px] px-2 -mx-2"
         >
           Weitere Optionen anzeigen
@@ -121,7 +124,10 @@ export function WatchProviderBadges({
       {isOpen && (
         <div
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4"
-          onClick={() => setIsOpen(false)}
+          onClick={(event) => {
+            event.stopPropagation();
+            setIsOpen(false);
+          }}
         >
           <div
             role="dialog"
@@ -134,7 +140,10 @@ export function WatchProviderBadges({
               <p className="text-sm font-medium leading-tight">{title}</p>
               <button
                 type="button"
-                onClick={() => setIsOpen(false)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setIsOpen(false);
+                }}
                 aria-label="Schließen"
                 className="h-11 w-11 flex items-center justify-center rounded-md hover:bg-accent shrink-0"
               >

@@ -219,6 +219,7 @@ export default async function ProfilePage({
         { data: recentTopList },
         { data: recentWatchlist },
         { data: recentPlaces },
+        { data: recentStoryEvents },
         { data: viewRows },
       ] = await Promise.all([
         supabase.from("profiles").select("id, username").in("id", followedIds),
@@ -239,6 +240,11 @@ export default async function ProfilePage({
           .gte("created_at", since),
         supabase
           .from("places")
+          .select("user_id, created_at")
+          .in("user_id", followedIds)
+          .gte("created_at", since),
+        supabase
+          .from("story_events")
           .select("user_id, created_at")
           .in("user_id", followedIds)
           .gte("created_at", since),
@@ -266,7 +272,7 @@ export default async function ProfilePage({
       }
 
       const latestActivityByUserId = new Map<string, string>();
-      for (const rows of [recentTopList, recentWatchlist, recentPlaces]) {
+      for (const rows of [recentTopList, recentWatchlist, recentPlaces, recentStoryEvents]) {
         for (const row of rows ?? []) {
           const existing = latestActivityByUserId.get(row.user_id);
           if (!existing || row.created_at > existing) {

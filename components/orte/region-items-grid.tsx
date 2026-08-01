@@ -10,7 +10,7 @@ import { NoteModal } from "@/components/lists/note-modal";
 import { PlaceDetailModal } from "@/components/orte/place-detail-modal";
 import { PlaceItemRow } from "@/components/items/list-item-row";
 import { removePlace, savePlaceToRegion, updatePlaceNote, type PlaceStatus } from "@/lib/place-items";
-import { setInteractionWithCredits, removeInteractionWithCredits } from "@/lib/interaction-credits";
+import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
 import {
   PLACE_CATEGORIES,
   PLACE_CATEGORY_ICONS,
@@ -384,7 +384,6 @@ function VisitorRegionList({
   const [pendingPlaceId, setPendingPlaceId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<PlaceCategory | null>(null);
   const [showSavedOnly, setShowSavedOnly] = useState(false);
-  const [likedKeys, setLikedKeys] = useState<Set<string>>(new Set());
   const [notePrompt, setNotePrompt] = useState<RegionPlaceItem | null>(null);
   const [showDetailsFor, setShowDetailsFor] = useState<RegionPlaceItem | null>(null);
 
@@ -395,78 +394,81 @@ function VisitorRegionList({
 
   useEffect(() => {
     const supabase = createClient();
-    (async () => {
-      const {
-        data: { user: currentUser },
-      } = await supabase.auth.getUser();
-      setUser(currentUser);
-      if (!currentUser) return;
-      const { data } = await supabase
-        .from("item_interactions")
-        .select("item_id")
-        .eq("user_id", currentUser.id)
-        .eq("interaction_type", "like")
-        .eq("media_type", "place");
-      setLikedKeys(new Set((data ?? []).map((row) => row.item_id)));
-    })();
+    supabase.auth.getUser().then(({ data }) => setUser(data.user));
   }, []);
 
-  const handleToggleLike = async (item: RegionPlaceItem) => {
-    if (!user) return;
-    const supabase = createClient();
-    const isLiked = likedKeys.has(item.placeId);
-    if (isLiked) {
-      await removeInteractionWithCredits(supabase, user.id, { itemId: item.placeId, mediaType: "place" });
-      setLikedKeys((prev) => {
-        const next = new Set(prev);
-        next.delete(item.placeId);
-        return next;
-      });
-    } else {
-      await setInteractionWithCredits(
-        supabase,
-        user.id,
-        { itemId: item.placeId, mediaType: "place" },
-        "like",
-        [ownerId],
-      );
-      setLikedKeys((prev) => new Set(prev).add(item.placeId));
-    }
-  };
-
-  const handleAdd = async (item: RegionPlaceItem) => {
+  // Rating a place on someone else's list behaves exactly like rating an
+  // unrated Orte feed item -- Ja/Nein/Merken -- except the write target and
+  // credited owner are this list's owner instead of nobody. Ja and Merken
+  // both resolve the viewer's own region via reverse-geocoding, same as the
+  // Inspiration Orte tab; only the status (and whether a like credit is
+  // recorded) differs.
+  const handleSave = async (item: RegionPlaceItem, status: PlaceStatus) => {
     if (!user || pendingPlaceId) return;
     setPendingPlaceId(item.placeId);
     const supabase = createClient();
 
     try {
+      if (status === "recommended") {
+        await setInteractionWithCredits(
+          supabase,
+          user.id,
+          { itemId: item.placeId, mediaType: "place" },
+          "like",
+          [ownerId],
+        );
+      }
+
       const geoResponse = await fetch(`/api/reverse-geocode?lat=${item.lat}&lng=${item.lng}`);
       const geoData: { region: string | null } = await geoResponse.json();
       const region = geoData.region ?? "Sonstige Orte";
 
-      const { error } = await savePlaceToRegion(supabase, user.id, region, {
-        placeId: item.placeId,
-        name: item.name,
-        address: item.address,
-        lat: item.lat,
-        lng: item.lng,
-        category: item.category,
-        photoUrl: item.photoUrl,
-        googleMapsUri: item.googleMapsUri,
-        rating: item.rating,
-        userRatingCount: item.userRatingCount,
-        priceLevel: item.priceLevel,
-        phoneNumber: item.phoneNumber,
-        websiteUri: item.websiteUri,
-      });
+      const { error } = await savePlaceToRegion(
+        supabase,
+        user.id,
+        region,
+        {
+          placeId: item.placeId,
+          name: item.name,
+          address: item.address,
+          lat: item.lat,
+          lng: item.lng,
+          category: item.category,
+          photoUrl: item.photoUrl,
+          googleMapsUri: item.googleMapsUri,
+          rating: item.rating,
+          userRatingCount: item.userRatingCount,
+          priceLevel: item.priceLevel,
+          phoneNumber: item.phoneNumber,
+          websiteUri: item.websiteUri,
+        },
+        ownerId,
+        status,
+      );
 
       if (!error) {
+        await recordInspiredCredits(supabase, user.id, [ownerId], {
+          itemId: item.placeId,
+          mediaType: "place",
+        });
         showToast(`Zu „${region}“ hinzugefügt`);
         setNotePrompt(item);
       }
     } finally {
       setPendingPlaceId(null);
     }
+  };
+
+  const handleDislike = async (item: RegionPlaceItem) => {
+    if (!user) return;
+    const supabase = createClient();
+    await setInteractionWithCredits(
+      supabase,
+      user.id,
+      { itemId: item.placeId, mediaType: "place" },
+      "dislike",
+      [ownerId],
+    );
   };
 
   const availableCategories = [...new Set(items.map((item) => item.category))];
@@ -582,15 +584,17 @@ function VisitorRegionList({
         priceLevel={item.priceLevel}
         phoneNumber={item.phoneNumber}
         websiteUri={item.websiteUri}
+        note={item.note}
         onOpenDetails={() => setShowDetailsFor(item)}
         isLoggedIn={!!user}
         onGuestClick={() => setShowGuestPrompt(true)}
         actions={{
-          variant: "foreign",
-          isLiked: likedKeys.has(item.placeId),
-          onToggleLike: () => handleToggleLike(item),
-          onAdd: () => handleAdd(item),
-          addLabel: "Hinzufügen",
+          variant: "rate",
+          pending: pendingPlaceId === item.placeId,
+          onLike: () => handleSave(item, "recommended"),
+          onDislike: () => handleDislike(item),
+          onAdd: () => handleSave(item, "want_to_visit"),
+          addLabel: "Merken",
         }}
       />
     );

@@ -16,7 +16,7 @@ export async function hasActiveStory(
   userId: string,
   since: string = storyWindowSince(),
 ): Promise<boolean> {
-  const [{ count: topListCount }, { count: watchlistCount }, { count: placesCount }] =
+  const [{ count: topListCount }, { count: watchlistCount }, { count: placesCount }, { count: storyEventCount }] =
     await Promise.all([
       supabase
         .from("top_list")
@@ -33,6 +33,13 @@ export async function hasActiveStory(
         .select("id", { count: "exact", head: true })
         .eq("user_id", userId)
         .gte("created_at", since),
+      supabase
+        .from("story_events")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .gte("created_at", since),
     ]);
-  return (topListCount ?? 0) + (watchlistCount ?? 0) + (placesCount ?? 0) > 0;
+  return (
+    (topListCount ?? 0) + (watchlistCount ?? 0) + (placesCount ?? 0) + (storyEventCount ?? 0) > 0
+  );
 }

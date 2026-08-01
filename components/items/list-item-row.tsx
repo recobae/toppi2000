@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { Ban, Check, Heart, Pencil, Plus, Star, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,13 @@ export type ListItemRowAttribution = { label: string; names: string[]; className
 
 export type ListItemRowActions =
   | {
-      /** Unrated feed item: Ja / Nein / Watchlist (movies) or Ja / Nein / Merken (places). */
+      /**
+       * Unrated item: Ja / Nein / Watchlist (movies) or Ja / Nein / Merken
+       * (places). Used both for feed items with no owner yet, and -- with
+       * the write target swapped to the viewer's own lists -- for items on
+       * someone else's list ("foreign" browsing), so the two behave
+       * identically instead of a reduced action set.
+       */
       variant: "rate";
       onLike: () => void;
       onDislike: () => void;
@@ -46,15 +52,8 @@ export type ListItemRowActions =
       onRemove: () => void;
       isRemoving?: boolean;
       favorite?: { isFavorite: boolean; onToggle: () => void; pending?: boolean };
-    }
-  | {
-      /** Item shown on someone else's profile/list. */
-      variant: "foreign";
-      isLiked: boolean;
-      onToggleLike: () => void;
-      onAdd: () => void;
-      addLabel?: string;
-      likePending?: boolean;
+      /** Watchlist-only: switch straight to Like/Dislike without removing first. */
+      statusTransition?: { onLike: () => void; onDislike: () => void; pending?: boolean };
     }
   | {
       /** Plain search results with no owner/friend context (e.g. Orte search) -- a single save toggle. */
@@ -79,7 +78,26 @@ function AttributionLines({ attribution }: { attribution?: ListItemRowAttributio
   );
 }
 
-function ActionBar({ actions, guard }: { actions: ListItemRowActions; guard: (fn: () => void) => void }) {
+/**
+ * Exported so surfaces outside the row itself -- currently the StoryViewer's
+ * embedded rate prompt -- can render the exact same Ja/Nein/Add bar rather
+ * than reimplementing it.
+ */
+export function ActionBar({
+  actions,
+  guard,
+}: {
+  actions: ListItemRowActions;
+  guard: (fn: () => void) => void;
+}) {
+  // Every button here must stop propagation -- ListItemRow's Card wraps the
+  // whole row in a click-to-open-details handler, and these buttons sit
+  // inside it.
+  const stop = (fn: () => void) => (event: MouseEvent) => {
+    event.stopPropagation();
+    guard(fn);
+  };
+
   if (actions.variant === "rate") {
     return (
       <div className="mt-auto pt-2 flex items-center gap-1.5">
@@ -87,7 +105,7 @@ function ActionBar({ actions, guard }: { actions: ListItemRowActions; guard: (fn
           type="button"
           aria-label="Ja"
           disabled={actions.pending}
-          onClick={() => guard(actions.onLike)}
+          onClick={stop(actions.onLike)}
           className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-green-600 hover:bg-green-600/10 transition-colors disabled:opacity-50"
         >
           <Heart className="size-4" />
@@ -96,7 +114,7 @@ function ActionBar({ actions, guard }: { actions: ListItemRowActions; guard: (fn
           type="button"
           aria-label="Nein"
           disabled={actions.pending}
-          onClick={() => guard(actions.onDislike)}
+          onClick={stop(actions.onDislike)}
           className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
         >
           <Ban className="size-4" />
@@ -104,7 +122,7 @@ function ActionBar({ actions, guard }: { actions: ListItemRowActions; guard: (fn
         <button
           type="button"
           disabled={actions.pending}
-          onClick={() => guard(actions.onAdd)}
+          onClick={stop(actions.onAdd)}
           className="ml-auto flex items-center gap-1 h-8 px-2.5 rounded-full bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
           <Plus className="size-3.5" />
@@ -116,13 +134,13 @@ function ActionBar({ actions, guard }: { actions: ListItemRowActions; guard: (fn
 
   if (actions.variant === "owned") {
     return (
-      <div className="mt-auto pt-2 flex items-center gap-1.5">
+      <div className="mt-auto pt-2 flex items-center gap-1.5 flex-wrap">
         {actions.favorite && (
           <button
             type="button"
             aria-label={actions.favorite.isFavorite ? "Favorit entfernen" : "Als Favorit markieren"}
             disabled={actions.favorite.pending}
-            onClick={actions.favorite.onToggle}
+            onClick={stop(actions.favorite.onToggle)}
             className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors disabled:opacity-50 ${
               actions.favorite.isFavorite
                 ? "border-amber-500 text-amber-500"
@@ -132,11 +150,33 @@ function ActionBar({ actions, guard }: { actions: ListItemRowActions; guard: (fn
             <Star className={`size-4 ${actions.favorite.isFavorite ? "fill-current" : ""}`} />
           </button>
         )}
+        {actions.statusTransition && (
+          <>
+            <button
+              type="button"
+              aria-label="Zu Gefällt mir"
+              disabled={actions.statusTransition.pending}
+              onClick={stop(actions.statusTransition.onLike)}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-green-600 hover:bg-green-600/10 transition-colors disabled:opacity-50"
+            >
+              <Heart className="size-4" />
+            </button>
+            <button
+              type="button"
+              aria-label="Zu Gefällt mir nicht"
+              disabled={actions.statusTransition.pending}
+              onClick={stop(actions.statusTransition.onDislike)}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+            >
+              <Ban className="size-4" />
+            </button>
+          </>
+        )}
         <Button
           variant="outline"
           size="sm"
           aria-label="Notiz bearbeiten"
-          onClick={actions.onEditNote}
+          onClick={stop(actions.onEditNote)}
         >
           <Pencil />
         </Button>
@@ -145,39 +185,11 @@ function ActionBar({ actions, guard }: { actions: ListItemRowActions; guard: (fn
           size="sm"
           className="ml-auto"
           disabled={actions.isRemoving}
-          onClick={actions.onRemove}
+          onClick={stop(actions.onRemove)}
         >
           <X />
           {actions.isRemoving ? "Wird entfernt…" : "Entfernen"}
         </Button>
-      </div>
-    );
-  }
-
-  if (actions.variant === "foreign") {
-    return (
-      <div className="mt-auto pt-2 flex items-center gap-1.5">
-        <button
-          type="button"
-          aria-label={actions.isLiked ? "Gefällt mir entfernen" : "Gefällt mir"}
-          disabled={actions.likePending}
-          onClick={() => guard(actions.onToggleLike)}
-          className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors disabled:opacity-50 ${
-            actions.isLiked
-              ? "border-green-600 bg-green-600/10 text-green-600"
-              : "border-input text-green-600 hover:bg-green-600/10"
-          }`}
-        >
-          <Heart className={`size-4 ${actions.isLiked ? "fill-current" : ""}`} />
-        </button>
-        <button
-          type="button"
-          onClick={() => guard(actions.onAdd)}
-          className="ml-auto flex items-center gap-1 h-8 px-2.5 rounded-full bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="size-3.5" />
-          {actions.addLabel ?? "Hinzufügen"}
-        </button>
       </div>
     );
   }
@@ -187,7 +199,7 @@ function ActionBar({ actions, guard }: { actions: ListItemRowActions; guard: (fn
       <button
         type="button"
         disabled={actions.pending}
-        onClick={() => guard(actions.onToggleSave)}
+        onClick={stop(actions.onToggleSave)}
         className={`w-full flex items-center justify-center gap-1.5 h-9 rounded-md text-sm font-medium transition-colors disabled:opacity-50 ${
           actions.isSaved
             ? "border border-input hover:bg-accent"
@@ -238,12 +250,27 @@ export function ListItemRow({
   };
 
   return (
-    <Card className="overflow-hidden flex gap-3 p-3">
-      <button
-        type="button"
-        onClick={onOpenDetails}
-        aria-label={`Details zu ${imageAlt} anzeigen`}
-        disabled={!onOpenDetails}
+    <Card
+      onClick={onOpenDetails}
+      role={onOpenDetails ? "button" : undefined}
+      tabIndex={onOpenDetails ? 0 : undefined}
+      onKeyDown={
+        onOpenDetails
+          ? (event) => {
+              // Only react when the Card itself is focused -- otherwise Enter/Space
+              // on a nested action button would bubble here and double-fire.
+              if (event.target !== event.currentTarget) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onOpenDetails();
+              }
+            }
+          : undefined
+      }
+      aria-label={onOpenDetails ? `Details zu ${imageAlt} anzeigen` : undefined}
+      className={`overflow-hidden flex gap-3 p-3 ${onOpenDetails ? "cursor-pointer" : ""}`}
+    >
+      <div
         className={`relative w-16 shrink-0 rounded-md overflow-hidden bg-muted ${
           imageAspect === "4/3" ? "aspect-[4/3]" : "aspect-[2/3]"
         }`}
@@ -253,7 +280,7 @@ export function ListItemRow({
         ) : (
           imageFallback
         )}
-      </button>
+      </div>
       <div className="flex-1 min-w-0 flex flex-col gap-1">
         <p className="text-sm font-medium leading-tight line-clamp-2">{title}</p>
         {meta}

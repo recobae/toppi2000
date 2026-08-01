@@ -8,18 +8,14 @@ import { createClient } from "@/lib/supabase/client";
 import { MovieItemRow } from "@/components/items/list-item-row";
 import { MovieDetailModal } from "@/components/movie-info";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
-import { CategoryPickerModal } from "@/components/inspo/category-picker-modal";
 import {
   removeFromCategory,
   saveToCategory,
   setFavorite,
   updateNote,
 } from "@/lib/saved-items";
-import {
-  setInteractionWithCredits,
-  removeInteractionWithCredits,
-  recordInspiredCredits,
-} from "@/lib/interaction-credits";
+import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
+import { postWatchlistTransitionStoryEvent, type WatchlistTransition } from "@/lib/story-events";
 import { CATEGORY_LABELS, type SavedCategory } from "@/lib/categories";
 import { NOTE_PLACEHOLDERS } from "@/lib/notes";
 import { NoteModal } from "@/components/lists/note-modal";
@@ -178,6 +174,7 @@ function OwnerCategoryList({
   const [showNoteModalFor, setShowNoteModalFor] = useState<CategoryListItem | null>(null);
   const [showDetailsFor, setShowDetailsFor] = useState<CategoryListItem | null>(null);
   const [favoritePendingId, setFavoritePendingId] = useState<string | null>(null);
+  const [transitionPendingId, setTransitionPendingId] = useState<string | null>(null);
 
   const handleRemove = async (item: CategoryListItem) => {
     setRemovingId(item.id);
@@ -187,6 +184,40 @@ function OwnerCategoryList({
       setItems((prev) => prev.filter((existing) => existing.id !== item.id));
     }
     setRemovingId(null);
+  };
+
+  // Watchlist-only: switch straight to Like/Dislike without removing first,
+  // then post the "Watchlist -> Gefällt mir(nicht)" story event.
+  const handleStatusTransition = async (item: CategoryListItem, transition: WatchlistTransition) => {
+    setTransitionPendingId(item.id);
+    const supabase = createClient();
+    const { error } = await removeFromCategory(supabase, "watchlist", userId, item.itemId, item.mediaType);
+    if (!error) {
+      if (transition === "like") {
+        await saveToCategory(supabase, "top_list", userId, {
+          itemId: item.itemId,
+          mediaType: item.mediaType,
+          title: item.title,
+          imageUrl: item.imageUrl,
+          year: item.year,
+        });
+      } else {
+        await setInteractionWithCredits(
+          supabase,
+          userId,
+          { itemId: String(item.itemId), mediaType: item.mediaType },
+          "dislike",
+        );
+      }
+      await postWatchlistTransitionStoryEvent(supabase, userId, transition, {
+        itemId: item.itemId,
+        mediaType: item.mediaType,
+        title: item.title,
+        imageUrl: item.imageUrl,
+      });
+      setItems((prev) => prev.filter((existing) => existing.id !== item.id));
+    }
+    setTransitionPendingId(null);
   };
 
   const handleSaveNote = async (item: CategoryListItem, note: string | null) => {
@@ -248,6 +279,14 @@ function OwnerCategoryList({
                     pending: favoritePendingId === item.id,
                   }
                 : undefined,
+            statusTransition:
+              category === "watchlist"
+                ? {
+                    onLike: () => handleStatusTransition(item, "like"),
+                    onDislike: () => handleStatusTransition(item, "dislike"),
+                    pending: transitionPendingId === item.id,
+                  }
+                : undefined,
           }}
         />
       ))}
@@ -294,9 +333,7 @@ function VisitorCategoryList({
   const [user, setUser] = useState<User | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
-  const [likedKeys, setLikedKeys] = useState<Set<string>>(new Set());
-  const [likePendingKey, setLikePendingKey] = useState<string | null>(null);
-  const [pickerFor, setPickerFor] = useState<CategoryListItem | null>(null);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [notePrompt, setNotePrompt] = useState<{ item: CategoryListItem; category: SavedCategory } | null>(null);
   const [showDetailsFor, setShowDetailsFor] = useState<CategoryListItem | null>(null);
 
@@ -307,57 +344,29 @@ function VisitorCategoryList({
 
   useEffect(() => {
     const supabase = createClient();
-    (async () => {
-      const {
-        data: { user: currentUser },
-      } = await supabase.auth.getUser();
-      setUser(currentUser);
-      if (!currentUser) return;
-      const { data } = await supabase
-        .from("item_interactions")
-        .select("item_id, media_type")
-        .eq("user_id", currentUser.id)
-        .eq("interaction_type", "like")
-        .in("media_type", ["movie", "tv"]);
-      setLikedKeys(new Set((data ?? []).map((row) => `${row.media_type}-${row.item_id}`)));
-    })();
+    supabase.auth.getUser().then(({ data }) => setUser(data.user));
   }, []);
 
   const socialProofMap = useSocialProof(items.map((item) => ({ id: item.itemId, mediaType: item.mediaType })));
 
-  const handleToggleLike = async (item: CategoryListItem) => {
+  // Rating a title on someone else's list behaves exactly like rating an
+  // unrated feed item -- Ja/Nein/Watchlist -- except the write target and
+  // credited owner are this list's owner instead of nobody.
+  const handleLike = async (item: CategoryListItem) => {
     if (!user) return;
     const key = `${item.mediaType}-${item.itemId}`;
-    setLikePendingKey(key);
+    setPendingKey(key);
     const supabase = createClient();
-    const isLiked = likedKeys.has(key);
-    if (isLiked) {
-      await removeInteractionWithCredits(supabase, user.id, { itemId: String(item.itemId), mediaType: item.mediaType });
-      setLikedKeys((prev) => {
-        const next = new Set(prev);
-        next.delete(key);
-        return next;
-      });
-    } else {
-      await setInteractionWithCredits(
-        supabase,
-        user.id,
-        { itemId: String(item.itemId), mediaType: item.mediaType },
-        "like",
-        [ownerId],
-      );
-      setLikedKeys((prev) => new Set(prev).add(key));
-    }
-    setLikePendingKey(null);
-  };
-
-  const handleAdd = async (item: CategoryListItem, targetCategory: SavedCategory) => {
-    if (!user) return;
-    setPickerFor(null);
-    const supabase = createClient();
+    await setInteractionWithCredits(
+      supabase,
+      user.id,
+      { itemId: String(item.itemId), mediaType: item.mediaType },
+      "like",
+      [ownerId],
+    );
     const { error } = await saveToCategory(
       supabase,
-      targetCategory,
+      "top_list",
       user.id,
       { itemId: item.itemId, mediaType: item.mediaType, title: item.title, imageUrl: item.imageUrl, year: item.year },
       ownerId,
@@ -367,11 +376,48 @@ function VisitorCategoryList({
         itemId: String(item.itemId),
         mediaType: item.mediaType,
       });
-      showToast(`Zu ${CATEGORY_LABELS[targetCategory]} hinzugefügt`);
-      setNotePrompt({ item, category: targetCategory });
-    } else {
-      showToast("Aktion fehlgeschlagen");
+      showToast(`Zu ${CATEGORY_LABELS.top_list} hinzugefügt`);
+      setNotePrompt({ item, category: "top_list" });
     }
+    setPendingKey(null);
+  };
+
+  const handleDislike = async (item: CategoryListItem) => {
+    if (!user) return;
+    const key = `${item.mediaType}-${item.itemId}`;
+    setPendingKey(key);
+    const supabase = createClient();
+    await setInteractionWithCredits(
+      supabase,
+      user.id,
+      { itemId: String(item.itemId), mediaType: item.mediaType },
+      "dislike",
+      [ownerId],
+    );
+    setPendingKey(null);
+  };
+
+  const handleWatchlist = async (item: CategoryListItem) => {
+    if (!user) return;
+    const key = `${item.mediaType}-${item.itemId}`;
+    setPendingKey(key);
+    const supabase = createClient();
+    const { error } = await saveToCategory(
+      supabase,
+      "watchlist",
+      user.id,
+      { itemId: item.itemId, mediaType: item.mediaType, title: item.title, imageUrl: item.imageUrl, year: item.year },
+      ownerId,
+    );
+    if (!error) {
+      await recordInspiredCredits(supabase, user.id, [ownerId], {
+        itemId: String(item.itemId),
+        mediaType: item.mediaType,
+      });
+      showToast(`Zu ${CATEGORY_LABELS.watchlist} hinzugefügt`);
+      setNotePrompt({ item, category: "watchlist" });
+    }
+    setPendingKey(null);
   };
 
   if (items.length === 0) {
@@ -405,23 +451,15 @@ function VisitorCategoryList({
           isLoggedIn={!!user}
           onGuestClick={() => setShowGuestPrompt(true)}
           actions={{
-            variant: "foreign",
-            isLiked: likedKeys.has(`${item.mediaType}-${item.itemId}`),
-            likePending: likePendingKey === `${item.mediaType}-${item.itemId}`,
-            onToggleLike: () => handleToggleLike(item),
-            onAdd: () => setPickerFor(item),
+            variant: "rate",
+            pending: pendingKey === `${item.mediaType}-${item.itemId}`,
+            onLike: () => handleLike(item),
+            onDislike: () => handleDislike(item),
+            onAdd: () => handleWatchlist(item),
+            addLabel: "Watchlist",
           }}
         />
       ))}
-
-      {pickerFor && (
-        <CategoryPickerModal
-          title={pickerFor.title}
-          imageUrl={pickerFor.imageUrl}
-          onPick={(pickedCategory) => handleAdd(pickerFor, pickedCategory)}
-          onClose={() => setPickerFor(null)}
-        />
-      )}
 
       {showDetailsFor && (
         <MovieDetailModal
