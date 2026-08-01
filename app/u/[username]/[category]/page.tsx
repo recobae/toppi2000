@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
@@ -7,6 +7,7 @@ import {
   CATEGORY_LABELS,
   CATEGORY_PAGE_SUBTITLES,
   isSavedCategory,
+  movieListHref,
 } from "@/lib/categories";
 
 export async function generateMetadata({
@@ -28,6 +29,12 @@ export default async function CategoryListPage({
 
   if (!isSavedCategory(category)) {
     notFound();
+  }
+
+  // Empfohlen and Watchlist now live together on one merged page -- old
+  // links to either standalone list resolve there instead of 404ing.
+  if (category === "top_list" || category === "watchlist") {
+    redirect(movieListHref(username));
   }
 
   const supabase = await createClient();

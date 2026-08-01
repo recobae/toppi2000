@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Heart, ListChecks, MapPin, Plus, Repeat2, Settings, Sparkles } from "lucide-react";
+import { Heart, ListChecks, MapPin, Plus, Repeat2, Settings, Sparkles, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileStoryAvatar } from "@/components/profile/profile-story-avatar";
 import { ListOverviewRow } from "@/components/profile/list-overview-row";
@@ -14,14 +14,14 @@ import { FollowerCount } from "@/components/profile/follower-count";
 import { ShareListButton } from "@/components/lists/share-list-button";
 import { ExpertiseBadges } from "@/components/profile/expertise-badges";
 import {
-  CATEGORY_ICONS,
-  CATEGORY_LABELS,
+  MOVIE_LIST_LABEL,
   VISIBLE_SAVED_CATEGORIES,
+  movieListHref,
   type SavedCategory,
 } from "@/lib/categories";
 import { resolveEarnedExpertiseLabels, resolvePlaceExpertiseLabels } from "@/lib/expertise";
 import { hasActiveStory as checkHasActiveStory, storyWindowSince } from "@/lib/story-activity";
-import { computeTasteMatch, TASTE_MATCH_MIN_SHARED } from "@/lib/taste-match";
+import { computeTasteMatch, formatTasteMatchLabel } from "@/lib/taste-match";
 
 // "X Likes"/"X mal inspiriert" are replaced by Taste Match below -- kept
 // computed (not deleted) in case they come back, just not rendered.
@@ -106,6 +106,16 @@ export default async function ProfilePage({
   );
 
   const topListPreview = previewByCategory.find((p) => p.category === "top_list");
+  const watchlistPreview = previewByCategory.find((p) => p.category === "watchlist");
+  // Empfohlen and Watchlist show as one merged row on the profile now (see
+  // /u/[username]/filme) -- posters favor Empfohlen first, same priority the
+  // merged list itself uses when an item could theoretically sit in both.
+  const movieListItemCount = (topListPreview?.itemCount ?? 0) + (watchlistPreview?.itemCount ?? 0);
+  const movieListNoteCount = (topListPreview?.noteCount ?? 0) + (watchlistPreview?.noteCount ?? 0);
+  const movieListPosterUrls = [
+    ...(topListPreview?.posterUrls ?? []),
+    ...(watchlistPreview?.posterUrls ?? []),
+  ].slice(0, 4);
 
   const itemCountByCategory = Object.fromEntries(
     previewByCategory.map((entry) => [entry.category, entry.itemCount]),
@@ -360,11 +370,7 @@ export default async function ProfilePage({
           {tasteMatch && (
             <div className="flex items-center gap-1.5">
               <Sparkles className="size-4 text-primary" />
-              <span>
-                {tasteMatch.percentage !== null
-                  ? `${tasteMatch.percentage}% Taste Match aus ${tasteMatch.sharedCount} Bewertungen`
-                  : `Noch nicht genug Daten (${tasteMatch.sharedCount}/${TASTE_MATCH_MIN_SHARED} gemeinsame Bewertungen)`}
-              </span>
+              <span>{formatTasteMatchLabel(tasteMatch)}</span>
             </div>
           )}
           <FollowerCount targetUserId={profile.id} count={followerCount ?? 0} />
@@ -396,18 +402,15 @@ export default async function ProfilePage({
         )}
 
         <div className="w-full flex flex-col gap-2 mt-2">
-          {previewByCategory.map(({ category, posterUrls, itemCount, noteCount }) => (
-            <ListOverviewRow
-              key={category}
-              title={CATEGORY_LABELS[category]}
-              icon={CATEGORY_ICONS[category]}
-              preview={{ type: "stack", urls: posterUrls }}
-              itemCount={itemCount}
-              noteCount={noteCount}
-              href={`/u/${profile.username}/${category}`}
-              shareUrl={`/u/${profile.username}/${category}`}
-            />
-          ))}
+          <ListOverviewRow
+            title={MOVIE_LIST_LABEL}
+            icon={Star}
+            preview={{ type: "stack", urls: movieListPosterUrls }}
+            itemCount={movieListItemCount}
+            noteCount={movieListNoteCount}
+            href={movieListHref(profile.username)}
+            shareUrl={movieListHref(profile.username)}
+          />
           {isGuest && <GuestProfileCta variant="row" />}
         </div>
 

@@ -47,6 +47,16 @@ export function isSavedCategory(value: string): value is SavedCategory {
 // resolve normally since the underlying route is untouched.
 export const VISIBLE_SAVED_CATEGORIES: SavedCategory[] = ["top_list", "watchlist"];
 
+// Empfohlen (top_list) and Watchlist share a single browsing surface --
+// /u/[username]/filme -- reading from both tables at once (see
+// app/api/movie-list-items/route.ts). The tables themselves stay separate
+// (favoriting, status-transition writes, credits all still target one table
+// at a time); this is purely the merged read/display layer.
+export const MOVIE_LIST_LABEL = "Filme & Serien";
+export function movieListHref(username: string): string {
+  return `/u/${username}/filme`;
+}
+
 // One consistent icon per category, reused on the profile page (next to the
 // list title) and on the 3 save buttons in the Inspiration feed.
 export const CATEGORY_ICONS: Record<SavedCategory, LucideIcon> = {

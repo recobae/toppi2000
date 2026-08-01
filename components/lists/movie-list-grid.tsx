@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { MovieItemRow } from "@/components/items/list-item-row";
 import { MovieDetailModal } from "@/components/movie-info";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
+import { MovieSuggestionsStrip } from "@/components/lists/list-items-grid";
 import {
   removeFromCategory,
   saveToCategory,
@@ -16,15 +17,15 @@ import {
 } from "@/lib/saved-items";
 import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
 import { postWatchlistTransitionStoryEvent, type WatchlistTransition } from "@/lib/story-events";
-import { CATEGORY_LABELS, type SavedCategory } from "@/lib/categories";
+import { CATEGORY_LABELS } from "@/lib/categories";
 import { NOTE_PLACEHOLDERS } from "@/lib/notes";
 import { NoteModal } from "@/components/lists/note-modal";
 import { useSocialProof, getSocialProofBreakdown } from "@/lib/hooks/use-social-proof";
-import type { WatchProviderGroups, MovieDetails, SearchResult } from "@/lib/tmdb";
+import type { WatchProviderGroups, MovieDetails } from "@/lib/tmdb";
 
-const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
+export type MovieListStatus = "top_list" | "watchlist";
 
-export type CategoryListItem = {
+export type MovieListItem = {
   id: string;
   itemId: number;
   mediaType: "movie" | "tv";
@@ -35,12 +36,136 @@ export type CategoryListItem = {
   watchProviders: WatchProviderGroups;
   movieDetails: MovieDetails;
   isFavorite: boolean;
+  status: MovieListStatus;
+  createdAt: string;
 };
 
-function AddItemRow({ category }: { category: SavedCategory }) {
+const STATUS_FILTERS: { key: MovieListStatus | null; label: string }[] = [
+  { key: null, label: "Alle" },
+  { key: "top_list", label: "Empfohlen" },
+  { key: "watchlist", label: "Watchlist" },
+];
+
+// Matched against WatchProviderGroups.flatrate[].name (TMDB's German-region
+// provider names) rather than hardcoded provider IDs, which drift across
+// TMDB catalogue changes far more than the display name does.
+const AVAILABILITY_FILTERS: { key: string; label: string; match: (name: string) => boolean }[] = [
+  { key: "netflix", label: "Netflix", match: (n) => n.toLowerCase().includes("netflix") },
+  { key: "prime", label: "Prime Video", match: (n) => n.toLowerCase().includes("prime video") },
+  { key: "disney", label: "Disney+", match: (n) => n.toLowerCase().includes("disney") },
+  { key: "appletv", label: "Apple TV+", match: (n) => n.toLowerCase().includes("apple tv") },
+  { key: "wow", label: "WOW/Sky", match: (n) => n.toLowerCase().includes("wow") || n.toLowerCase().includes("sky") },
+];
+
+type SortKey = "favorite" | "newest" | "alphabetical" | "taste_match";
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "favorite", label: "Top Filme" },
+  { key: "newest", label: "Neueste" },
+  { key: "alphabetical", label: "A-Z" },
+  { key: "taste_match", label: "Taste-Match" },
+];
+
+function sortItems(
+  items: MovieListItem[],
+  sortBy: SortKey,
+  socialProofMap: Record<string, ReturnType<typeof getSocialProofBreakdown>>,
+): MovieListItem[] {
+  const sorted = [...items];
+  const byNewest = (a: MovieListItem, b: MovieListItem) => (a.createdAt < b.createdAt ? 1 : -1);
+
+  if (sortBy === "favorite") {
+    sorted.sort((a, b) => Number(b.isFavorite) - Number(a.isFavorite) || byNewest(a, b));
+  } else if (sortBy === "alphabetical") {
+    sorted.sort((a, b) => a.title.localeCompare(b.title, "de"));
+  } else if (sortBy === "taste_match") {
+    sorted.sort((a, b) => {
+      const aScore = getSocialProofBreakdown(socialProofMap, a.itemId, a.mediaType).positive.total;
+      const bScore = getSocialProofBreakdown(socialProofMap, b.itemId, b.mediaType).positive.total;
+      return bScore - aScore || byNewest(a, b);
+    });
+  } else {
+    sorted.sort(byNewest);
+  }
+  return sorted;
+}
+
+function FilterBar({
+  statusFilter,
+  onStatusChange,
+  availabilityFilter,
+  onAvailabilityChange,
+  sortBy,
+  onSortChange,
+}: {
+  statusFilter: MovieListStatus | null;
+  onStatusChange: (status: MovieListStatus | null) => void;
+  availabilityFilter: string | null;
+  onAvailabilityChange: (key: string | null) => void;
+  sortBy: SortKey;
+  onSortChange: (key: SortKey) => void;
+}) {
+  return (
+    <div className="w-full flex flex-col gap-2">
+      <div className="w-full flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {STATUS_FILTERS.map((option) => {
+          const isActive = statusFilter === option.key;
+          return (
+            <button
+              key={option.label}
+              type="button"
+              onClick={() => onStatusChange(isActive ? null : option.key)}
+              className={`shrink-0 whitespace-nowrap h-7 px-3 rounded-full border text-xs font-medium transition-colors ${
+                isActive ? "border-primary bg-primary/10 text-primary" : "border-input hover:bg-accent"
+              }`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+        <div className="w-px shrink-0 self-stretch bg-border" />
+        {AVAILABILITY_FILTERS.map((option) => {
+          const isActive = availabilityFilter === option.key;
+          return (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => onAvailabilityChange(isActive ? null : option.key)}
+              className={`shrink-0 whitespace-nowrap h-7 px-3 rounded-full border text-xs font-medium transition-colors ${
+                isActive ? "border-primary bg-primary/10 text-primary" : "border-input hover:bg-accent"
+              }`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="w-full flex items-center gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <span className="shrink-0 text-xs text-muted-foreground">Sortierung:</span>
+        {SORT_OPTIONS.map((option) => {
+          const isActive = sortBy === option.key;
+          return (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => onSortChange(option.key)}
+              className={`shrink-0 whitespace-nowrap h-7 px-3 rounded-full border text-xs font-medium transition-colors ${
+                isActive ? "border-primary bg-primary/10 text-primary" : "border-input hover:bg-accent"
+              }`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AddItemRow() {
   return (
     <Link
-      href={`/inspiration?addTo=${category}`}
+      href="/inspiration"
       className="flex items-center justify-center gap-2 h-14 w-full rounded-lg border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
     >
       <Plus className="size-5" />
@@ -49,146 +174,59 @@ function AddItemRow({ category }: { category: SavedCategory }) {
   );
 }
 
-/**
- * Compact suggestion strip under the owner's own Empfohlen-list, fed by the
- * same shared engine (lib/recommendations.ts) as the Inspiration page --
- * here specifically the genre-profile variant, derived from what the user
- * already rated/liked. Same ListItemRow "rate" bar (Ja/Nein/Watchlist) as
- * everywhere else, just visually set apart with a dashed border.
- */
-export function MovieSuggestionsStrip({ userId }: { userId: string }) {
-  const [suggestions, setSuggestions] = useState<SearchResult[] | null>(null);
-  const [pendingKey, setPendingKey] = useState<string | null>(null);
-  const [exhausted, setExhausted] = useState(false);
-  const isReloadingRef = useRef(false);
-
-  const loadSuggestions = useCallback(async () => {
-    const response = await fetch("/api/movie-suggestions");
-    if (!response.ok) return null;
-    const data: { results: SearchResult[] } = await response.json();
-    setSuggestions(data.results);
-    return data.results;
-  }, []);
-
-  useEffect(() => {
-    loadSuggestions();
-  }, [loadSuggestions]);
-
-  // Every visible suggestion rated -> automatically fetch a fresh batch
-  // (exclusion already keeps rated titles out server-side) instead of
-  // leaving the strip empty; once a reload comes back empty too, hide it.
-  useEffect(() => {
-    if (!suggestions || suggestions.length > 0 || exhausted || isReloadingRef.current) return;
-    isReloadingRef.current = true;
-    loadSuggestions().then((fresh) => {
-      if (!fresh || fresh.length === 0) setExhausted(true);
-      isReloadingRef.current = false;
-    });
-  }, [suggestions, exhausted, loadSuggestions]);
-
-  const socialProofMap = useSocialProof(
-    (suggestions ?? []).map((r) => ({ id: r.id, mediaType: r.mediaType })),
-  );
-
-  const removeSuggestion = (result: SearchResult) => {
-    setSuggestions((prev) =>
-      (prev ?? []).filter((r) => !(r.id === result.id && r.mediaType === result.mediaType)),
-    );
-  };
-
-  const handleAdd = async (result: SearchResult, category: SavedCategory) => {
-    const key = `${result.mediaType}-${result.id}`;
-    setPendingKey(key);
-    const supabase = createClient();
-    const { error } = await saveToCategory(supabase, category, userId, {
-      itemId: result.id,
-      mediaType: result.mediaType,
-      title: result.title,
-      imageUrl: result.posterPath ? `${POSTER_BASE_URL}${result.posterPath}` : null,
-      year: result.year,
-    });
-    if (!error) removeSuggestion(result);
-    setPendingKey(null);
-  };
-
-  const handleDislike = async (result: SearchResult) => {
-    const key = `${result.mediaType}-${result.id}`;
-    setPendingKey(key);
-    const supabase = createClient();
-    await setInteractionWithCredits(
-      supabase,
-      userId,
-      { itemId: String(result.id), mediaType: result.mediaType },
-      "dislike",
-    );
-    removeSuggestion(result);
-    setPendingKey(null);
-  };
-
-  if (!suggestions || suggestions.length === 0) return null;
-
-  return (
-    <div className="w-full flex flex-col gap-3 mt-2 pt-4 border-t border-dashed">
-      <h2 className="text-xs font-medium text-muted-foreground">
-        Passend zu deinem Geschmack
-      </h2>
-      <div className="w-full flex flex-col gap-3">
-        {suggestions.map((result) => {
-          const key = `${result.mediaType}-${result.id}`;
-          return (
-            <MovieItemRow
-              key={key}
-              imageUrl={result.posterPath ? `${POSTER_BASE_URL}${result.posterPath}` : null}
-              title={result.title}
-              year={result.year}
-              movieDetails={result.movieDetails}
-              watchProviders={result.watchProviders}
-              socialProof={getSocialProofBreakdown(socialProofMap, result.id, result.mediaType)}
-              actions={{
-                variant: "rate",
-                pending: pendingKey === key,
-                onLike: () => handleAdd(result, "top_list"),
-                onDislike: () => handleDislike(result),
-                onAdd: () => handleAdd(result, "watchlist"),
-                addLabel: "Watchlist",
-              }}
-            />
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function OwnerCategoryList({
+function OwnerMovieList({
   initialItems,
-  category,
   userId,
 }: {
-  initialItems: CategoryListItem[];
-  category: SavedCategory;
+  initialItems: MovieListItem[];
   userId: string;
 }) {
   const [items, setItems] = useState(initialItems);
+  const [statusFilter, setStatusFilter] = useState<MovieListStatus | null>(null);
+  const [availabilityFilter, setAvailabilityFilter] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<SortKey>("favorite");
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [showNoteModalFor, setShowNoteModalFor] = useState<CategoryListItem | null>(null);
-  const [showDetailsFor, setShowDetailsFor] = useState<CategoryListItem | null>(null);
   const [favoritePendingId, setFavoritePendingId] = useState<string | null>(null);
   const [transitionPendingId, setTransitionPendingId] = useState<string | null>(null);
+  const [showNoteModalFor, setShowNoteModalFor] = useState<MovieListItem | null>(null);
+  const [showDetailsFor, setShowDetailsFor] = useState<MovieListItem | null>(null);
 
-  const handleRemove = async (item: CategoryListItem) => {
+  const socialProofMap = useSocialProof(items.map((item) => ({ id: item.itemId, mediaType: item.mediaType })));
+
+  const handleRemove = async (item: MovieListItem) => {
     setRemovingId(item.id);
     const supabase = createClient();
-    const { error } = await removeFromCategory(supabase, category, userId, item.itemId, item.mediaType);
+    const { error } = await removeFromCategory(supabase, item.status, userId, item.itemId, item.mediaType);
     if (!error) {
       setItems((prev) => prev.filter((existing) => existing.id !== item.id));
     }
     setRemovingId(null);
   };
 
+  const handleSaveNote = async (item: MovieListItem, note: string | null) => {
+    const supabase = createClient();
+    const { error } = await updateNote(supabase, item.status, userId, item.itemId, item.mediaType, note);
+    if (!error) {
+      setItems((prev) => prev.map((existing) => (existing.id === item.id ? { ...existing, note } : existing)));
+    }
+  };
+
+  const handleToggleFavorite = async (item: MovieListItem) => {
+    setFavoritePendingId(item.id);
+    const supabase = createClient();
+    const nextFavorite = !item.isFavorite;
+    const { error } = await setFavorite(supabase, userId, item.itemId, item.mediaType, nextFavorite);
+    if (!error) {
+      setItems((prev) =>
+        prev.map((existing) => (existing.id === item.id ? { ...existing, isFavorite: nextFavorite } : existing)),
+      );
+    }
+    setFavoritePendingId(null);
+  };
+
   // Watchlist-only: switch straight to Like/Dislike without removing first,
   // then post the "Watchlist -> Gefällt mir(nicht)" story event.
-  const handleStatusTransition = async (item: CategoryListItem, transition: WatchlistTransition) => {
+  const handleStatusTransition = async (item: MovieListItem, transition: WatchlistTransition) => {
     setTransitionPendingId(item.id);
     const supabase = createClient();
     const { error } = await removeFromCategory(supabase, "watchlist", userId, item.itemId, item.mediaType);
@@ -220,42 +258,34 @@ function OwnerCategoryList({
     setTransitionPendingId(null);
   };
 
-  const handleSaveNote = async (item: CategoryListItem, note: string | null) => {
-    const supabase = createClient();
-    const { error } = await updateNote(supabase, category, userId, item.itemId, item.mediaType, note);
-    if (!error) {
-      setItems((prev) => prev.map((existing) => (existing.id === item.id ? { ...existing, note } : existing)));
-    }
-  };
-
-  const handleToggleFavorite = async (item: CategoryListItem) => {
-    setFavoritePendingId(item.id);
-    const supabase = createClient();
-    const nextFavorite = !item.isFavorite;
-    const { error } = await setFavorite(supabase, userId, item.itemId, item.mediaType, nextFavorite);
-    if (!error) {
-      setItems((prev) => {
-        const updated = prev.map((existing) =>
-          existing.id === item.id ? { ...existing, isFavorite: nextFavorite } : existing,
-        );
-        // Mirrors the server sort (favorites first, newest star on top) so
-        // the row jumps immediately instead of waiting for a refetch.
-        return [...updated].sort((a, b) => Number(b.isFavorite) - Number(a.isFavorite));
-      });
-    }
-    setFavoritePendingId(null);
-  };
-
-  const socialProofMap = useSocialProof(items.map((item) => ({ id: item.itemId, mediaType: item.mediaType })));
+  const statusFiltered = statusFilter ? items.filter((item) => item.status === statusFilter) : items;
+  const availabilityOption = AVAILABILITY_FILTERS.find((option) => option.key === availabilityFilter);
+  const availabilityFiltered = availabilityOption
+    ? statusFiltered.filter((item) => item.watchProviders.flatrate.some((p) => availabilityOption.match(p.name)))
+    : statusFiltered;
+  const visibleItems = sortItems(availabilityFiltered, sortBy, socialProofMap);
 
   return (
     <div className="w-full flex flex-col gap-3">
+      <FilterBar
+        statusFilter={statusFilter}
+        onStatusChange={setStatusFilter}
+        availabilityFilter={availabilityFilter}
+        onAvailabilityChange={setAvailabilityFilter}
+        sortBy={sortBy}
+        onSortChange={setSortBy}
+      />
+
       {items.length === 0 && (
         <p className="w-full text-sm text-muted-foreground">
-          {CATEGORY_LABELS[category]} enthält noch keine Einträge.
+          Noch keine Filme oder Serien gespeichert.
         </p>
       )}
-      {items.map((item) => (
+      {items.length > 0 && visibleItems.length === 0 && (
+        <p className="w-full text-sm text-muted-foreground">Keine Treffer für diese Filter.</p>
+      )}
+
+      {visibleItems.map((item) => (
         <MovieItemRow
           key={item.id}
           imageUrl={item.imageUrl}
@@ -272,7 +302,7 @@ function OwnerCategoryList({
             onRemove: () => handleRemove(item),
             isRemoving: removingId === item.id,
             favorite:
-              category === "top_list"
+              item.status === "top_list"
                 ? {
                     isFavorite: item.isFavorite,
                     onToggle: () => handleToggleFavorite(item),
@@ -280,7 +310,7 @@ function OwnerCategoryList({
                   }
                 : undefined,
             statusTransition:
-              category === "watchlist"
+              item.status === "watchlist"
                 ? {
                     onLike: () => handleStatusTransition(item, "like"),
                     onDislike: () => handleStatusTransition(item, "dislike"),
@@ -290,8 +320,8 @@ function OwnerCategoryList({
           }}
         />
       ))}
-      <AddItemRow category={category} />
-      {category === "top_list" && <MovieSuggestionsStrip userId={userId} />}
+      <AddItemRow />
+      <MovieSuggestionsStrip userId={userId} />
 
       {showDetailsFor && (
         <MovieDetailModal
@@ -311,7 +341,7 @@ function OwnerCategoryList({
           title={showNoteModalFor.title}
           posterUrl={showNoteModalFor.imageUrl}
           initialNote={showNoteModalFor.note}
-          placeholder={NOTE_PLACEHOLDERS[category]}
+          placeholder={NOTE_PLACEHOLDERS[showNoteModalFor.status]}
           onSave={(note) => handleSaveNote(showNoteModalFor, note)}
           onClose={() => setShowNoteModalFor(null)}
         />
@@ -320,22 +350,25 @@ function OwnerCategoryList({
   );
 }
 
-function VisitorCategoryList({
+function VisitorMovieList({
   initialItems,
   ownerId,
   ownerUsername,
 }: {
-  initialItems: CategoryListItem[];
+  initialItems: MovieListItem[];
   ownerId: string;
   ownerUsername: string;
 }) {
   const items = initialItems;
+  const [statusFilter, setStatusFilter] = useState<MovieListStatus | null>(null);
+  const [availabilityFilter, setAvailabilityFilter] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<SortKey>("favorite");
   const [user, setUser] = useState<User | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
-  const [notePrompt, setNotePrompt] = useState<{ item: CategoryListItem; category: SavedCategory } | null>(null);
-  const [showDetailsFor, setShowDetailsFor] = useState<CategoryListItem | null>(null);
+  const [notePrompt, setNotePrompt] = useState<{ item: MovieListItem; category: MovieListStatus } | null>(null);
+  const [showDetailsFor, setShowDetailsFor] = useState<MovieListItem | null>(null);
 
   const showToast = useCallback((message: string) => {
     setToastMessage(message);
@@ -352,7 +385,7 @@ function VisitorCategoryList({
   // Rating a title on someone else's list behaves exactly like rating an
   // unrated feed item -- Ja/Nein/Watchlist -- except the write target and
   // credited owner are this list's owner instead of nobody.
-  const handleLike = async (item: CategoryListItem) => {
+  const handleLike = async (item: MovieListItem) => {
     if (!user) return;
     const key = `${item.mediaType}-${item.itemId}`;
     setPendingKey(key);
@@ -382,7 +415,7 @@ function VisitorCategoryList({
     setPendingKey(null);
   };
 
-  const handleDislike = async (item: CategoryListItem) => {
+  const handleDislike = async (item: MovieListItem) => {
     if (!user) return;
     const key = `${item.mediaType}-${item.itemId}`;
     setPendingKey(key);
@@ -397,7 +430,7 @@ function VisitorCategoryList({
     setPendingKey(null);
   };
 
-  const handleWatchlist = async (item: CategoryListItem) => {
+  const handleWatchlist = async (item: MovieListItem) => {
     if (!user) return;
     const key = `${item.mediaType}-${item.itemId}`;
     setPendingKey(key);
@@ -420,6 +453,13 @@ function VisitorCategoryList({
     setPendingKey(null);
   };
 
+  const statusFiltered = statusFilter ? items.filter((item) => item.status === statusFilter) : items;
+  const availabilityOption = AVAILABILITY_FILTERS.find((option) => option.key === availabilityFilter);
+  const availabilityFiltered = availabilityOption
+    ? statusFiltered.filter((item) => item.watchProviders.flatrate.some((p) => availabilityOption.match(p.name)))
+    : statusFiltered;
+  const visibleItems = sortItems(availabilityFiltered, sortBy, socialProofMap);
+
   if (items.length === 0) {
     return (
       <p className="w-full text-sm text-muted-foreground">
@@ -437,7 +477,20 @@ function VisitorCategoryList({
           </div>
         </div>
       )}
-      {items.map((item) => (
+      <FilterBar
+        statusFilter={statusFilter}
+        onStatusChange={setStatusFilter}
+        availabilityFilter={availabilityFilter}
+        onAvailabilityChange={setAvailabilityFilter}
+        sortBy={sortBy}
+        onSortChange={setSortBy}
+      />
+
+      {visibleItems.length === 0 && (
+        <p className="w-full text-sm text-muted-foreground">Keine Treffer für diese Filter.</p>
+      )}
+
+      {visibleItems.map((item) => (
         <MovieItemRow
           key={item.id}
           imageUrl={item.imageUrl}
@@ -506,34 +559,30 @@ function VisitorCategoryList({
   );
 }
 
-export function CategoryItemsGrid({
+export function MovieListGrid({
   username,
-  category,
   ownerId,
   currentUserId,
 }: {
   username: string;
-  category: SavedCategory;
   ownerId: string;
   currentUserId?: string | null;
 }) {
-  const [items, setItems] = useState<CategoryListItem[] | null>(null);
+  const [items, setItems] = useState<MovieListItem[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setItems(null);
     (async () => {
-      const response = await fetch(
-        `/api/category-items?username=${encodeURIComponent(username)}&category=${category}`,
-      );
+      const response = await fetch(`/api/movie-list-items?username=${encodeURIComponent(username)}`);
       if (!response.ok || cancelled) return;
-      const data: { items: CategoryListItem[] } = await response.json();
+      const data: { items: MovieListItem[] } = await response.json();
       if (!cancelled) setItems(data.items);
     })();
     return () => {
       cancelled = true;
     };
-  }, [username, category]);
+  }, [username]);
 
   if (items === null) {
     return <p className="text-sm text-muted-foreground">Lädt…</p>;
@@ -542,12 +591,8 @@ export function CategoryItemsGrid({
   const isOwner = currentUserId === ownerId;
 
   return isOwner ? (
-    <OwnerCategoryList initialItems={items} category={category} userId={ownerId} />
+    <OwnerMovieList initialItems={items} userId={ownerId} />
   ) : (
-    <VisitorCategoryList
-      initialItems={items}
-      ownerId={ownerId}
-      ownerUsername={username}
-    />
+    <VisitorMovieList initialItems={items} ownerId={ownerId} ownerUsername={username} />
   );
 }

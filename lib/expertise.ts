@@ -1,5 +1,5 @@
 import { MapPin, Star, type LucideIcon } from "lucide-react";
-import type { SavedCategory } from "@/lib/categories";
+import { movieListHref, type SavedCategory } from "@/lib/categories";
 import { PLACES_EXPERTISE_MIN_ITEMS } from "@/lib/places";
 
 // Central, extensible mapping of "expertise" categories a user can be known
@@ -50,7 +50,10 @@ export function resolveEarnedExpertiseLabels(
   ).map((definition) => ({
     key: definition.key,
     label: definition.label,
-    href: `/u/${username}/${definition.sourceCategory}`,
+    // "movies_shows" is the only static label today and always points at
+    // the merged Empfohlen+Watchlist view now, not the (redirecting)
+    // standalone top_list route.
+    href: definition.sourceCategory === "top_list" ? movieListHref(username) : `/u/${username}/${definition.sourceCategory}`,
   }));
 }
 
