@@ -612,7 +612,7 @@ export function MoviesInspirationTab({
                 <p className="text-sm text-muted-foreground">Lädt…</p>
               ) : friendsLikes.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  Noch keine Likes von Freunden, denen du folgst.
+                  Noch keine Likes von Personen, die dich inspirieren.
                 </p>
               ) : (
                 <div className="w-full flex flex-col gap-3">

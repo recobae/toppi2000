@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, UserCheck } from "lucide-react";
+import { MoreHorizontal, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
@@ -19,6 +19,7 @@ export function FollowButton({
   const [isFollowing, setIsFollowing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showGuestModal, setShowGuestModal] = useState(false);
+  const [showUnfollowConfirm, setShowUnfollowConfirm] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,70 +48,128 @@ export function FollowButton({
     return () => clearTimeout(timeout);
   }, [errorMessage]);
 
-  const handleClick = async () => {
+  const handleFollow = async () => {
     if (!isLoggedIn) {
       setShowGuestModal(true);
       return;
     }
     if (isSubmitting) return;
     setIsSubmitting(true);
-    const supabase = createClient();
-
+    setIsFollowing(true);
     try {
-      if (isFollowing) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (!user) return;
+      const response = await fetch("/api/follows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ followedId: targetUserId }),
+      });
 
+      if (!response.ok) {
         setIsFollowing(false);
-        const { error } = await supabase
-          .from("user_follows")
-          .delete()
-          .eq("follower_id", user.id)
-          .eq("followed_id", targetUserId);
-
-        if (error) {
-          setIsFollowing(true);
-          setErrorMessage("Entfolgen fehlgeschlagen");
-          return;
-        }
-        router.refresh();
-      } else {
-        setIsFollowing(true);
-        const response = await fetch("/api/follows", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ followedId: targetUserId }),
-        });
-
-        if (!response.ok) {
-          setIsFollowing(false);
-          setErrorMessage("Folgen fehlgeschlagen");
-          return;
-        }
-        router.refresh();
+        setErrorMessage("Fehlgeschlagen");
+        return;
       }
+      router.refresh();
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const handleUnfollow = async () => {
+    setShowUnfollowConfirm(false);
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    const supabase = createClient();
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      setIsFollowing(false);
+      const { error } = await supabase
+        .from("user_follows")
+        .delete()
+        .eq("follower_id", user.id)
+        .eq("followed_id", targetUserId);
+
+      if (error) {
+        setIsFollowing(true);
+        setErrorMessage("Fehlgeschlagen");
+        return;
+      }
+      router.refresh();
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (isFollowing) {
+    return (
+      <div className="relative inline-flex items-center">
+        <button
+          type="button"
+          aria-label={`${targetUsername} nicht mehr inspirieren lassen`}
+          disabled={isSubmitting}
+          onClick={() => setShowUnfollowConfirm(true)}
+          className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50"
+        >
+          <MoreHorizontal className="size-4" />
+        </button>
+
+        {errorMessage && (
+          <span className="absolute top-full mt-1 whitespace-nowrap rounded bg-destructive text-destructive-foreground text-[10px] px-1.5 py-0.5 z-10">
+            {errorMessage}
+          </span>
+        )}
+
+        {showUnfollowConfirm && (
+          <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4"
+            onClick={() => setShowUnfollowConfirm(false)}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Nicht mehr inspirieren lassen bestätigen"
+          >
+            <div
+              className="w-full max-w-sm rounded-lg bg-background border p-5 flex flex-col gap-4"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <p className="text-sm">
+                Möchtest du {targetUsername} wirklich nicht mehr folgen / dich nicht mehr
+                inspirieren lassen?
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowUnfollowConfirm(false)}
+                >
+                  Abbrechen
+                </Button>
+                <Button type="button" variant="destructive" size="sm" onClick={handleUnfollow}>
+                  Nicht mehr inspirieren lassen
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="relative flex flex-col items-center gap-1">
       <Button
-        variant={isFollowing ? "outline" : "default"}
+        variant="default"
         size="sm"
         disabled={isSubmitting}
-        onClick={handleClick}
+        onClick={handleFollow}
         className="min-h-11"
       >
-        {isFollowing ? (
-          <UserCheck className="size-4" />
-        ) : (
-          <UserPlus className="size-4" />
-        )}
-        {isFollowing ? "Entfolgen" : "Folgen"}
+        <Sparkles className="size-4" />
+        Inspirierend
       </Button>
 
       {errorMessage && (
@@ -121,7 +180,7 @@ export function FollowButton({
 
       {showGuestModal && (
         <GuestSignupModal
-          message={`Melde dich an, um ${targetUsername} zu folgen und immer auf dem Laufenden zu bleiben.`}
+          message={`Melde dich an, um dich von ${targetUsername} inspirieren zu lassen und immer auf dem Laufenden zu bleiben.`}
           next={`/u/${targetUsername}`}
           onClose={() => setShowGuestModal(false)}
         />

@@ -80,14 +80,14 @@ export function FollowerListModal({
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label="Follower"
+      aria-label="Inspirierte"
     >
       <div
         className="w-full max-w-sm max-h-[80vh] overflow-y-auto rounded-lg bg-background border p-5 flex flex-col gap-4"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-medium">Follower</p>
+          <p className="text-sm font-medium">Inspirierte</p>
           <button
             type="button"
             aria-label="Schließen"
@@ -102,7 +102,7 @@ export function FollowerListModal({
           {followers === null ? (
             <p className="text-sm text-muted-foreground">Lädt…</p>
           ) : followers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Noch keine Follower.</p>
+            <p className="text-sm text-muted-foreground">Noch niemand lässt sich inspirieren.</p>
           ) : (
             followers.map((follower) => (
               <div

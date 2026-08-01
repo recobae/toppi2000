@@ -266,6 +266,56 @@ export type TmdbTitleLike = {
   popularity?: number;
 };
 
+export type TitleMatch = {
+  id: number;
+  mediaType: "movie" | "tv";
+  title: string;
+  year: string | null;
+  posterPath: string | null;
+};
+
+/**
+ * Best-effort single match for a free-text title, used by the import flow
+ * (lib/import-extract.ts's line-split names, or vision-extracted names from
+ * a screenshot) -- deliberately lighter than buildSearchResults, which also
+ * fetches watch providers/details per item; the import preview only needs
+ * enough to render a row and later save it via the normal saveToCategory
+ * flow once the user confirms.
+ */
+export async function searchBestTitleMatch(
+  query: string,
+  apiKey: string,
+): Promise<TitleMatch | null> {
+  try {
+    const url = new URL(`${TMDB_BASE_URL}/search/multi`);
+    url.searchParams.set("api_key", apiKey);
+    url.searchParams.set("query", query);
+    url.searchParams.set("include_adult", "false");
+
+    const response = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!response.ok) return null;
+
+    const data: { results?: TmdbTitleLike[] } = await response.json();
+    const best = (data.results ?? []).find(
+      (item) => item.media_type === "movie" || item.media_type === "tv",
+    );
+    if (!best) return null;
+
+    const isMovie = best.media_type === "movie";
+    const date = isMovie ? best.release_date : best.first_air_date;
+
+    return {
+      id: best.id,
+      mediaType: best.media_type as "movie" | "tv",
+      title: (isMovie ? best.title : best.name) ?? query,
+      year: date ? date.slice(0, 4) : null,
+      posterPath: best.poster_path,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function buildSearchResults(
   items: TmdbTitleLike[],
   apiKey: string,

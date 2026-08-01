@@ -17,7 +17,7 @@ export function FollowerCount({
     return (
       <div className="flex items-center gap-1.5">
         <Users className="size-4" />
-        <span>0 Follower</span>
+        <span>0 Inspirierte</span>
       </div>
     );
   }
@@ -30,7 +30,7 @@ export function FollowerCount({
         className="flex items-center gap-1.5 hover:text-foreground transition-colors"
       >
         <Users className="size-4" />
-        <span>{count} Follower</span>
+        <span>{count} Inspirierte</span>
       </button>
       {showModal && (
         <FollowerListModal
