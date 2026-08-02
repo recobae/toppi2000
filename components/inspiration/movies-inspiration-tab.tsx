@@ -123,15 +123,19 @@ export function MoviesInspirationTab({
     if (!user) return;
     setFeedPendingKey(`${item.mediaType}-${item.itemId}`);
     const supabase = createClient();
-    await setInteractionWithCredits(
+    const { error } = await setInteractionWithCredits(
       supabase,
       user.id,
       { itemId: item.itemId, mediaType: item.mediaType },
       "dislike",
       item.topList.userIds,
     );
-    showToast("Nicht dein Geschmack? Notiert.");
-    removeFeedItem(item.itemId, item.mediaType);
+    if (error) {
+      showToast("Konnte nicht gespeichert werden, versuch's nochmal");
+    } else {
+      showToast("Nicht dein Geschmack? Notiert.");
+      removeFeedItem(item.itemId, item.mediaType);
+    }
     setFeedPendingKey(null);
   };
 
@@ -395,14 +399,18 @@ export function MoviesInspirationTab({
     const key = `${result.mediaType}-${result.id}`;
     setBrowsePendingKey(key);
     const supabase = createClient();
-    await setInteractionWithCredits(
+    const { error } = await setInteractionWithCredits(
       supabase,
       user.id,
       { itemId: String(result.id), mediaType: result.mediaType },
       "dislike",
     );
-    showToast("Nicht dein Geschmack? Notiert.");
-    removeAfter?.(result);
+    if (error) {
+      showToast("Konnte nicht gespeichert werden, versuch's nochmal");
+    } else {
+      showToast("Nicht dein Geschmack? Notiert.");
+      removeAfter?.(result);
+    }
     setBrowsePendingKey(null);
   };
 

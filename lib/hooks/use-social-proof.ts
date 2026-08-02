@@ -69,11 +69,17 @@ export function useSocialProof(items: SocialProofItem[]) {
 
       const [likesResult, topListResult, watchlistResult, dontWatchResult] =
         await Promise.all([
+          // Reads from item_interactions (interaction_type = "like"), not the
+          // legacy `likes` table -- the app stopped writing to `likes` once
+          // item_interactions became the single source of truth for
+          // like/dislike, so `likes` no longer reflects anything recorded
+          // after that migration.
           supabase
-            .from("likes")
+            .from("item_interactions")
             .select("user_id, item_id, media_type")
+            .eq("interaction_type", "like")
             .in("user_id", followedIds)
-            .in("item_id", itemIds),
+            .in("item_id", itemIds.map(String)),
           supabase
             .from("top_list")
             .select("user_id, item_id, media_type")
@@ -91,7 +97,9 @@ export function useSocialProof(items: SocialProofItem[]) {
             .in("item_id", itemIds),
         ]);
 
-      const likesRows = (likesResult.data ?? []) as Row[];
+      const likesRows = ((likesResult.data ?? []) as { user_id: string; item_id: string; media_type: string }[]).map(
+        (row) => ({ user_id: row.user_id, item_id: Number(row.item_id), media_type: row.media_type }),
+      );
       const topListRows = (topListResult.data ?? []) as Row[];
       const watchlistRows = (watchlistResult.data ?? []) as Row[];
       const dontWatchRows = (dontWatchResult.data ?? []) as Row[];

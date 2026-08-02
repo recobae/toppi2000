@@ -154,17 +154,33 @@ export function OrteInspirationTab({
 
   const handleDislike = async (place: PlaceSearchResult) => {
     if (!user) return;
+    const previous = recommendations;
     removeFromRecommendations(place.placeId);
     const supabase = createClient();
-    await setInteractionWithCredits(supabase, user.id, { itemId: place.placeId, mediaType: "place" }, "dislike");
-    showToast("Nicht dein Geschmack? Notiert.");
+    const { error } = await setInteractionWithCredits(
+      supabase,
+      user.id,
+      { itemId: place.placeId, mediaType: "place" },
+      "dislike",
+    );
+    if (error) {
+      setRecommendations(previous);
+      showToast("Konnte nicht gespeichert werden, versuch's nochmal");
+    } else {
+      showToast("Nicht dein Geschmack? Notiert.");
+    }
   };
 
   const handleSkip = async (place: PlaceSearchResult) => {
     if (!user) return;
+    const previous = recommendations;
     removeFromRecommendations(place.placeId);
     const supabase = createClient();
-    await recordSkip(supabase, user.id, place.placeId, "place");
+    const { error } = await recordSkip(supabase, user.id, place.placeId, "place");
+    if (error) {
+      setRecommendations(previous);
+      showToast("Konnte nicht gespeichert werden, versuch's nochmal");
+    }
   };
 
   // Personalized labels (home city + the user's own region lists) always

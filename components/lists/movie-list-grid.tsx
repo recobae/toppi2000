@@ -425,14 +425,18 @@ function VisitorMovieList({
     const key = `${item.mediaType}-${item.itemId}`;
     setPendingKey(key);
     const supabase = createClient();
-    await setInteractionWithCredits(
+    const { error } = await setInteractionWithCredits(
       supabase,
       user.id,
       { itemId: String(item.itemId), mediaType: item.mediaType },
       "dislike",
       [ownerId],
     );
-    markOwn(String(item.itemId), item.mediaType, "dislike");
+    if (error) {
+      showToast("Konnte nicht gespeichert werden, versuch's nochmal");
+    } else {
+      markOwn(String(item.itemId), item.mediaType, "dislike");
+    }
     setPendingKey(null);
   };
 

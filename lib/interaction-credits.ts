@@ -87,8 +87,11 @@ export async function removeInteractionWithCredits(
   actorUserId: string,
   item: CreditItem,
 ) {
-  await removeInteraction(supabase, actorUserId, item.itemId, item.mediaType);
+  const { error } = await removeInteraction(supabase, actorUserId, item.itemId, item.mediaType);
+  if (error) return { error };
+
   await clearLikeCredits(supabase, actorUserId, item);
+  return { error: null };
 }
 
 /**

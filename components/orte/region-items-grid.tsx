@@ -139,8 +139,22 @@ function PlaceSuggestionsStrip({ userId, regionName }: { userId: string; regionN
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [exhausted, setExhausted] = useState(false);
   const [showDetailsFor, setShowDetailsFor] = useState<PlaceSearchResult | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const limitRef = useRef(12);
   const isReloadingRef = useRef(false);
+
+  const showToast = useCallback((message: string) => {
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(null), 3000);
+  }, []);
+
+  const unDismiss = (placeId: string) => {
+    setDismissedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(placeId);
+      return next;
+    });
+  };
 
   const load = useCallback(async (limit: number) => {
     const response = await fetch(
@@ -195,69 +209,93 @@ function PlaceSuggestionsStrip({ userId, regionName }: { userId: string; regionN
   const handleDislike = async (placeId: string) => {
     setDismissedIds((prev) => new Set(prev).add(placeId));
     const supabase = createClient();
-    await setInteractionWithCredits(supabase, userId, { itemId: placeId, mediaType: "place" }, "dislike");
+    const { error } = await setInteractionWithCredits(
+      supabase,
+      userId,
+      { itemId: placeId, mediaType: "place" },
+      "dislike",
+    );
+    if (error) {
+      unDismiss(placeId);
+      showToast("Konnte nicht gespeichert werden, versuch's nochmal");
+    }
   };
 
   const handleSkip = async (placeId: string) => {
     setDismissedIds((prev) => new Set(prev).add(placeId));
     const supabase = createClient();
-    await recordSkip(supabase, userId, placeId, "place");
+    const { error } = await recordSkip(supabase, userId, placeId, "place");
+    if (error) {
+      unDismiss(placeId);
+      showToast("Konnte nicht gespeichert werden, versuch's nochmal");
+    }
   };
 
-  if (visibleSuggestions.length === 0) return null;
+  if (visibleSuggestions.length === 0 && !toastMessage) return null;
 
   return (
-    <div className="w-full flex flex-col gap-3 mt-2 pt-4 border-t border-dashed">
-      <h2 className="text-xs font-medium text-muted-foreground">
-        Weitere Empfehlungen für {regionName}
-      </h2>
-      <div className="w-full flex flex-col gap-3">
-        {visibleSuggestions.map((place) => (
-          <PlaceItemRow
-            key={place.placeId}
-            imageUrl={place.photoUrl}
-            name={place.name}
-            category={place.category}
-            address={place.address}
-            rating={place.rating}
-            userRatingCount={place.userRatingCount}
-            openingStatus={place.openingStatus}
-            priceLevel={place.priceLevel}
-            phoneNumber={place.phoneNumber}
-            websiteUri={place.websiteUri}
-            onOpenDetails={() => setShowDetailsFor(place)}
-            actions={{
-              variant: "rate",
-              pending: pendingId === place.placeId,
-              onLike: () => handleAdd(place.placeId, "recommended"),
-              onDislike: () => handleDislike(place.placeId),
-              onSkip: () => handleSkip(place.placeId),
-              onAdd: () => handleAdd(place.placeId, "want_to_visit"),
-              addLabel: "Merken",
-            }}
-          />
-        ))}
-      </div>
-
-      {showDetailsFor && (
-        <PlaceDetailModal
-          name={showDetailsFor.name}
-          address={showDetailsFor.address}
-          category={showDetailsFor.category}
-          photoUrl={showDetailsFor.photoUrl}
-          lat={showDetailsFor.lat}
-          lng={showDetailsFor.lng}
-          googleMapsUri={showDetailsFor.googleMapsUri}
-          rating={showDetailsFor.rating}
-          userRatingCount={showDetailsFor.userRatingCount}
-          priceLevel={showDetailsFor.priceLevel}
-          phoneNumber={showDetailsFor.phoneNumber}
-          websiteUri={showDetailsFor.websiteUri}
-          openingStatus={showDetailsFor.openingStatus}
-          onClose={() => setShowDetailsFor(null)}
-        />
+    <>
+      {toastMessage && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <div className="rounded-md bg-foreground text-background px-4 py-2 text-sm shadow-lg">
+            {toastMessage}
+          </div>
+        </div>
       )}
-    </div>
+      {visibleSuggestions.length > 0 && (
+        <div className="w-full flex flex-col gap-3 mt-2 pt-4 border-t border-dashed">
+          <h2 className="text-xs font-medium text-muted-foreground">
+            Weitere Empfehlungen für {regionName}
+          </h2>
+          <div className="w-full flex flex-col gap-3">
+            {visibleSuggestions.map((place) => (
+              <PlaceItemRow
+                key={place.placeId}
+                imageUrl={place.photoUrl}
+                name={place.name}
+                category={place.category}
+                address={place.address}
+                rating={place.rating}
+                userRatingCount={place.userRatingCount}
+                openingStatus={place.openingStatus}
+                priceLevel={place.priceLevel}
+                phoneNumber={place.phoneNumber}
+                websiteUri={place.websiteUri}
+                onOpenDetails={() => setShowDetailsFor(place)}
+                actions={{
+                  variant: "rate",
+                  pending: pendingId === place.placeId,
+                  onLike: () => handleAdd(place.placeId, "recommended"),
+                  onDislike: () => handleDislike(place.placeId),
+                  onSkip: () => handleSkip(place.placeId),
+                  onAdd: () => handleAdd(place.placeId, "want_to_visit"),
+                  addLabel: "Merken",
+                }}
+              />
+            ))}
+          </div>
+
+          {showDetailsFor && (
+            <PlaceDetailModal
+              name={showDetailsFor.name}
+              address={showDetailsFor.address}
+              category={showDetailsFor.category}
+              photoUrl={showDetailsFor.photoUrl}
+              lat={showDetailsFor.lat}
+              lng={showDetailsFor.lng}
+              googleMapsUri={showDetailsFor.googleMapsUri}
+              rating={showDetailsFor.rating}
+              userRatingCount={showDetailsFor.userRatingCount}
+              priceLevel={showDetailsFor.priceLevel}
+              phoneNumber={showDetailsFor.phoneNumber}
+              websiteUri={showDetailsFor.websiteUri}
+              openingStatus={showDetailsFor.openingStatus}
+              onClose={() => setShowDetailsFor(null)}
+            />
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -499,14 +537,18 @@ function VisitorRegionList({
   const handleDislike = async (item: RegionPlaceItem) => {
     if (!user) return;
     const supabase = createClient();
-    await setInteractionWithCredits(
+    const { error } = await setInteractionWithCredits(
       supabase,
       user.id,
       { itemId: item.placeId, mediaType: "place" },
       "dislike",
       [ownerId],
     );
-    markOwn(item.placeId, "place", "dislike");
+    if (error) {
+      showToast("Konnte nicht gespeichert werden, versuch's nochmal");
+    } else {
+      markOwn(item.placeId, "place", "dislike");
+    }
   };
 
   const availableCategories = [...new Set(items.map((item) => item.category))];

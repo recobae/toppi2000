@@ -40,6 +40,12 @@ export function StoryViewer({
   const [index, setIndex] = useState(0);
   const [deleting, setDeleting] = useState(false);
   const [actionPending, setActionPending] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -101,17 +107,22 @@ export function StoryViewer({
       } = await supabase.auth.getUser();
       if (!user) return;
 
+      let error = null;
       if (current.category === "places" && current.placeId) {
-        await removePlace(supabase, user.id, current.placeId);
+        ({ error } = await removePlace(supabase, user.id, current.placeId));
       } else if (
         current.category !== "places" &&
         current.category !== "watchlist_transition" &&
         current.itemId != null &&
         current.mediaType
       ) {
-        await removeFromCategory(supabase, current.category, user.id, current.itemId, current.mediaType);
+        ({ error } = await removeFromCategory(supabase, current.category, user.id, current.itemId, current.mediaType));
       }
-      setUpdates((prev) => (prev ?? []).filter((_, i) => i !== index));
+      if (error) {
+        showToast("Konnte nicht gelöscht werden, versuch's nochmal");
+      } else {
+        setUpdates((prev) => (prev ?? []).filter((_, i) => i !== index));
+      }
     } finally {
       setDeleting(false);
     }
@@ -128,7 +139,12 @@ export function StoryViewer({
     setActionPending(true);
     const supabase = createClient();
     const item = { itemId: String(current.itemId), mediaType: current.mediaType };
-    await setInteractionWithCredits(supabase, viewerId, item, "like", [ownerId]);
+    const { error: interactionError } = await setInteractionWithCredits(supabase, viewerId, item, "like", [ownerId]);
+    if (interactionError) {
+      showToast("Konnte nicht gespeichert werden, versuch's nochmal");
+      setActionPending(false);
+      return;
+    }
     const { error } = await saveToCategory(
       supabase,
       "top_list",
@@ -145,7 +161,7 @@ export function StoryViewer({
     if (!current || !current.itemId || !current.mediaType || !viewerId || !ownerId) return;
     setActionPending(true);
     const supabase = createClient();
-    await setInteractionWithCredits(
+    const { error } = await setInteractionWithCredits(
       supabase,
       viewerId,
       { itemId: String(current.itemId), mediaType: current.mediaType },
@@ -153,6 +169,10 @@ export function StoryViewer({
       [ownerId],
     );
     setActionPending(false);
+    if (error) {
+      showToast("Konnte nicht gespeichert werden, versuch's nochmal");
+      return;
+    }
     setIndex((i) => i + 1);
   };
 
@@ -299,6 +319,14 @@ export function StoryViewer({
             onClick={(event) => event.stopPropagation()}
           >
             <ActionBar actions={storyActions} guard={(fn) => fn()} />
+          </div>
+        )}
+
+        {toastMessage && (
+          <div className="absolute bottom-5 left-3 right-3 z-40 flex justify-center">
+            <div className="rounded-md bg-foreground text-background px-4 py-2 text-sm shadow-lg">
+              {toastMessage}
+            </div>
           </div>
         )}
       </div>
