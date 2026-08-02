@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { MovieListGrid } from "@/components/lists/movie-list-grid";
+import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
 import { MOVIE_LIST_LABEL } from "@/lib/categories";
 
 export async function generateMetadata({
@@ -54,6 +55,7 @@ export default async function MovieListPage({
           currentUserId={viewer?.id ?? null}
         />
       </div>
+      <ScrollToTopButton />
     </main>
   );
 }

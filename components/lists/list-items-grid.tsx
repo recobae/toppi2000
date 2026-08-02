@@ -15,6 +15,7 @@ import {
   updateNote,
 } from "@/lib/saved-items";
 import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
+import { recordSkip } from "@/lib/item-skips";
 import { postWatchlistTransitionStoryEvent, type WatchlistTransition } from "@/lib/story-events";
 import { CATEGORY_LABELS, type SavedCategory } from "@/lib/categories";
 import { NOTE_PLACEHOLDERS } from "@/lib/notes";
@@ -54,13 +55,15 @@ function AddItemRow({ category }: { category: SavedCategory }) {
  * Compact suggestion strip under the owner's own Empfohlen-list, fed by the
  * same shared engine (lib/recommendations.ts) as the Inspiration page --
  * here specifically the genre-profile variant, derived from what the user
- * already rated/liked. Same ListItemRow "rate" bar (Ja/Nein/Watchlist) as
- * everywhere else, just visually set apart with a dashed border.
+ * already rated/liked. Same ListItemRow "rate" bar (Ja/Nein/Skip/Watchlist)
+ * and the same detail-modal-on-click behavior as the Inspiration feed --
+ * just visually set apart with a dashed border.
  */
 export function MovieSuggestionsStrip({ userId }: { userId: string }) {
   const [suggestions, setSuggestions] = useState<SearchResult[] | null>(null);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [exhausted, setExhausted] = useState(false);
+  const [showDetailsFor, setShowDetailsFor] = useState<SearchResult | null>(null);
   const isReloadingRef = useRef(false);
 
   const loadSuggestions = useCallback(async () => {
@@ -126,6 +129,15 @@ export function MovieSuggestionsStrip({ userId }: { userId: string }) {
     setPendingKey(null);
   };
 
+  const handleSkip = async (result: SearchResult) => {
+    const key = `${result.mediaType}-${result.id}`;
+    setPendingKey(key);
+    const supabase = createClient();
+    await recordSkip(supabase, userId, String(result.id), result.mediaType);
+    removeSuggestion(result);
+    setPendingKey(null);
+  };
+
   if (!suggestions || suggestions.length === 0) return null;
 
   return (
@@ -145,11 +157,13 @@ export function MovieSuggestionsStrip({ userId }: { userId: string }) {
               movieDetails={result.movieDetails}
               watchProviders={result.watchProviders}
               socialProof={getSocialProofBreakdown(socialProofMap, result.id, result.mediaType)}
+              onOpenDetails={() => setShowDetailsFor(result)}
               actions={{
                 variant: "rate",
                 pending: pendingKey === key,
                 onLike: () => handleAdd(result, "top_list"),
                 onDislike: () => handleDislike(result),
+                onSkip: () => handleSkip(result),
                 onAdd: () => handleAdd(result, "watchlist"),
                 addLabel: "Watchlist",
               }}
@@ -157,6 +171,19 @@ export function MovieSuggestionsStrip({ userId }: { userId: string }) {
           );
         })}
       </div>
+
+      {showDetailsFor && (
+        <MovieDetailModal
+          title={showDetailsFor.title}
+          posterUrl={showDetailsFor.posterPath ? `${POSTER_BASE_URL}${showDetailsFor.posterPath}` : null}
+          year={showDetailsFor.year}
+          details={showDetailsFor.movieDetails}
+          tmdbId={showDetailsFor.id}
+          mediaType={showDetailsFor.mediaType}
+          socialProof={getSocialProofBreakdown(socialProofMap, showDetailsFor.id, showDetailsFor.mediaType)}
+          onClose={() => setShowDetailsFor(null)}
+        />
+      )}
     </div>
   );
 }

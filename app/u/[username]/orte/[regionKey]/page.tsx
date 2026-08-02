@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { RegionItemsGrid } from "@/components/orte/region-items-grid";
+import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
 
 export async function generateMetadata({
   params,
@@ -82,6 +83,7 @@ export default async function RegionListPage({
           currentUserId={viewer?.id ?? null}
         />
       </div>
+      <ScrollToTopButton />
     </main>
   );
 }

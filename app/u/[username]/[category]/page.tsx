@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { CategoryItemsGrid } from "@/components/lists/list-items-grid";
+import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
 import {
   CATEGORY_LABELS,
   CATEGORY_PAGE_SUBTITLES,
@@ -73,6 +74,7 @@ export default async function CategoryListPage({
           currentUserId={viewer?.id ?? null}
         />
       </div>
+      <ScrollToTopButton />
     </main>
   );
 }

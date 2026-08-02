@@ -11,6 +11,7 @@ import { PlaceDetailModal } from "@/components/orte/place-detail-modal";
 import { PlaceItemRow } from "@/components/items/list-item-row";
 import { removePlace, savePlaceToRegion, updatePlaceNote, type PlaceStatus } from "@/lib/place-items";
 import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
+import { recordSkip } from "@/lib/item-skips";
 import { useOwnInteractions } from "@/lib/hooks/use-own-interactions";
 import {
   PLACE_CATEGORIES,
@@ -21,6 +22,7 @@ import {
 } from "@/lib/places";
 import type { OpeningStatus } from "@/lib/opening-hours";
 import type { CityPlaceRecommendations } from "@/lib/recommendations";
+import type { PlaceSearchResult } from "@/lib/google-places";
 
 export type RegionPlaceItem = {
   id: string;
@@ -128,13 +130,15 @@ function AddPlaceRow() {
  * Compact suggestion strip under the owner's own Orte-region list -- exact
  * same query (lib/recommendations.ts) as the Inspiration Orte tab's per-city
  * feed: friends who added something here first, then generic popular
- * places. Rating happens right here via Ja/Nein/Merken, same as everywhere.
+ * places. Rating happens right here via Ja/Nein/Skip/Merken, and clicking
+ * an item opens the same detail modal, exactly like the Inspiration feed.
  */
 function PlaceSuggestionsStrip({ userId, regionName }: { userId: string; regionName: string }) {
   const [recommendations, setRecommendations] = useState<CityPlaceRecommendations | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [exhausted, setExhausted] = useState(false);
+  const [showDetailsFor, setShowDetailsFor] = useState<PlaceSearchResult | null>(null);
   const limitRef = useRef(12);
   const isReloadingRef = useRef(false);
 
@@ -194,6 +198,12 @@ function PlaceSuggestionsStrip({ userId, regionName }: { userId: string; regionN
     await setInteractionWithCredits(supabase, userId, { itemId: placeId, mediaType: "place" }, "dislike");
   };
 
+  const handleSkip = async (placeId: string) => {
+    setDismissedIds((prev) => new Set(prev).add(placeId));
+    const supabase = createClient();
+    await recordSkip(supabase, userId, placeId, "place");
+  };
+
   if (visibleSuggestions.length === 0) return null;
 
   return (
@@ -215,17 +225,38 @@ function PlaceSuggestionsStrip({ userId, regionName }: { userId: string; regionN
             priceLevel={place.priceLevel}
             phoneNumber={place.phoneNumber}
             websiteUri={place.websiteUri}
+            onOpenDetails={() => setShowDetailsFor(place)}
             actions={{
               variant: "rate",
               pending: pendingId === place.placeId,
               onLike: () => handleAdd(place.placeId, "recommended"),
               onDislike: () => handleDislike(place.placeId),
+              onSkip: () => handleSkip(place.placeId),
               onAdd: () => handleAdd(place.placeId, "want_to_visit"),
               addLabel: "Merken",
             }}
           />
         ))}
       </div>
+
+      {showDetailsFor && (
+        <PlaceDetailModal
+          name={showDetailsFor.name}
+          address={showDetailsFor.address}
+          category={showDetailsFor.category}
+          photoUrl={showDetailsFor.photoUrl}
+          lat={showDetailsFor.lat}
+          lng={showDetailsFor.lng}
+          googleMapsUri={showDetailsFor.googleMapsUri}
+          rating={showDetailsFor.rating}
+          userRatingCount={showDetailsFor.userRatingCount}
+          priceLevel={showDetailsFor.priceLevel}
+          phoneNumber={showDetailsFor.phoneNumber}
+          websiteUri={showDetailsFor.websiteUri}
+          openingStatus={showDetailsFor.openingStatus}
+          onClose={() => setShowDetailsFor(null)}
+        />
+      )}
     </div>
   );
 }
