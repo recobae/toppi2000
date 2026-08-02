@@ -123,6 +123,71 @@ export async function computeTasteMatch(
   };
 }
 
+/**
+ * Same match/percentage logic as computeTasteMatch, batched across many
+ * owners against one fixed viewer -- e.g. the profile owner's Ich-folge bar,
+ * where every followed friend's badge is matched against the same viewer
+ * (the profile owner). Runs exactly 2 item_interactions queries total
+ * (one `user_id IN (ownerIds)`, one for the single viewerId) instead of one
+ * computeTasteMatch call (2 queries) per owner.
+ */
+export async function computeTasteMatchBatch(
+  supabase: SupabaseClient,
+  ownerIds: string[],
+  viewerId: string,
+): Promise<Map<string, TasteMatch>> {
+  const result = new Map<string, TasteMatch>();
+  if (ownerIds.length === 0) return result;
+
+  const [{ data: ownerRows }, { data: viewerRows }] = await Promise.all([
+    supabase
+      .from("item_interactions")
+      .select("user_id, item_id, media_type, interaction_type")
+      .in("user_id", ownerIds)
+      .in("interaction_type", ["like", "dislike"]),
+    supabase
+      .from("item_interactions")
+      .select("item_id, media_type, interaction_type")
+      .eq("user_id", viewerId)
+      .in("interaction_type", ["like", "dislike"]),
+  ]);
+
+  const viewerByKey = new Map<string, "like" | "dislike">(
+    (viewerRows ?? []).map((row) => [`${row.media_type}-${row.item_id}`, row.interaction_type as "like" | "dislike"]),
+  );
+
+  const rowsByOwnerId = new Map<string, { media_type: string; item_id: string; interaction_type: string }[]>();
+  for (const row of ownerRows ?? []) {
+    if (!rowsByOwnerId.has(row.user_id)) rowsByOwnerId.set(row.user_id, []);
+    rowsByOwnerId.get(row.user_id)!.push(row);
+  }
+
+  for (const ownerId of ownerIds) {
+    let movieShared = 0;
+    let movieMatch = 0;
+    let placeShared = 0;
+    let placeMatch = 0;
+    for (const row of rowsByOwnerId.get(ownerId) ?? []) {
+      const viewerType = viewerByKey.get(`${row.media_type}-${row.item_id}`);
+      if (!viewerType) continue;
+      const isMatch = viewerType === row.interaction_type;
+      if (row.media_type === "place") {
+        placeShared += 1;
+        if (isMatch) placeMatch += 1;
+      } else {
+        movieShared += 1;
+        if (isMatch) movieMatch += 1;
+      }
+    }
+    result.set(ownerId, {
+      movies: buildCategoryMatch(movieShared, movieMatch),
+      places: buildCategoryMatch(placeShared, placeMatch),
+    });
+  }
+
+  return result;
+}
+
 function formatCategorySegment(label: string, category: CategoryTasteMatch): string | null {
   if (category.percentage === null) return null;
   return `${label}: ${category.percentage}%${category.isLowConfidence ? " (wenige gemeinsame Bewertungen)" : ""}`;

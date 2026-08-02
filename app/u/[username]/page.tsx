@@ -23,7 +23,7 @@ import {
 } from "@/lib/categories";
 import { resolveEarnedExpertiseLabels, resolvePlaceExpertiseLabels } from "@/lib/expertise";
 import { hasActiveStory as checkHasActiveStory, storyWindowSince } from "@/lib/story-activity";
-import { computeTasteMatch, bestTasteMatchPercentage } from "@/lib/taste-match";
+import { computeTasteMatch, computeTasteMatchBatch, bestTasteMatchPercentage } from "@/lib/taste-match";
 
 // "X Likes"/"X mal inspiriert" are replaced by Taste Match below -- kept
 // computed (not deleted) in case they come back, just not rendered.
@@ -53,19 +53,19 @@ export default async function ProfilePage({
   const { username } = await params;
   const supabase = await createClient();
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, username, total_likes_received, home_city")
-    .eq("username", username)
-    .single();
+  const [{ data: profile }, { data: { user: viewer } }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, username, total_likes_received, home_city")
+      .eq("username", username)
+      .single(),
+    supabase.auth.getUser(),
+  ]);
 
   if (!profile) {
     notFound();
   }
 
-  const {
-    data: { user: viewer },
-  } = await supabase.auth.getUser();
   const isOwner = viewer?.id === profile.id;
   const isGuest = !viewer;
 
@@ -183,45 +183,48 @@ export default async function ProfilePage({
   // crediting EVERY one of those owners, not just the first. This replaced
   // the old single-column item_interactions.target_user_id / adopted_from
   // approach, which could only ever credit one owner per event.
-  const [{ count: likesCount }, { count: inspiredCount }] = await Promise.all([
-    supabase
-      .from("interaction_credits")
-      .select("id", { count: "exact", head: true })
-      .eq("owner_user_id", profile.id)
-      .eq("credit_type", "like"),
-    supabase
-      .from("interaction_credits")
-      .select("id", { count: "exact", head: true })
-      .eq("owner_user_id", profile.id)
-      .eq("credit_type", "inspired"),
-  ]);
-
-  const hasActiveStory = await checkHasActiveStory(supabase, profile.id);
-
-  const tasteMatch =
-    !isOwner && viewer ? await computeTasteMatch(supabase, profile.id, viewer.id) : null;
-
   // Progress badges (Block 3): total like+dislike item_interactions rows,
   // never watchlist/Merken adds or skips -- those aren't a taste opinion.
-  const [{ count: movieInteractionCount }, { count: placeInteractionCount }] = await Promise.all([
+  const [
+    [{ count: likesCount }, { count: inspiredCount }],
+    hasActiveStory,
+    tasteMatch,
+    [{ count: movieInteractionCount }, { count: placeInteractionCount }],
+    { count: followerCount },
+  ] = await Promise.all([
+    Promise.all([
+      supabase
+        .from("interaction_credits")
+        .select("id", { count: "exact", head: true })
+        .eq("owner_user_id", profile.id)
+        .eq("credit_type", "like"),
+      supabase
+        .from("interaction_credits")
+        .select("id", { count: "exact", head: true })
+        .eq("owner_user_id", profile.id)
+        .eq("credit_type", "inspired"),
+    ]),
+    checkHasActiveStory(supabase, profile.id),
+    !isOwner && viewer ? computeTasteMatch(supabase, profile.id, viewer.id) : Promise.resolve(null),
+    Promise.all([
+      supabase
+        .from("item_interactions")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", profile.id)
+        .in("interaction_type", ["like", "dislike"])
+        .in("media_type", ["movie", "tv"]),
+      supabase
+        .from("item_interactions")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", profile.id)
+        .in("interaction_type", ["like", "dislike"])
+        .eq("media_type", "place"),
+    ]),
     supabase
-      .from("item_interactions")
+      .from("user_follows")
       .select("id", { count: "exact", head: true })
-      .eq("user_id", profile.id)
-      .in("interaction_type", ["like", "dislike"])
-      .in("media_type", ["movie", "tv"]),
-    supabase
-      .from("item_interactions")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", profile.id)
-      .in("interaction_type", ["like", "dislike"])
-      .eq("media_type", "place"),
+      .eq("followed_id", profile.id),
   ]);
-
-  const { count: followerCount } = await supabase
-    .from("user_follows")
-    .select("id", { count: "exact", head: true })
-    .eq("followed_id", profile.id);
 
   type FollowingProfile = {
     id: string;
@@ -314,16 +317,12 @@ export default async function ProfilePage({
         (viewRows ?? []).map((row) => [row.target_user_id, row.viewed_at]),
       );
 
-      // Block 2.1: the small Taste-Match badge on each avatar -- one query
-      // pair per friend (bounded by follow count, same N+1 shape as the
-      // avatar/expertise lookups above).
+      // Block 2.1: the small Taste-Match badge on each avatar -- a single
+      // batched pair of item_interactions queries for every followed friend
+      // at once, instead of one computeTasteMatch call (2 queries) per friend.
+      const tasteMatchBatch = await computeTasteMatchBatch(supabase, followedIds, profile.id);
       const tasteMatchByUserId = new Map(
-        await Promise.all(
-          (friendProfiles ?? []).map(async (friend) => {
-            const match = await computeTasteMatch(supabase, friend.id, profile.id);
-            return [friend.id, bestTasteMatchPercentage(match)] as const;
-          }),
-        ),
+        [...tasteMatchBatch].map(([friendId, match]) => [friendId, bestTasteMatchPercentage(match)] as const),
       );
 
       followingProfiles = (friendProfiles ?? []).map((friend) => {

@@ -26,19 +26,19 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = await createClient();
-  const {
-    data: { user: viewer },
-  } = await supabase.auth.getUser();
+  const [
+    {
+      data: { user: viewer },
+    },
+    { data: owner },
+  ] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.from("profiles").select("id").eq("username", username).single(),
+  ]);
 
   if (!viewer) {
     return NextResponse.json({ error: "Nicht angemeldet" }, { status: 401 });
   }
-
-  const { data: owner } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("username", username)
-    .single();
 
   if (!owner) {
     return NextResponse.json({ error: "Nicht gefunden" }, { status: 404 });

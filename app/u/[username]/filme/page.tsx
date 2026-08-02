@@ -23,19 +23,18 @@ export default async function MovieListPage({
   const { username } = await params;
   const supabase = await createClient();
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, username")
-    .eq("username", username)
-    .single();
+  const [{ data: profile }, { data: { user: viewer } }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, username")
+      .eq("username", username)
+      .single(),
+    supabase.auth.getUser(),
+  ]);
 
   if (!profile) {
     notFound();
   }
-
-  const {
-    data: { user: viewer },
-  } = await supabase.auth.getUser();
 
   return (
     <main className="min-h-screen flex flex-col items-center">
