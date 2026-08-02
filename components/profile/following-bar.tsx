@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Compass, Plus } from "lucide-react";
+import { Compass, Plus, Zap } from "lucide-react";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { FollowSuggestionsModal } from "@/components/profile/follow-suggestions-modal";
 import { StoryViewer } from "@/components/profile/story-viewer";
@@ -57,6 +57,28 @@ function InspoWidget() {
   );
 }
 
+function SwipeWidget() {
+  return (
+    <Link
+      href="/swipe"
+      aria-label="Swipe"
+      className="shrink-0 flex flex-col items-center gap-1 w-14"
+    >
+      <span className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/60 text-primary-foreground">
+        <Zap className="size-6" />
+      </span>
+      <span className="w-full text-center text-[10px] font-medium truncate">
+        Swipe
+      </span>
+    </Link>
+  );
+}
+
+/** Separates the fixed Inspiration/Swipe tiles from the scrollable followed-profile avatars. */
+function BarDivider() {
+  return <div className="w-px self-stretch bg-border shrink-0" />;
+}
+
 export function FollowingBar({
   currentUserId,
   followingProfiles,
@@ -91,6 +113,8 @@ export function FollowingBar({
     return (
       <div className="w-full flex items-center gap-3">
         <InspoWidget />
+        <SwipeWidget />
+        <BarDivider />
         <button
           type="button"
           onClick={() => setShowSuggestions(true)}
@@ -112,6 +136,8 @@ export function FollowingBar({
   return (
     <div className="w-full flex items-start gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <InspoWidget />
+      <SwipeWidget />
+      <BarDivider />
       {followingProfiles.map((friend) => {
         const hasUnseenStory = friend.hasUnseenStory && !locallyViewedIds.has(friend.id);
         const avatar = (
