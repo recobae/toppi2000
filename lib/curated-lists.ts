@@ -41,7 +41,7 @@ export async function getCuratedLists(
     .in("id", ownerIds);
   const usernameByOwnerId = new Map((owners ?? []).map((owner) => [owner.id, owner.username]));
 
-  return Promise.all(
+  const previews = await Promise.all(
     regionRows.map(async (region) => {
       const [{ data: previewRows }, { count }, { count: noteCount }, { count: savedCount }] =
         await Promise.all([
@@ -80,4 +80,9 @@ export async function getCuratedLists(
       };
     }),
   );
+
+  // A curated list a system account hasn't populated yet must not appear in
+  // the onboarding picker or the Inspiration section -- both surfaces exist
+  // specifically to hand a new user something to interact with immediately.
+  return previews.filter((preview) => preview.itemCount > 0);
 }

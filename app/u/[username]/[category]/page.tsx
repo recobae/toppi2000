@@ -12,6 +12,7 @@ import {
 } from "@/lib/categories";
 import { getOwnInteractionRows } from "@/lib/taste-match";
 import type { OwnInteractionEntry } from "@/lib/hooks/use-own-interactions";
+import { resolveBackToOwnProfileUsername } from "@/lib/profile-link";
 
 export async function generateMetadata({
   params,
@@ -69,13 +70,19 @@ export default async function CategoryListPage({
       interactionType: row.interaction_type,
     }));
   }
+  const backToProfileUsername = await resolveBackToOwnProfileUsername(
+    supabase,
+    viewer,
+    isOwner,
+    profile.username,
+  );
 
   return (
     <main className="min-h-screen flex flex-col items-center">
       <div className="flex-1 w-full flex flex-col gap-6 max-w-5xl p-5">
         <div className="flex flex-col gap-1 pt-8">
           <Link
-            href={`/u/${profile.username}`}
+            href={`/u/${backToProfileUsername}`}
             className="text-sm text-muted-foreground hover:underline w-fit"
           >
             ← Zum Profil

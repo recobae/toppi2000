@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Plus, Upload } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { BackToProfileLink } from "@/components/profile/back-to-profile-link";
@@ -98,15 +98,18 @@ export default function InspirationPage() {
                 </button>
               );
             })}
+            {/* Same tab-button component/weight as "Filme & Serien"/"Orte" --
+                triggers the existing import modal directly instead of
+                switching to a persistent tab view, since there's no
+                standalone "Import" content to show once opened. */}
+            <button
+              type="button"
+              onClick={() => (user ? setShowImport(true) : setShowGuestModal(true))}
+              className="px-3 py-2 text-sm font-medium border-b-2 border-transparent -mb-px text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Importieren
+            </button>
             <div className="ml-auto mb-1 flex items-center gap-1.5">
-              <button
-                type="button"
-                aria-label="Liste importieren"
-                onClick={() => (user ? setShowImport(true) : setShowGuestModal(true))}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
-              >
-                <Upload className="size-4" />
-              </button>
               <button
                 type="button"
                 aria-label="Neue Personen finden"
