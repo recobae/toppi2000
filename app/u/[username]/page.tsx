@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Heart, ListChecks, MapPin, Plus, Repeat2, Settings, Sparkles, Star } from "lucide-react";
+import { Heart, ListChecks, MapPin, Plus, Repeat2, Settings, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileStoryAvatar } from "@/components/profile/profile-story-avatar";
 import { ListOverviewRow } from "@/components/profile/list-overview-row";
@@ -13,6 +13,8 @@ import { FollowingBar } from "@/components/profile/following-bar";
 import { FollowerCount } from "@/components/profile/follower-count";
 import { ShareListButton } from "@/components/lists/share-list-button";
 import { ExpertiseBadges } from "@/components/profile/expertise-badges";
+import { TasteMatchExpandable } from "@/components/profile/taste-match-expandable";
+import { ProgressBadges } from "@/components/profile/progress-badges";
 import {
   MOVIE_LIST_LABEL,
   VISIBLE_SAVED_CATEGORIES,
@@ -21,7 +23,7 @@ import {
 } from "@/lib/categories";
 import { resolveEarnedExpertiseLabels, resolvePlaceExpertiseLabels } from "@/lib/expertise";
 import { hasActiveStory as checkHasActiveStory, storyWindowSince } from "@/lib/story-activity";
-import { computeTasteMatch, formatTasteMatchLabel } from "@/lib/taste-match";
+import { computeTasteMatch, bestTasteMatchPercentage } from "@/lib/taste-match";
 
 // "X Likes"/"X mal inspiriert" are replaced by Taste Match below -- kept
 // computed (not deleted) in case they come back, just not rendered.
@@ -199,6 +201,23 @@ export default async function ProfilePage({
   const tasteMatch =
     !isOwner && viewer ? await computeTasteMatch(supabase, profile.id, viewer.id) : null;
 
+  // Progress badges (Block 3): total like+dislike item_interactions rows,
+  // never watchlist/Merken adds or skips -- those aren't a taste opinion.
+  const [{ count: movieInteractionCount }, { count: placeInteractionCount }] = await Promise.all([
+    supabase
+      .from("item_interactions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", profile.id)
+      .in("interaction_type", ["like", "dislike"])
+      .in("media_type", ["movie", "tv"]),
+    supabase
+      .from("item_interactions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", profile.id)
+      .in("interaction_type", ["like", "dislike"])
+      .eq("media_type", "place"),
+  ]);
+
   const { count: followerCount } = await supabase
     .from("user_follows")
     .select("id", { count: "exact", head: true })
@@ -210,6 +229,7 @@ export default async function ProfilePage({
     avatarUrl: string | null;
     expertiseKeys: string[];
     hasUnseenStory: boolean;
+    tasteMatchBadge: number | null;
   };
 
   let followingProfiles: FollowingProfile[] = [];
@@ -294,6 +314,18 @@ export default async function ProfilePage({
         (viewRows ?? []).map((row) => [row.target_user_id, row.viewed_at]),
       );
 
+      // Block 2.1: the small Taste-Match badge on each avatar -- one query
+      // pair per friend (bounded by follow count, same N+1 shape as the
+      // avatar/expertise lookups above).
+      const tasteMatchByUserId = new Map(
+        await Promise.all(
+          (friendProfiles ?? []).map(async (friend) => {
+            const match = await computeTasteMatch(supabase, friend.id, profile.id);
+            return [friend.id, bestTasteMatchPercentage(match)] as const;
+          }),
+        ),
+      );
+
       followingProfiles = (friendProfiles ?? []).map((friend) => {
         const itemCounts: Partial<Record<SavedCategory, number>> = {
           top_list: topListCountByUserId.get(friend.id) ?? 0,
@@ -310,6 +342,7 @@ export default async function ProfilePage({
             friend.username,
           ).map((entry) => entry.key),
           hasUnseenStory: !!latestActivity && (!viewedAt || viewedAt < latestActivity),
+          tasteMatchBadge: tasteMatchByUserId.get(friend.id) ?? null,
         };
       });
     }
@@ -367,14 +400,18 @@ export default async function ProfilePage({
               </div>
             </>
           )}
-          {tasteMatch && (
-            <div className="flex items-center gap-1.5">
-              <Sparkles className="size-4 text-primary" />
-              <span>{formatTasteMatchLabel(tasteMatch)}</span>
-            </div>
-          )}
           <FollowerCount targetUserId={profile.id} count={followerCount ?? 0} />
         </div>
+
+        {tasteMatch && (
+          <TasteMatchExpandable username={profile.username} tasteMatch={tasteMatch} />
+        )}
+
+        <ProgressBadges
+          movieCount={movieInteractionCount ?? 0}
+          placeCount={placeInteractionCount ?? 0}
+          showRing={isOwner}
+        />
 
         {!isOwner && !isGuest && (
           <FollowButton

@@ -15,6 +15,8 @@ type FollowingProfile = {
   avatarUrl: string | null;
   expertiseKeys: string[];
   hasUnseenStory: boolean;
+  /** Higher of the two Taste-Match category percentages, or null if neither has enough shared ratings yet. */
+  tasteMatchBadge: number | null;
 };
 
 function ExpertiseCornerBadge({ expertiseKeys }: { expertiseKeys: string[] }) {
@@ -25,6 +27,15 @@ function ExpertiseCornerBadge({ expertiseKeys }: { expertiseKeys: string[] }) {
   return (
     <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-background border border-border">
       <Icon className="size-2.5 fill-current text-primary" />
+    </span>
+  );
+}
+
+function TasteMatchCornerBadge({ percentage }: { percentage: number | null }) {
+  if (percentage === null) return null;
+  return (
+    <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-semibold text-primary-foreground border border-background">
+      {percentage}%
     </span>
   );
 }
@@ -115,6 +126,7 @@ export function FollowingBar({
               </span>
             </span>
             <ExpertiseCornerBadge expertiseKeys={friend.expertiseKeys} />
+            <TasteMatchCornerBadge percentage={friend.tasteMatchBadge} />
           </span>
         );
 

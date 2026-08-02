@@ -13,6 +13,7 @@ import { PersonSelector } from "@/components/search/person-selector";
 import { useSocialProof, getSocialProofBreakdown } from "@/lib/hooks/use-social-proof";
 import { saveToCategory, updateNote } from "@/lib/saved-items";
 import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
+import { recordSkip } from "@/lib/item-skips";
 import { CATEGORY_LABELS } from "@/lib/categories";
 import { NOTE_PLACEHOLDERS } from "@/lib/notes";
 import { NoteModal } from "@/components/lists/note-modal";
@@ -159,6 +160,13 @@ export function MoviesInspirationTab({
     }
     removeFeedItem(item.itemId, item.mediaType);
     setFeedPendingKey(null);
+  };
+
+  const handleFeedSkip = async (item: FriendFeedMovieItem) => {
+    if (!user) return;
+    const supabase = createClient();
+    await recordSkip(supabase, user.id, item.itemId, item.mediaType);
+    removeFeedItem(item.itemId, item.mediaType);
   };
 
   // ---- Search ----
@@ -425,6 +433,16 @@ export function MoviesInspirationTab({
     setBrowsePendingKey(null);
   };
 
+  const genericSkip = async (result: SearchResult, removeAfter?: (r: SearchResult) => void) => {
+    if (!user) return;
+    const key = `${result.mediaType}-${result.id}`;
+    setBrowsePendingKey(key);
+    const supabase = createClient();
+    await recordSkip(supabase, user.id, String(result.id), result.mediaType);
+    removeAfter?.(result);
+    setBrowsePendingKey(null);
+  };
+
   const socialProofItems = [...browseItems, ...friendsLikes, ...results, ...personResults];
   const socialProofMap = useSocialProof(
     socialProofItems.map((r) => ({ id: r.id, mediaType: r.mediaType })),
@@ -454,6 +472,7 @@ export function MoviesInspirationTab({
           pending: browsePendingKey === key,
           onLike: () => genericLike(result, removeAfter),
           onDislike: () => genericDislike(result, removeAfter),
+          onSkip: () => genericSkip(result, removeAfter),
           onAdd: () => genericWatchlist(result, removeAfter),
           addLabel: "Watchlist",
         }}
@@ -544,6 +563,7 @@ export function MoviesInspirationTab({
                         pending: feedPendingKey === key,
                         onLike: () => handleFeedLike(item),
                         onDislike: () => handleFeedDislike(item),
+                        onSkip: () => handleFeedSkip(item),
                         onAdd: () => handleFeedWatchlist(item),
                         addLabel: "Watchlist",
                       }}

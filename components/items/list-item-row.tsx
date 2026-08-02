@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import type { MouseEvent, ReactNode } from "react";
-import { Ban, Check, Heart, Pencil, Plus, Star, X } from "lucide-react";
+import { Ban, Check, Heart, Pencil, Plus, SkipForward, Star, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MovieMetaBadges, SocialProofIcons } from "@/components/movie-info";
@@ -44,6 +44,10 @@ export type ListItemRowActions =
       onAdd: () => void;
       addLabel: string;
       pending?: boolean;
+      /** Inspiration-feed-only: "kenne ich nicht / jetzt nicht" -- never offered on foreign lists or watchlist transitions. */
+      onSkip?: () => void;
+      /** Foreign-list rows only: the viewer's own existing stance on this item, so Ja/Nein reflect it instead of always looking unrated. */
+      ownInteraction?: "like" | "dislike" | null;
     }
   | {
       /** Item already on one of the viewer's own lists. */
@@ -99,26 +103,47 @@ export function ActionBar({
   };
 
   if (actions.variant === "rate") {
+    const likedByMe = actions.ownInteraction === "like";
+    const dislikedByMe = actions.ownInteraction === "dislike";
     return (
       <div className="mt-auto pt-2 flex items-center gap-1.5">
         <button
           type="button"
-          aria-label="Ja"
+          aria-label={likedByMe ? "Gefällt mir (bereits geliked)" : "Ja"}
           disabled={actions.pending}
           onClick={stop(actions.onLike)}
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-green-600 hover:bg-green-600/10 transition-colors disabled:opacity-50"
+          className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors disabled:opacity-50 ${
+            likedByMe
+              ? "border-green-600 bg-green-600/10 text-green-600"
+              : "border-input text-green-600 hover:bg-green-600/10"
+          }`}
         >
-          <Heart className="size-4" />
+          <Heart className={`size-4 ${likedByMe ? "fill-current" : ""}`} />
         </button>
         <button
           type="button"
-          aria-label="Nein"
+          aria-label={dislikedByMe ? "Gefällt mir nicht (bereits vergeben)" : "Nein"}
           disabled={actions.pending}
           onClick={stop(actions.onDislike)}
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+          className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors disabled:opacity-50 ${
+            dislikedByMe
+              ? "border-destructive bg-destructive/10 text-destructive"
+              : "border-input text-destructive hover:bg-destructive/10"
+          }`}
         >
-          <Ban className="size-4" />
+          <Ban className={`size-4 ${dislikedByMe ? "fill-current" : ""}`} />
         </button>
+        {actions.onSkip && (
+          <button
+            type="button"
+            aria-label="Kenne ich nicht"
+            disabled={actions.pending}
+            onClick={stop(actions.onSkip)}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-muted-foreground hover:bg-accent transition-colors disabled:opacity-50"
+          >
+            <SkipForward className="size-4" />
+          </button>
+        )}
         <button
           type="button"
           disabled={actions.pending}
@@ -285,6 +310,15 @@ export function ListItemRow({
         <p className="text-sm font-medium leading-tight line-clamp-2">{title}</p>
         {meta}
         <AttributionLines attribution={attribution} />
+        {actions.variant === "rate" && actions.ownInteraction && (
+          <p
+            className={`text-[11px] font-medium ${
+              actions.ownInteraction === "like" ? "text-green-600" : "text-destructive"
+            }`}
+          >
+            {actions.ownInteraction === "like" ? "Auch von dir geliked" : "Auch von dir nicht gemocht"}
+          </p>
+        )}
         {note && (
           <p className="text-[11px] italic text-muted-foreground line-clamp-2">
             „{truncateNote(note)}“

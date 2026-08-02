@@ -9,6 +9,7 @@ import { PlaceDetailModal } from "@/components/orte/place-detail-modal";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { NoteModal } from "@/components/lists/note-modal";
 import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
+import { recordSkip } from "@/lib/item-skips";
 import { savePlaceToRegion, updatePlaceNote, type PlaceStatus } from "@/lib/place-items";
 import type { PlaceSearchResult } from "@/lib/google-places";
 import type { CityPlaceRecommendations } from "@/lib/recommendations";
@@ -159,6 +160,13 @@ export function OrteInspirationTab({
     showToast("Nicht dein Geschmack? Notiert.");
   };
 
+  const handleSkip = async (place: PlaceSearchResult) => {
+    if (!user) return;
+    removeFromRecommendations(place.placeId);
+    const supabase = createClient();
+    await recordSkip(supabase, user.id, place.placeId, "place");
+  };
+
   // Personalized labels (home city + the user's own region lists) always
   // come first, then the curated fallback fills in the rest -- deduped so a
   // city the user already has doesn't show up twice.
@@ -196,6 +204,7 @@ export function OrteInspirationTab({
           pending: pendingPlaceId === place.placeId,
           onLike: () => handleAdd(place, recommendedBy, "recommended"),
           onDislike: () => handleDislike(place),
+          onSkip: () => handleSkip(place),
           onAdd: () => handleAdd(place, recommendedBy, "want_to_visit"),
           addLabel: "Merken",
         }}

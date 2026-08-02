@@ -20,6 +20,7 @@ import { CATEGORY_LABELS, type SavedCategory } from "@/lib/categories";
 import { NOTE_PLACEHOLDERS } from "@/lib/notes";
 import { NoteModal } from "@/components/lists/note-modal";
 import { useSocialProof, getSocialProofBreakdown } from "@/lib/hooks/use-social-proof";
+import { useOwnInteractions } from "@/lib/hooks/use-own-interactions";
 import type { WatchProviderGroups, MovieDetails, SearchResult } from "@/lib/tmdb";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
@@ -348,6 +349,9 @@ function VisitorCategoryList({
   }, []);
 
   const socialProofMap = useSocialProof(items.map((item) => ({ id: item.itemId, mediaType: item.mediaType })));
+  const { getOwn, markOwn } = useOwnInteractions(
+    items.map((item) => ({ id: String(item.itemId), mediaType: item.mediaType })),
+  );
 
   // Rating a title on someone else's list behaves exactly like rating an
   // unrated feed item -- Ja/Nein/Watchlist -- except the write target and
@@ -364,6 +368,7 @@ function VisitorCategoryList({
       "like",
       [ownerId],
     );
+    markOwn(String(item.itemId), item.mediaType, "like");
     const { error } = await saveToCategory(
       supabase,
       "top_list",
@@ -394,6 +399,7 @@ function VisitorCategoryList({
       "dislike",
       [ownerId],
     );
+    markOwn(String(item.itemId), item.mediaType, "dislike");
     setPendingKey(null);
   };
 
@@ -453,6 +459,7 @@ function VisitorCategoryList({
           actions={{
             variant: "rate",
             pending: pendingKey === `${item.mediaType}-${item.itemId}`,
+            ownInteraction: getOwn(String(item.itemId), item.mediaType),
             onLike: () => handleLike(item),
             onDislike: () => handleDislike(item),
             onAdd: () => handleWatchlist(item),

@@ -21,6 +21,14 @@ export type TasteMatch = {
   places: CategoryTasteMatch;
 };
 
+export type SharedRating = {
+  itemId: string;
+  mediaType: string;
+  ownerType: "like" | "dislike";
+  viewerType: "like" | "dislike";
+  isMatch: boolean;
+};
+
 function buildCategoryMatch(sharedCount: number, matchCount: number): CategoryTasteMatch {
   return {
     sharedCount,
@@ -28,6 +36,53 @@ function buildCategoryMatch(sharedCount: number, matchCount: number): CategoryTa
     percentage: sharedCount >= TASTE_MATCH_MIN_SHARED ? Math.round((matchCount / sharedCount) * 100) : null,
     isLowConfidence: sharedCount >= TASTE_MATCH_MIN_SHARED && sharedCount <= TASTE_MATCH_LOW_CONFIDENCE_MAX,
   };
+}
+
+/**
+ * The one query both computeTasteMatch (the percentage) and the "show me
+ * the actual titles" breakdown (app/api/taste-match-details) build on:
+ * every item BOTH users rated (like or dislike), each tagged with whether
+ * they agreed. Reads exclusively from item_interactions -- never
+ * item_skips or any list table -- so a skip or a watchlist add can never
+ * masquerade as a taste match.
+ */
+export async function getSharedRatings(
+  supabase: SupabaseClient,
+  ownerId: string,
+  viewerId: string,
+): Promise<SharedRating[]> {
+  const [{ data: ownerRows }, { data: viewerRows }] = await Promise.all([
+    supabase
+      .from("item_interactions")
+      .select("item_id, media_type, interaction_type")
+      .eq("user_id", ownerId)
+      .in("interaction_type", ["like", "dislike"]),
+    supabase
+      .from("item_interactions")
+      .select("item_id, media_type, interaction_type")
+      .eq("user_id", viewerId)
+      .in("interaction_type", ["like", "dislike"]),
+  ]);
+
+  const ownerByKey = new Map<string, "like" | "dislike">(
+    (ownerRows ?? []).map((row) => [`${row.media_type}-${row.item_id}`, row.interaction_type as "like" | "dislike"]),
+  );
+
+  const shared: SharedRating[] = [];
+  for (const row of viewerRows ?? []) {
+    const key = `${row.media_type}-${row.item_id}`;
+    const ownerType = ownerByKey.get(key);
+    if (!ownerType) continue;
+    const viewerType = row.interaction_type as "like" | "dislike";
+    shared.push({
+      itemId: row.item_id,
+      mediaType: row.media_type,
+      ownerType,
+      viewerType,
+      isMatch: ownerType === viewerType,
+    });
+  }
+  return shared;
 }
 
 /**
@@ -46,40 +101,19 @@ export async function computeTasteMatch(
   ownerId: string,
   viewerId: string,
 ): Promise<TasteMatch> {
-  const [{ data: ownerRows }, { data: viewerRows }] = await Promise.all([
-    supabase
-      .from("item_interactions")
-      .select("item_id, media_type, interaction_type")
-      .eq("user_id", ownerId)
-      .in("interaction_type", ["like", "dislike"]),
-    supabase
-      .from("item_interactions")
-      .select("item_id, media_type, interaction_type")
-      .eq("user_id", viewerId)
-      .in("interaction_type", ["like", "dislike"]),
-  ]);
-
-  const ownerByKey = new Map<string, "like" | "dislike">(
-    (ownerRows ?? []).map((row) => [`${row.media_type}-${row.item_id}`, row.interaction_type as "like" | "dislike"]),
-  );
+  const shared = await getSharedRatings(supabase, ownerId, viewerId);
 
   let movieShared = 0;
   let movieMatch = 0;
   let placeShared = 0;
   let placeMatch = 0;
-
-  for (const row of viewerRows ?? []) {
-    const key = `${row.media_type}-${row.item_id}`;
-    const ownerType = ownerByKey.get(key);
-    if (!ownerType) continue;
-
-    const isMatch = ownerType === row.interaction_type;
-    if (row.media_type === "place") {
+  for (const entry of shared) {
+    if (entry.mediaType === "place") {
       placeShared += 1;
-      if (isMatch) placeMatch += 1;
+      if (entry.isMatch) placeMatch += 1;
     } else {
       movieShared += 1;
-      if (isMatch) movieMatch += 1;
+      if (entry.isMatch) movieMatch += 1;
     }
   }
 
@@ -110,4 +144,12 @@ export function formatTasteMatchLabel(match: TasteMatch): string {
   if (segments.length > 0) return segments.join(" · ");
 
   return `Noch nicht genug Daten (${match.movies.sharedCount}/${TASTE_MATCH_MIN_SHARED} Filme, ${match.places.sharedCount}/${TASTE_MATCH_MIN_SHARED} Orte gemeinsam bewertet)`;
+}
+
+/** The higher of the two category percentages, or null if neither has reached the threshold -- used for the compact FollowingBar badge. */
+export function bestTasteMatchPercentage(match: TasteMatch): number | null {
+  const values = [match.movies.percentage, match.places.percentage].filter(
+    (value): value is number => value !== null,
+  );
+  return values.length > 0 ? Math.max(...values) : null;
 }

@@ -11,6 +11,7 @@ import { PlaceDetailModal } from "@/components/orte/place-detail-modal";
 import { PlaceItemRow } from "@/components/items/list-item-row";
 import { removePlace, savePlaceToRegion, updatePlaceNote, type PlaceStatus } from "@/lib/place-items";
 import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
+import { useOwnInteractions } from "@/lib/hooks/use-own-interactions";
 import {
   PLACE_CATEGORIES,
   PLACE_CATEGORY_ICONS,
@@ -397,6 +398,10 @@ function VisitorRegionList({
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
   }, []);
 
+  const { getOwn, markOwn } = useOwnInteractions(
+    items.map((item) => ({ id: item.placeId, mediaType: "place" as const })),
+  );
+
   // Rating a place on someone else's list behaves exactly like rating an
   // unrated Orte feed item -- Ja/Nein/Merken -- except the write target and
   // credited owner are this list's owner instead of nobody. Ja and Merken
@@ -417,6 +422,7 @@ function VisitorRegionList({
           "like",
           [ownerId],
         );
+        markOwn(item.placeId, "place", "like");
       }
 
       const geoResponse = await fetch(`/api/reverse-geocode?lat=${item.lat}&lng=${item.lng}`);
@@ -469,6 +475,7 @@ function VisitorRegionList({
       "dislike",
       [ownerId],
     );
+    markOwn(item.placeId, "place", "dislike");
   };
 
   const availableCategories = [...new Set(items.map((item) => item.category))];
@@ -591,6 +598,7 @@ function VisitorRegionList({
         actions={{
           variant: "rate",
           pending: pendingPlaceId === item.placeId,
+          ownInteraction: getOwn(item.placeId, "place"),
           onLike: () => handleSave(item, "recommended"),
           onDislike: () => handleDislike(item),
           onAdd: () => handleSave(item, "want_to_visit"),
