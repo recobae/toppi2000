@@ -10,7 +10,9 @@ import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { NoteModal } from "@/components/lists/note-modal";
 import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
 import { recordSkip } from "@/lib/item-skips";
-import { savePlaceToRegion, updatePlaceNote, type PlaceStatus } from "@/lib/place-items";
+import { savePlaceToRegion, createFreeRegion, updatePlaceNote, type PlaceStatus } from "@/lib/place-items";
+import { CreateFreeListModal } from "@/components/orte/create-free-list-modal";
+import { CuratedListsSection } from "@/components/inspiration/curated-lists-section";
 import type { PlaceSearchResult } from "@/lib/google-places";
 import type { CityPlaceRecommendations } from "@/lib/recommendations";
 import { CURATED_CITY_LABELS } from "@/lib/places";
@@ -27,6 +29,8 @@ export function OrteInspirationTab({
   const [homeCity, setHomeCity] = useState<string | null>(null);
   const [cityLabels, setCityLabels] = useState<string[]>([]);
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
+  const [isSystemAccount, setIsSystemAccount] = useState(false);
+  const [showCreateFreeList, setShowCreateFreeList] = useState(false);
   const [recommendations, setRecommendations] = useState<CityPlaceRecommendations | null>(null);
   const [isLoadingCity, setIsLoadingCity] = useState(false);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
@@ -45,17 +49,30 @@ export function OrteInspirationTab({
     const supabase = createClient();
     (async () => {
       const [{ data: profile }, { data: regionRows }] = await Promise.all([
-        supabase.from("profiles").select("home_city").eq("id", user.id).maybeSingle(),
+        supabase.from("profiles").select("home_city, is_system_account").eq("id", user.id).maybeSingle(),
         supabase.from("place_regions").select("region_name").eq("user_id", user.id),
       ]);
 
       const home = profile?.home_city ?? null;
       setHomeCity(home);
+      setIsSystemAccount(profile?.is_system_account ?? false);
       const labels = [...new Set((regionRows ?? []).map((r) => r.region_name))];
       setCityLabels(labels);
       setSelectedCity(home ?? labels[0] ?? null);
     })();
   }, [user]);
+
+  const handleCreateFreeList = async (title: string) => {
+    if (!user) return;
+    const supabase = createClient();
+    const { data, error } = await createFreeRegion(supabase, user.id, title);
+    if (error || !data) {
+      showToast("Konnte nicht erstellt werden, versuch's nochmal");
+      return;
+    }
+    setCityLabels((prev) => [...new Set([...prev, data.region_name])]);
+    setSelectedCity(data.region_name);
+  };
 
   const loadCityRecommendations = useCallback(async (city: string, limit: number) => {
     setIsLoadingCity(true);
@@ -128,6 +145,7 @@ export function OrteInspirationTab({
         place,
         undefined,
         status,
+        isSystemAccount,
       );
       if (!error) {
         if (recommendedByUsernames.length > 0) {
@@ -232,6 +250,8 @@ export function OrteInspirationTab({
     <div className="w-full flex flex-col gap-4">
       <OrteSearchPanel />
 
+      <CuratedListsSection />
+
       {allCityLabels.length > 0 && (
         <div className="w-full flex flex-col gap-3 border-t pt-4">
           <div className="w-full flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -250,6 +270,15 @@ export function OrteInspirationTab({
                 </button>
               );
             })}
+            {isSystemAccount && (
+              <button
+                type="button"
+                onClick={() => setShowCreateFreeList(true)}
+                className="shrink-0 whitespace-nowrap h-7 px-3 rounded-full border border-dashed border-input text-xs font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+              >
+                + Freie Liste
+              </button>
+            )}
           </div>
 
           {isLoadingCity ? (
@@ -330,6 +359,13 @@ export function OrteInspirationTab({
             await updatePlaceNote(supabase, user.id, notePrompt.place.placeId, note);
           }}
           onClose={() => setNotePrompt(null)}
+        />
+      )}
+
+      {showCreateFreeList && (
+        <CreateFreeListModal
+          onCreate={handleCreateFreeList}
+          onClose={() => setShowCreateFreeList(false)}
         />
       )}
     </div>

@@ -44,6 +44,13 @@ export async function savePlaceToRegion(
   place: SavablePlace,
   adoptedFrom?: string | null,
   status: PlaceStatus = "recommended",
+  /**
+   * Set by callers that know `userId` belongs to a system account (see
+   * lib/system-profile.ts) -- marks a newly created region list as curated
+   * content. Only applied on first creation; has no effect on an
+   * already-existing region.
+   */
+  markAsCurated = false,
 ): Promise<SavePlaceResult> {
   const regionKey = normalizeRegionKey(regionName);
 
@@ -60,7 +67,12 @@ export async function savePlaceToRegion(
   } else {
     const { data: inserted, error: insertRegionError } = await supabase
       .from("place_regions")
-      .insert({ user_id: userId, region_name: regionName, region_key: regionKey })
+      .insert({
+        user_id: userId,
+        region_name: regionName,
+        region_key: regionKey,
+        is_curated: markAsCurated,
+      })
       .select("id")
       .single();
     if (insertRegionError || !inserted) {
@@ -119,6 +131,21 @@ export async function savePlaceToRegion(
     regionName,
     regionItemCount: count ?? undefined,
   };
+}
+
+/**
+ * System-account-only: creates an empty, curated place_regions row from a
+ * freely chosen title, with no place attached yet -- items are added to it
+ * afterwards through the normal savePlaceToRegion flow once it's selected
+ * like any other city list.
+ */
+export async function createFreeRegion(supabase: SupabaseClient, userId: string, title: string) {
+  const regionKey = normalizeRegionKey(title);
+  return supabase
+    .from("place_regions")
+    .insert({ user_id: userId, region_name: title, region_key: regionKey, is_curated: true })
+    .select("id, region_name, region_key")
+    .single();
 }
 
 export async function removePlace(

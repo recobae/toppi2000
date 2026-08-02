@@ -1,25 +1,35 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { suggestUsernameFromEmail, withRandomSuffix } from "@/lib/username";
+import { followSystemAccount } from "@/lib/system-profile";
 
 export const DEFAULT_POST_AUTH_PATH = "/search";
+export const ONBOARDING_PATH = "/onboarding";
 const USERNAME_COLLISION_ATTEMPTS = 5;
+
+export type EnsureUsernameResult = {
+  username: string;
+  /** True only the moment the profiles row itself is first created. */
+  isNewProfile: boolean;
+};
 
 /**
  * Guarantees the user has a profiles.username, auto-generating one from
  * their email's local part (with a random numeric suffix on collision) the
- * first time they're seen. Returns the (existing or newly created) username.
+ * first time they're seen. Returns the (existing or newly created) username,
+ * plus whether this call is the one that actually created the profile row --
+ * used to gate one-time-only signup side effects (auto-follow, onboarding).
  */
 export async function ensureUsername(
   supabase: SupabaseClient,
   userId: string,
-): Promise<string> {
+): Promise<EnsureUsernameResult> {
   const { data: profile } = await supabase
     .from("profiles")
     .select("username")
     .eq("id", userId)
     .maybeSingle();
 
-  if (profile?.username) return profile.username;
+  if (profile?.username) return { username: profile.username, isNewProfile: false };
 
   const {
     data: { user },
@@ -42,7 +52,7 @@ export async function ensureUsername(
     .from("profiles")
     .upsert({ id: userId, username: candidate }, { onConflict: "id" });
 
-  return candidate;
+  return { username: candidate, isNewProfile: true };
 }
 
 /** Used after login: ensures a username exists, then returns `next` unchanged. */
@@ -60,15 +70,36 @@ export async function resolvePostAuthPath(
  * username exists, then sends the user straight to their own profile unless
  * `next` points somewhere more specific (e.g. a shared list they signed up
  * from).
+ *
+ * On a genuinely brand-new (non-system) profile, this is also the one-time
+ * hook for the two signup side effects: auto-following the curated content
+ * system account, and routing through /onboarding instead of straight to
+ * the (empty) profile page. `onboarding_completed` itself is only flipped
+ * by the onboarding page once the user actually reaches it (see
+ * app/onboarding/page.tsx) -- this function only decides where to send them.
  */
 export async function resolveSignupRedirectPath(
   supabase: SupabaseClient,
   userId: string,
   next: string,
 ): Promise<string> {
-  const username = await ensureUsername(supabase, userId);
-  if (next === DEFAULT_POST_AUTH_PATH) {
-    return `/u/${username}`;
+  const { username, isNewProfile } = await ensureUsername(supabase, userId);
+  if (next !== DEFAULT_POST_AUTH_PATH) return next;
+
+  if (isNewProfile) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_system_account, onboarding_completed")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (profile && !profile.is_system_account) {
+      await followSystemAccount(supabase, userId);
+      if (!profile.onboarding_completed) {
+        return ONBOARDING_PATH;
+      }
+    }
   }
-  return next;
+
+  return `/u/${username}`;
 }

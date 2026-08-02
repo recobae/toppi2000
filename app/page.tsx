@@ -10,7 +10,7 @@ export default async function Home() {
   const userId = data?.user?.id;
 
   if (userId) {
-    const username = await ensureUsername(supabase, userId);
+    const { username } = await ensureUsername(supabase, userId);
     redirect(`/u/${username}`);
   }
 
