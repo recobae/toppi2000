@@ -4,6 +4,8 @@ import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { RegionItemsGrid } from "@/components/orte/region-items-grid";
 import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
+import { getOwnInteractionRows } from "@/lib/taste-match";
+import type { OwnInteractionEntry } from "@/lib/hooks/use-own-interactions";
 
 export async function generateMetadata({
   params,
@@ -62,6 +64,21 @@ export default async function RegionListPage({
     notFound();
   }
 
+  const isOwner = viewer?.id === profile.id;
+  // Prefetched here (instead of inside useOwnInteractions on mount) since
+  // this page already knows viewer.id -- only needed on someone else's
+  // list, where the Ja/Nein buttons need to reflect the viewer's own
+  // like/dislike immediately.
+  let initialOwnInteractions: OwnInteractionEntry[] | undefined;
+  if (!isOwner && viewer) {
+    const rows = await getOwnInteractionRows(supabase, viewer.id);
+    initialOwnInteractions = rows.map((row) => ({
+      id: row.item_id,
+      mediaType: row.media_type as OwnInteractionEntry["mediaType"],
+      interactionType: row.interaction_type,
+    }));
+  }
+
   return (
     <main className="min-h-screen flex flex-col items-center">
       <div className="flex-1 w-full flex flex-col gap-6 max-w-5xl p-5">
@@ -80,6 +97,7 @@ export default async function RegionListPage({
           regionName={region.region_name}
           ownerId={profile.id}
           currentUserId={viewer?.id ?? null}
+          initialOwnInteractions={initialOwnInteractions}
         />
       </div>
       <ScrollToTopButton />

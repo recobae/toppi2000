@@ -38,6 +38,31 @@ function buildCategoryMatch(sharedCount: number, matchCount: number): CategoryTa
   };
 }
 
+export type OwnInteractionRow = {
+  item_id: string;
+  media_type: string;
+  interaction_type: "like" | "dislike";
+};
+
+/**
+ * Every like/dislike item_interactions row for one user. Exported so a
+ * caller that also needs the raw rows for something else (e.g. the profile
+ * page's movie/place progress-badge counts) can fetch them once and pass
+ * them into getSharedRatings/computeTasteMatch below instead of triggering
+ * a second, identical query for the same user.
+ */
+export async function getOwnInteractionRows(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<OwnInteractionRow[]> {
+  const { data } = await supabase
+    .from("item_interactions")
+    .select("item_id, media_type, interaction_type")
+    .eq("user_id", userId)
+    .in("interaction_type", ["like", "dislike"]);
+  return (data ?? []) as OwnInteractionRow[];
+}
+
 /**
  * The one query both computeTasteMatch (the percentage) and the "show me
  * the actual titles" breakdown (app/api/taste-match-details) build on:
@@ -45,35 +70,31 @@ function buildCategoryMatch(sharedCount: number, matchCount: number): CategoryTa
  * they agreed. Reads exclusively from item_interactions -- never
  * item_skips or any list table -- so a skip or a watchlist add can never
  * masquerade as a taste match.
+ *
+ * `ownerRows` lets a caller that already fetched the owner's own rows for
+ * another purpose reuse them here instead of triggering a duplicate query.
  */
 export async function getSharedRatings(
   supabase: SupabaseClient,
   ownerId: string,
   viewerId: string,
+  ownerRows?: OwnInteractionRow[],
 ): Promise<SharedRating[]> {
-  const [{ data: ownerRows }, { data: viewerRows }] = await Promise.all([
-    supabase
-      .from("item_interactions")
-      .select("item_id, media_type, interaction_type")
-      .eq("user_id", ownerId)
-      .in("interaction_type", ["like", "dislike"]),
-    supabase
-      .from("item_interactions")
-      .select("item_id, media_type, interaction_type")
-      .eq("user_id", viewerId)
-      .in("interaction_type", ["like", "dislike"]),
+  const [resolvedOwnerRows, viewerRows] = await Promise.all([
+    ownerRows ?? getOwnInteractionRows(supabase, ownerId),
+    getOwnInteractionRows(supabase, viewerId),
   ]);
 
   const ownerByKey = new Map<string, "like" | "dislike">(
-    (ownerRows ?? []).map((row) => [`${row.media_type}-${row.item_id}`, row.interaction_type as "like" | "dislike"]),
+    resolvedOwnerRows.map((row) => [`${row.media_type}-${row.item_id}`, row.interaction_type]),
   );
 
   const shared: SharedRating[] = [];
-  for (const row of viewerRows ?? []) {
+  for (const row of viewerRows) {
     const key = `${row.media_type}-${row.item_id}`;
     const ownerType = ownerByKey.get(key);
     if (!ownerType) continue;
-    const viewerType = row.interaction_type as "like" | "dislike";
+    const viewerType = row.interaction_type;
     shared.push({
       itemId: row.item_id,
       mediaType: row.media_type,
@@ -100,8 +121,9 @@ export async function computeTasteMatch(
   supabase: SupabaseClient,
   ownerId: string,
   viewerId: string,
+  ownerRows?: OwnInteractionRow[],
 ): Promise<TasteMatch> {
-  const shared = await getSharedRatings(supabase, ownerId, viewerId);
+  const shared = await getSharedRatings(supabase, ownerId, viewerId, ownerRows);
 
   let movieShared = 0;
   let movieMatch = 0;

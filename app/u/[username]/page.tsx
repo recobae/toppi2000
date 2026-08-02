@@ -23,7 +23,12 @@ import {
 } from "@/lib/categories";
 import { resolveEarnedExpertiseLabels, resolvePlaceExpertiseLabels } from "@/lib/expertise";
 import { hasActiveStory as checkHasActiveStory, storyWindowSince } from "@/lib/story-activity";
-import { computeTasteMatch, computeTasteMatchBatch, bestTasteMatchPercentage } from "@/lib/taste-match";
+import {
+  computeTasteMatch,
+  computeTasteMatchBatch,
+  bestTasteMatchPercentage,
+  getOwnInteractionRows,
+} from "@/lib/taste-match";
 
 // "X Likes"/"X mal inspiriert" are replaced by Taste Match below -- kept
 // computed (not deleted) in case they come back, just not rendered.
@@ -185,12 +190,17 @@ export default async function ProfilePage({
   // approach, which could only ever credit one owner per event.
   // Progress badges (Block 3): total like+dislike item_interactions rows,
   // never watchlist/Merken adds or skips -- those aren't a taste opinion.
+  // Fetched once as raw rows (ownInteractionRows) and reused for both the
+  // counts below and, when applicable, as computeTasteMatch's owner-side
+  // input -- avoids a second identical item_interactions query for
+  // profile.id that a separate count-only query and computeTasteMatch's own
+  // internal fetch would otherwise both run.
   const [
     [{ count: likesCount }, { count: inspiredCount }],
     hasActiveStory,
-    tasteMatch,
-    [{ count: movieInteractionCount }, { count: placeInteractionCount }],
+    { ownInteractionRows, tasteMatch },
     { count: followerCount },
+    { data: existingFollowRow },
   ] = await Promise.all([
     Promise.all([
       supabase
@@ -205,26 +215,33 @@ export default async function ProfilePage({
         .eq("credit_type", "inspired"),
     ]),
     checkHasActiveStory(supabase, profile.id),
-    !isOwner && viewer ? computeTasteMatch(supabase, profile.id, viewer.id) : Promise.resolve(null),
-    Promise.all([
-      supabase
-        .from("item_interactions")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", profile.id)
-        .in("interaction_type", ["like", "dislike"])
-        .in("media_type", ["movie", "tv"]),
-      supabase
-        .from("item_interactions")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", profile.id)
-        .in("interaction_type", ["like", "dislike"])
-        .eq("media_type", "place"),
-    ]),
+    (async () => {
+      const ownInteractionRows = await getOwnInteractionRows(supabase, profile.id);
+      const tasteMatch =
+        !isOwner && viewer
+          ? await computeTasteMatch(supabase, profile.id, viewer.id, ownInteractionRows)
+          : null;
+      return { ownInteractionRows, tasteMatch };
+    })(),
     supabase
       .from("user_follows")
       .select("id", { count: "exact", head: true })
       .eq("followed_id", profile.id),
+    // Resolved here (instead of inside FollowButton on mount) so the button
+    // never needs its own client-side getUser()+user_follows roundtrip --
+    // both ids are already known on this page.
+    !isOwner && viewer
+      ? supabase
+          .from("user_follows")
+          .select("id")
+          .eq("follower_id", viewer.id)
+          .eq("followed_id", profile.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
+
+  const movieInteractionCount = ownInteractionRows.filter((row) => row.media_type !== "place").length;
+  const placeInteractionCount = ownInteractionRows.filter((row) => row.media_type === "place").length;
 
   type FollowingProfile = {
     id: string;
@@ -249,23 +266,20 @@ export default async function ProfilePage({
       const [
         { data: friendProfiles },
         { data: friendTopListItems },
-        { data: recentTopList },
         { data: recentWatchlist },
         { data: recentPlaces },
         { data: recentStoryEvents },
         { data: viewRows },
       ] = await Promise.all([
         supabase.from("profiles").select("id, username").in("id", followedIds),
+        // Combines what used to be two separate top_list queries over the
+        // same followedIds rows (avatar/position + recent-activity
+        // timestamps) into one -- both are derived from it below instead.
         supabase
           .from("top_list")
-          .select("user_id, image_url")
+          .select("user_id, image_url, created_at")
           .in("user_id", followedIds)
           .order("position", { ascending: true }),
-        supabase
-          .from("top_list")
-          .select("user_id, created_at")
-          .in("user_id", followedIds)
-          .gte("created_at", since),
         supabase
           .from("watchlist")
           .select("user_id, created_at")
@@ -294,6 +308,7 @@ export default async function ProfilePage({
       // to count per-friend items instead of an extra query. A future label
       // backed by a different category would add its own count map here.
       const topListCountByUserId = new Map<string, number>();
+      const recentTopList = (friendTopListItems ?? []).filter((item) => item.created_at >= since);
       for (const item of friendTopListItems ?? []) {
         if (item.image_url && !avatarByUserId.has(item.user_id)) {
           avatarByUserId.set(item.user_id, item.image_url);
@@ -416,6 +431,8 @@ export default async function ProfilePage({
           <FollowButton
             targetUserId={profile.id}
             targetUsername={profile.username}
+            initialIsLoggedIn
+            initialIsFollowing={!!existingFollowRow}
           />
         )}
         {isGuest && <GuestProfileCta variant="button" />}

@@ -3,9 +3,18 @@ import { createClient } from "@/lib/supabase/client";
 import type { InteractionMediaType, InteractionType } from "@/lib/interactions";
 
 export type OwnInteractionItem = { id: string; mediaType: InteractionMediaType };
+export type OwnInteractionEntry = OwnInteractionItem & { interactionType: InteractionType };
 
 function itemKey(id: string, mediaType: string): string {
   return `${mediaType}-${id}`;
+}
+
+function toMap(entries: OwnInteractionEntry[]): Record<string, InteractionType> {
+  const map: Record<string, InteractionType> = {};
+  for (const entry of entries) {
+    map[itemKey(entry.id, entry.mediaType)] = entry.interactionType;
+  }
+  return map;
 }
 
 /**
@@ -15,12 +24,22 @@ function itemKey(id: string, mediaType: string): string {
  * viewer's own like/dislike immediately, both on load and right after the
  * viewer rates something (via the returned `markOwn` setter, applied
  * optimistically instead of waiting for a refetch).
+ *
+ * `initial` lets a caller that already resolved the viewer's own
+ * interactions server-side (the page already knows currentUserId) seed the
+ * map directly and skip the client-side getUser()+item_interactions
+ * roundtrip on mount entirely. Optional -- omitting it keeps the previous
+ * client-only-fetch behavior for callers that haven't been updated.
  */
-export function useOwnInteractions(items: OwnInteractionItem[]) {
-  const [map, setMap] = useState<Record<string, InteractionType>>({});
+export function useOwnInteractions(items: OwnInteractionItem[], initial?: OwnInteractionEntry[]) {
+  const [map, setMap] = useState<Record<string, InteractionType>>(() =>
+    initial ? toMap(initial) : {},
+  );
   const itemsKey = items.map((item) => itemKey(item.id, item.mediaType)).join(",");
+  const hasInitial = initial !== undefined;
 
   useEffect(() => {
+    if (hasInitial) return;
     if (items.length === 0) {
       setMap({});
       return;
@@ -55,7 +74,7 @@ export function useOwnInteractions(items: OwnInteractionItem[]) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itemsKey]);
+  }, [itemsKey, hasInitial]);
 
   const getOwn = (id: string, mediaType: InteractionMediaType): InteractionType | null =>
     map[itemKey(id, mediaType)] ?? null;

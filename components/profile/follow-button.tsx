@@ -10,19 +10,32 @@ import { GuestSignupModal } from "@/components/guest-signup-modal";
 export function FollowButton({
   targetUserId,
   targetUsername,
+  initialIsLoggedIn,
+  initialIsFollowing,
 }: {
   targetUserId: string;
   targetUsername: string;
+  /**
+   * Server-known initial state -- the caller's page already resolved
+   * viewer.id and profile.id, so it can pass these to skip the client-side
+   * getUser()+user_follows roundtrip on first render entirely. Optional:
+   * callers that don't know this server-side (e.g. a client-fetched
+   * suggestions list) can omit both and keep the old client-fetch behavior.
+   */
+  initialIsLoggedIn?: boolean;
+  initialIsFollowing?: boolean;
 }) {
   const router = useRouter();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isFollowing, setIsFollowing] = useState(false);
+  const hasInitialState = initialIsLoggedIn !== undefined;
+  const [isLoggedIn, setIsLoggedIn] = useState(initialIsLoggedIn ?? false);
+  const [isFollowing, setIsFollowing] = useState(initialIsFollowing ?? false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showGuestModal, setShowGuestModal] = useState(false);
   const [showUnfollowConfirm, setShowUnfollowConfirm] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    if (hasInitialState) return;
     const supabase = createClient();
 
     (async () => {
@@ -40,7 +53,7 @@ export function FollowButton({
         .maybeSingle();
       setIsFollowing(!!data);
     })();
-  }, [targetUserId]);
+  }, [targetUserId, hasInitialState]);
 
   useEffect(() => {
     if (!errorMessage) return;

@@ -2,12 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 // The single, generic source of truth for "I like/dislike this item" --
 // independent of whether it's on any list. Supersedes the older "likes" and
-// "item_ratings" tables (both left untouched in the DB for their historical
-// data, but no longer written to by the app). "Skip" is a deliberately
-// separate concept (lib/item-skips.ts, its own table) -- it makes no taste
-// statement, so it must never appear here; taste-match, progress badges and
-// everything else that reads item_interactions can assume every row is a
-// real opinion.
+// "item_ratings" tables, which the app no longer reads or writes at all
+// (their historical rows just sit unused in the DB). "Skip" is a
+// deliberately separate concept (lib/item-skips.ts, its own table) -- it
+// makes no taste statement, so it must never appear here; taste-match,
+// progress badges and everything else that reads item_interactions can
+// assume every row is a real opinion.
 export type InteractionType = "like" | "dislike";
 export type InteractionMediaType = "movie" | "tv" | "place";
 

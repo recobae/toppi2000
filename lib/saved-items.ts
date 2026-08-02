@@ -104,22 +104,3 @@ export async function removeFromCategory(
     .eq("item_id", itemId)
     .eq("media_type", mediaType);
 }
-
-/** "likes" is a lightweight table: no ranking, no position. */
-export async function saveLike(
-  supabase: SupabaseClient,
-  userId: string,
-  item: SavableItem,
-) {
-  return supabase.from("likes").upsert(
-    {
-      user_id: userId,
-      item_id: item.itemId,
-      media_type: item.mediaType,
-      title: item.title,
-      image_url: item.imageUrl,
-      metadata: { year: item.year },
-    },
-    { onConflict: "user_id,item_id,media_type" },
-  );
-}

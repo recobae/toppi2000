@@ -21,7 +21,7 @@ import { CATEGORY_LABELS, type SavedCategory } from "@/lib/categories";
 import { NOTE_PLACEHOLDERS } from "@/lib/notes";
 import { NoteModal } from "@/components/lists/note-modal";
 import { useSocialProof, getSocialProofBreakdown } from "@/lib/hooks/use-social-proof";
-import { useOwnInteractions } from "@/lib/hooks/use-own-interactions";
+import { useOwnInteractions, type OwnInteractionEntry } from "@/lib/hooks/use-own-interactions";
 import type { WatchProviderGroups, MovieDetails, SearchResult } from "@/lib/tmdb";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
@@ -352,10 +352,12 @@ function VisitorCategoryList({
   initialItems,
   ownerId,
   ownerUsername,
+  initialOwnInteractions,
 }: {
   initialItems: CategoryListItem[];
   ownerId: string;
   ownerUsername: string;
+  initialOwnInteractions?: OwnInteractionEntry[];
 }) {
   const items = initialItems;
   const [user, setUser] = useState<User | null>(null);
@@ -378,6 +380,7 @@ function VisitorCategoryList({
   const socialProofMap = useSocialProof(items.map((item) => ({ id: item.itemId, mediaType: item.mediaType })));
   const { getOwn, markOwn } = useOwnInteractions(
     items.map((item) => ({ id: String(item.itemId), mediaType: item.mediaType })),
+    initialOwnInteractions,
   );
 
   // Rating a title on someone else's list behaves exactly like rating an
@@ -549,11 +552,13 @@ export function CategoryItemsGrid({
   category,
   ownerId,
   currentUserId,
+  initialOwnInteractions,
 }: {
   username: string;
   category: SavedCategory;
   ownerId: string;
   currentUserId?: string | null;
+  initialOwnInteractions?: OwnInteractionEntry[];
 }) {
   const [items, setItems] = useState<CategoryListItem[] | null>(null);
 
@@ -586,6 +591,7 @@ export function CategoryItemsGrid({
       initialItems={items}
       ownerId={ownerId}
       ownerUsername={username}
+      initialOwnInteractions={initialOwnInteractions}
     />
   );
 }

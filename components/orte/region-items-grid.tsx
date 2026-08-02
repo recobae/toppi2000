@@ -12,7 +12,7 @@ import { PlaceItemRow } from "@/components/items/list-item-row";
 import { removePlace, savePlaceToRegion, updatePlaceNote, type PlaceStatus } from "@/lib/place-items";
 import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
 import { recordSkip } from "@/lib/item-skips";
-import { useOwnInteractions } from "@/lib/hooks/use-own-interactions";
+import { useOwnInteractions, type OwnInteractionEntry } from "@/lib/hooks/use-own-interactions";
 import {
   PLACE_CATEGORIES,
   PLACE_CATEGORY_ICONS,
@@ -443,9 +443,11 @@ function OwnerRegionList({
 function VisitorRegionList({
   initialItems,
   ownerId,
+  initialOwnInteractions,
 }: {
   initialItems: RegionPlaceItem[];
   ownerId: string;
+  initialOwnInteractions?: OwnInteractionEntry[];
 }) {
   const items = initialItems;
   const [user, setUser] = useState<User | null>(null);
@@ -469,6 +471,7 @@ function VisitorRegionList({
 
   const { getOwn, markOwn } = useOwnInteractions(
     items.map((item) => ({ id: item.placeId, mediaType: "place" as const })),
+    initialOwnInteractions,
   );
 
   // Rating a place on someone else's list behaves exactly like rating an
@@ -688,12 +691,14 @@ export function RegionItemsGrid({
   regionName,
   ownerId,
   currentUserId,
+  initialOwnInteractions,
 }: {
   username: string;
   regionKey: string;
   regionName: string;
   ownerId: string;
   currentUserId?: string | null;
+  initialOwnInteractions?: OwnInteractionEntry[];
 }) {
   const [items, setItems] = useState<RegionPlaceItem[] | null>(null);
 
@@ -722,6 +727,10 @@ export function RegionItemsGrid({
   return isOwner ? (
     <OwnerRegionList initialItems={items} userId={ownerId} regionName={regionName} />
   ) : (
-    <VisitorRegionList initialItems={items} ownerId={ownerId} />
+    <VisitorRegionList
+      initialItems={items}
+      ownerId={ownerId}
+      initialOwnInteractions={initialOwnInteractions}
+    />
   );
 }
