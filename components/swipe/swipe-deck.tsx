@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { saveToCategory, type SavableItem } from "@/lib/saved-items";
 import { recordSkip } from "@/lib/item-skips";
 import { recordSwipeCardAction } from "@/lib/swipe-deck";
+import { useSocialProof, getSocialProofBreakdown } from "@/lib/hooks/use-social-proof";
 import { SwipeCard } from "@/components/swipe/swipe-card";
 import { MovieDetailModal } from "@/components/movie-info";
 import type { SearchResult } from "@/lib/tmdb";
@@ -162,6 +163,16 @@ export function SwipeDeck({ userId }: { userId: string }) {
   const current = items[0];
   const next = items[1];
 
+  // Same batched friend-like lookup already used across Inspiration/lists
+  // (lib/hooks/use-social-proof.ts) -- the swipe deck just wasn't calling it
+  // before, so "does a friend already like this" never reached these cards.
+  const socialProofMap = useSocialProof(
+    items.map((item) => ({ id: item.id, mediaType: item.mediaType })),
+  );
+  const currentProof = current
+    ? getSocialProofBreakdown(socialProofMap, current.id, current.mediaType)
+    : undefined;
+
   return (
     <div className="w-full flex-1 min-h-0 flex flex-col items-center gap-4">
       {toastMessage && (
@@ -207,6 +218,7 @@ export function SwipeDeck({ userId }: { userId: string }) {
                 onOpenDetails={() => setShowDetailsFor(current)}
                 disabled={pending || exitDirection !== null}
                 exitDirection={exitDirection}
+                friendLikes={currentProof?.positive.usernames}
               />
             </>
           ) : (
@@ -239,6 +251,11 @@ export function SwipeDeck({ userId }: { userId: string }) {
           tmdbId={showDetailsFor.id}
           mediaType={showDetailsFor.mediaType}
           watchProviders={showDetailsFor.watchProviders}
+          socialProof={getSocialProofBreakdown(
+            socialProofMap,
+            showDetailsFor.id,
+            showDetailsFor.mediaType,
+          )}
           onClose={() => setShowDetailsFor(null)}
           onSkip={() => handleDetailAction("skip")}
           onWatchlist={() => handleDetailAction("watchlist")}

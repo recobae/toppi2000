@@ -9,7 +9,7 @@ import {
   animate,
   type PanInfo,
 } from "framer-motion";
-import { Info, Star } from "lucide-react";
+import { Info, Star, Users } from "lucide-react";
 import type { SearchResult } from "@/lib/tmdb";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w500";
@@ -39,6 +39,7 @@ export function SwipeCard({
   onOpenDetails,
   disabled,
   exitDirection,
+  friendLikes,
 }: {
   item: SearchResult;
   onLike: () => void;
@@ -46,6 +47,8 @@ export function SwipeCard({
   onOpenDetails: () => void;
   disabled?: boolean;
   exitDirection?: "left" | "right" | null;
+  /** Usernames of followed friends who already liked/top-listed this title. */
+  friendLikes?: string[];
 }) {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-300, 300], [-20, 20]);
@@ -111,6 +114,17 @@ export function SwipeCard({
       ) : (
         <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
           Kein Poster
+        </div>
+      )}
+
+      {friendLikes && friendLikes.length > 0 && (
+        <div className="absolute top-3 left-3 z-10 flex items-center gap-1 rounded-full bg-black/60 pl-1.5 pr-2.5 py-1 text-[11px] font-medium text-white backdrop-blur-sm">
+          <Users className="size-3 shrink-0" />
+          <span className="truncate max-w-[180px]">
+            {friendLikes.length === 1
+              ? `${friendLikes[0]} empfiehlt das`
+              : `${friendLikes[0]} +${friendLikes.length - 1} empfehlen das`}
+          </span>
         </div>
       )}
 
