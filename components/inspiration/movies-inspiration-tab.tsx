@@ -170,6 +170,8 @@ export function MoviesInspirationTab({
     if (!user) return;
     const supabase = createClient();
     await recordSkip(supabase, user.id, item.itemId, item.mediaType);
+    // Positive framing (Punkt 6): a skip is a personalization signal, not a rejection.
+    showToast("Hilft uns, dich besser zu verstehen");
     removeFeedItem(item.itemId, item.mediaType);
   };
 
@@ -447,6 +449,8 @@ export function MoviesInspirationTab({
     setBrowsePendingKey(key);
     const supabase = createClient();
     await recordSkip(supabase, user.id, String(result.id), result.mediaType);
+    // Positive framing (Punkt 6): a skip is a personalization signal, not a rejection.
+    showToast("Hilft uns, dich besser zu verstehen");
     removeAfter?.(result);
     setBrowsePendingKey(null);
   };

@@ -10,8 +10,9 @@ export default async function Home() {
   const userId = data?.user?.id;
 
   if (userId) {
-    const { username } = await ensureUsername(supabase, userId);
-    redirect(`/u/${username}`);
+    // Zero-effort landing: straight into the swipe deck, no decision screen.
+    await ensureUsername(supabase, userId);
+    redirect("/swipe");
   }
 
   return (

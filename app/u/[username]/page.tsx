@@ -15,6 +15,7 @@ import { ShareListButton } from "@/components/lists/share-list-button";
 import { ExpertiseBadges } from "@/components/profile/expertise-badges";
 import { TasteMatchExpandable } from "@/components/profile/taste-match-expandable";
 import { ProgressBadges } from "@/components/profile/progress-badges";
+import { getForMeStatus, type ForMeStatus } from "@/lib/for-me";
 import {
   MOVIE_LIST_LABEL,
   VISIBLE_SAVED_CATEGORIES,
@@ -249,6 +250,12 @@ export default async function ProfilePage({
   const movieInteractionCount = ownInteractionRows.filter((row) => row.media_type !== "place").length;
   const placeInteractionCount = ownInteractionRows.filter((row) => row.media_type === "place").length;
 
+  // Only ever needed for the owner's own FollowingBar tile -- a foreign
+  // profile visit never renders it, so skip the extra queries entirely.
+  const forMe: ForMeStatus | null = isOwner
+    ? await getForMeStatus(supabase, profile.id, movieInteractionCount + placeInteractionCount)
+    : null;
+
   type FollowingProfile = {
     id: string;
     username: string;
@@ -454,10 +461,11 @@ export default async function ProfilePage({
           </Link>
         )}
 
-        {isOwner && (
+        {isOwner && forMe && (
           <FollowingBar
             currentUserId={profile.id}
             followingProfiles={followingProfiles}
+            forMe={forMe}
           />
         )}
 

@@ -55,35 +55,40 @@ export async function ensureUsername(
   return { username: candidate, isNewProfile: true };
 }
 
-/** Used after login: ensures a username exists, then returns `next` unchanged. */
+/**
+ * Used after login: ensures a username exists, then sends the user straight
+ * into the swipe deck -- the app's zero-effort landing view -- unless
+ * `next` points somewhere more specific (e.g. a shared list link).
+ */
 export async function resolvePostAuthPath(
   supabase: SupabaseClient,
   userId: string,
   next: string,
 ): Promise<string> {
   await ensureUsername(supabase, userId);
+  if (next === DEFAULT_POST_AUTH_PATH) return "/swipe";
   return next;
 }
 
 /**
  * Used after signup/email-confirmation and the OAuth callback: ensures a
- * username exists, then sends the user straight to their own profile unless
- * `next` points somewhere more specific (e.g. a shared list they signed up
- * from).
+ * username exists, then sends the user straight into the swipe deck --
+ * the app's zero-effort landing view -- unless `next` points somewhere
+ * more specific (e.g. a shared list they signed up from).
  *
  * On a genuinely brand-new (non-system) profile, this is also the one-time
  * hook for the two signup side effects: auto-following the curated content
- * system account, and routing through /onboarding instead of straight to
- * the (empty) profile page. `onboarding_completed` itself is only flipped
- * by the onboarding page once the user actually reaches it (see
- * app/onboarding/page.tsx) -- this function only decides where to send them.
+ * system account, and routing through /onboarding instead of straight into
+ * the deck. `onboarding_completed` itself is only flipped by the onboarding
+ * page once the user actually reaches it (see app/onboarding/page.tsx) --
+ * this function only decides where to send them.
  */
 export async function resolveSignupRedirectPath(
   supabase: SupabaseClient,
   userId: string,
   next: string,
 ): Promise<string> {
-  const { username, isNewProfile } = await ensureUsername(supabase, userId);
+  const { isNewProfile } = await ensureUsername(supabase, userId);
   if (next !== DEFAULT_POST_AUTH_PATH) return next;
 
   if (isNewProfile) {
@@ -101,5 +106,5 @@ export async function resolveSignupRedirectPath(
     }
   }
 
-  return `/u/${username}`;
+  return "/swipe";
 }

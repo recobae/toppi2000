@@ -10,29 +10,44 @@ import {
 
 const RING_SIZE = 20;
 const RING_STROKE = 2;
-const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
-const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
-function ProgressRing({ fraction }: { fraction: number }) {
-  const offset = RING_CIRCUMFERENCE * (1 - fraction);
+/**
+ * Exported so other progress-ring surfaces (e.g. FollowingBar's "For Me"
+ * tile) reuse this exact ring instead of a second implementation -- size/
+ * stroke are configurable, defaulting to the small inline badge usage below.
+ */
+export function ProgressRing({
+  fraction,
+  size = RING_SIZE,
+  stroke = RING_STROKE,
+  className,
+}: {
+  fraction: number;
+  size?: number;
+  stroke?: number;
+  className?: string;
+}) {
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - Math.min(1, Math.max(0, fraction)));
   return (
-    <svg width={RING_SIZE} height={RING_SIZE} className="-rotate-90 shrink-0">
+    <svg width={size} height={size} className={`-rotate-90 shrink-0 ${className ?? ""}`}>
       <circle
-        cx={RING_SIZE / 2}
-        cy={RING_SIZE / 2}
-        r={RING_RADIUS}
-        strokeWidth={RING_STROKE}
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        strokeWidth={stroke}
         className="stroke-muted"
         fill="none"
       />
       <circle
-        cx={RING_SIZE / 2}
-        cy={RING_SIZE / 2}
-        r={RING_RADIUS}
-        strokeWidth={RING_STROKE}
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        strokeWidth={stroke}
         className="stroke-primary transition-[stroke-dashoffset]"
         fill="none"
-        strokeDasharray={RING_CIRCUMFERENCE}
+        strokeDasharray={circumference}
         strokeDashoffset={offset}
         strokeLinecap="round"
       />

@@ -198,6 +198,9 @@ export function OrteInspirationTab({
     if (error) {
       setRecommendations(previous);
       showToast("Konnte nicht gespeichert werden, versuch's nochmal");
+    } else {
+      // Positive framing (Punkt 6): a skip is a personalization signal, not a rejection.
+      showToast("Hilft uns, dich besser zu verstehen");
     }
   };
 

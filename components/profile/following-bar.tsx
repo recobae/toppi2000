@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CookingPot, Compass, Plus, Zap } from "lucide-react";
+import Image from "next/image";
+import { Lock, Plus, Sparkles, Zap } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { FollowSuggestionsModal } from "@/components/profile/follow-suggestions-modal";
 import { StoryViewer } from "@/components/profile/story-viewer";
 import { STORY_RING_CLASS, STORY_RING_CLASS_INACTIVE } from "@/components/profile/story-ring-styles";
+import { ProgressRing } from "@/components/profile/progress-badges";
+import { markForMeUnlockNotified, type ForMeStatus } from "@/lib/for-me";
 import { getExpertiseIcon } from "@/lib/expertise";
 
 type FollowingProfile = {
@@ -40,23 +44,6 @@ function TasteMatchCornerBadge({ percentage }: { percentage: number | null }) {
   );
 }
 
-function InspoWidget() {
-  return (
-    <Link
-      href="/inspiration"
-      aria-label="Inspiration"
-      className="shrink-0 flex flex-col items-center gap-1 w-14"
-    >
-      <span className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/60 text-primary-foreground">
-        <Compass className="size-6" />
-      </span>
-      <span className="w-full text-center text-[10px] font-medium truncate">
-        Inspiration
-      </span>
-    </Link>
-  );
-}
-
 function SwipeWidget() {
   return (
     <Link
@@ -74,24 +61,60 @@ function SwipeWidget() {
   );
 }
 
-function TopfWidget() {
+/**
+ * The "For Me" tile: an action element (ring + lock/sparkle + label,
+ * tappable, leads to /topf) with a visually separate info line underneath
+ * (own vs. friend contribution counts, color-coded) -- two layers instead
+ * of one dense block, per the UX-audit ask. Locked state blurs real recent
+ * Topf thumbnails behind the ring (never a grey placeholder) to read as "not
+ * yet" rather than "empty."
+ */
+function ForMeWidget({ forMe }: { forMe: ForMeStatus }) {
   return (
-    <Link
-      href="/topf"
-      aria-label="Mein Topf"
-      className="shrink-0 flex flex-col items-center gap-1 w-14"
-    >
-      <span className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/60 text-primary-foreground">
-        <CookingPot className="size-6" />
+    <div className="shrink-0 flex flex-col items-center gap-1 w-16">
+      <Link
+        href="/topf"
+        aria-label={forMe.isUnlocked ? "For Me" : "For Me (noch gesperrt)"}
+        className="relative flex h-[52px] w-[52px] items-center justify-center rounded-full overflow-hidden bg-muted border border-border"
+      >
+        {!forMe.isUnlocked && forMe.previewImageUrls.length > 0 && (
+          <>
+            <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
+              {Array.from({ length: 4 }).map((_, index) => {
+                const url = forMe.previewImageUrls[index % forMe.previewImageUrls.length];
+                return (
+                  <div key={index} className="relative bg-muted">
+                    <Image src={url} alt="" fill sizes="26px" className="object-cover blur-[3px] scale-125" />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="absolute inset-0 bg-background/40" />
+          </>
+        )}
+        <ProgressRing fraction={forMe.fraction} size={48} stroke={3} />
+        <span className="absolute inset-0 flex items-center justify-center">
+          {forMe.isUnlocked ? (
+            <Sparkles className="size-4 text-primary" />
+          ) : (
+            <Lock className="size-3.5 text-foreground" />
+          )}
+        </span>
+      </Link>
+      <span className="w-full text-center text-[10px] font-medium truncate">For Me</span>
+      <span className="flex flex-col items-center gap-0 leading-tight">
+        <span className="text-[9px] font-medium text-green-600 whitespace-nowrap">
+          {forMe.ownCount} von dir
+        </span>
+        <span className="text-[9px] font-medium text-blue-600 whitespace-nowrap">
+          {forMe.friendCount} von Freunden
+        </span>
       </span>
-      <span className="w-full text-center text-[10px] font-medium truncate">
-        Mein Topf
-      </span>
-    </Link>
+    </div>
   );
 }
 
-/** Separates the fixed Inspiration/Swipe/Mein-Topf tiles from the scrollable followed-profile avatars. */
+/** Separates the fixed Swipe/For-Me tiles from the scrollable followed-profile avatars. */
 function BarDivider() {
   return <div className="w-px self-stretch bg-border shrink-0" />;
 }
@@ -99,15 +122,30 @@ function BarDivider() {
 export function FollowingBar({
   currentUserId,
   followingProfiles,
+  forMe,
 }: {
   currentUserId: string;
   followingProfiles: FollowingProfile[];
+  forMe: ForMeStatus;
 }) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [storyUsername, setStoryUsername] = useState<string | null>(null);
   // Opening a story marks it viewed server-side; track that locally too so
   // the ring disappears immediately without waiting for a full page refetch.
   const [locallyViewedIds, setLocallyViewedIds] = useState<Set<string>>(new Set());
+  const [unlockToast, setUnlockToast] = useState(false);
+
+  // Fires exactly once, at the actual unlock moment (server already
+  // confirmed topf_unlocked_notified was still false) -- never re-shown on
+  // a later visit, and never announced ahead of time.
+  useEffect(() => {
+    if (!forMe.justUnlocked) return;
+    setUnlockToast(true);
+    const supabase = createClient();
+    markForMeUnlockNotified(supabase, currentUserId);
+    const timeout = setTimeout(() => setUnlockToast(false), 4000);
+    return () => clearTimeout(timeout);
+  }, [forMe.justUnlocked, currentUserId]);
 
   const markViewed = (username: string) => {
     const friend = followingProfiles.find((f) => f.username === username);
@@ -126,12 +164,19 @@ export function FollowingBar({
     setStoryUsername(next?.username ?? null);
   };
 
+  const unlockToastEl = unlockToast && (
+    <div className="fixed bottom-4 right-4 z-50">
+      <div className="rounded-md bg-foreground text-background px-4 py-2 text-sm shadow-lg">
+        🎉 Dein &bdquo;For Me&ldquo;-Bereich ist jetzt offen!
+      </div>
+    </div>
+  );
+
   if (followingProfiles.length === 0) {
     return (
-      <div className="w-full flex items-center gap-3">
-        <InspoWidget />
+      <div className="w-full flex items-start gap-3">
         <SwipeWidget />
-        <TopfWidget />
+        <ForMeWidget forMe={forMe} />
         <BarDivider />
         <button
           type="button"
@@ -147,15 +192,15 @@ export function FollowingBar({
             onClose={() => setShowSuggestions(false)}
           />
         )}
+        {unlockToastEl}
       </div>
     );
   }
 
   return (
     <div className="w-full flex items-start gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <InspoWidget />
       <SwipeWidget />
-      <TopfWidget />
+      <ForMeWidget forMe={forMe} />
       <BarDivider />
       {followingProfiles.map((friend) => {
         const hasUnseenStory = friend.hasUnseenStory && !locallyViewedIds.has(friend.id);
@@ -213,6 +258,7 @@ export function FollowingBar({
           onNext={() => openNextStory(storyUsername)}
         />
       )}
+      {unlockToastEl}
     </div>
   );
 }

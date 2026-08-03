@@ -44,7 +44,7 @@ export type ListItemRowActions =
       onAdd: () => void;
       addLabel: string;
       pending?: boolean;
-      /** Inspiration-feed-only: "kenne ich nicht / jetzt nicht" -- never offered on foreign lists or watchlist transitions. */
+      /** Inspiration-feed-only: "nicht jetzt" -- never offered on foreign lists or watchlist transitions. */
       onSkip?: () => void;
       /** Foreign-list rows only: the viewer's own existing stance on this item, so Ja/Nein reflect it instead of always looking unrated. */
       ownInteraction?: "like" | "dislike" | null;
@@ -148,7 +148,7 @@ export function ActionBar({
         {actions.onSkip && (
           <button
             type="button"
-            aria-label="Kenne ich nicht"
+            aria-label="Nicht jetzt"
             disabled={actions.pending}
             onClick={stop(actions.onSkip)}
             className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-muted-foreground hover:bg-accent transition-colors disabled:opacity-50"

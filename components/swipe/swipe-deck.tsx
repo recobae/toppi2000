@@ -131,6 +131,12 @@ export function SwipeDeck({ userId }: { userId: string }) {
       console.error("swipe card tracking failed", trackingError);
     }
 
+    // Positive framing (Punkt 6): a skip is a personalization signal, not a
+    // rejection -- Like/Dislike stay silent/honest, this is skip-only.
+    if (target === "skip") {
+      showToast("Hilft uns, dich besser zu verstehen");
+    }
+
     dismissCurrent();
     setPending(false);
   };
@@ -202,7 +208,7 @@ export function SwipeDeck({ userId }: { userId: string }) {
               className="flex items-center gap-1.5 h-10 px-4 rounded-full border border-input text-sm font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
             >
               <HelpCircle className="size-4" />
-              Kenne ich nicht
+              Nicht jetzt
             </button>
             <button
               type="button"
