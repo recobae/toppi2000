@@ -136,8 +136,13 @@ export async function GET(request: NextRequest) {
 
   // Best-effort -- if this fails the story just stays unread, not fatal.
   await supabase.from("story_views").upsert(
-    { viewer_id: viewer.id, target_user_id: target.id, viewed_at: new Date().toISOString() },
-    { onConflict: "viewer_id,target_user_id" },
+    {
+      viewer_id: viewer.id,
+      target_user_id: target.id,
+      content_type: "story",
+      viewed_at: new Date().toISOString(),
+    },
+    { onConflict: "viewer_id,target_user_id,content_type" },
   );
 
   return NextResponse.json({ username: target.username, ownerId: target.id, updates });

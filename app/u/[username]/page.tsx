@@ -26,6 +26,7 @@ import {
 } from "@/lib/categories";
 import { resolveEarnedExpertiseLabels, resolvePlaceExpertiseLabels } from "@/lib/expertise";
 import { hasActiveStory as checkHasActiveStory, storyWindowSince } from "@/lib/story-activity";
+import { hasUnseenSong } from "@/lib/song-activity";
 import {
   computeTasteMatch,
   computeTasteMatchBatch,
@@ -65,7 +66,7 @@ export default async function ProfilePage({
     supabase
       .from("profiles")
       .select(
-        "id, username, total_likes_received, home_city, favorite_song_title, favorite_song_artist, favorite_song_preview_url, favorite_song_artwork_url",
+        "id, username, total_likes_received, home_city, favorite_song_title, favorite_song_artist, favorite_song_preview_url, favorite_song_artwork_url, favorite_song_updated_at",
       )
       .eq("username", username)
       .single(),
@@ -87,6 +88,10 @@ export default async function ProfilePage({
           artworkUrl: profile.favorite_song_artwork_url,
         }
       : null;
+  const unseenSong =
+    !isOwner && !isGuest && viewer && favoriteSong
+      ? await hasUnseenSong(supabase, viewer.id, profile.id, profile.favorite_song_updated_at)
+      : false;
 
   const previewByCategory = await Promise.all(
     VISIBLE_SAVED_CATEGORIES.map(async (category) => {
@@ -325,6 +330,7 @@ export default async function ProfilePage({
           .from("story_views")
           .select("target_user_id, viewed_at")
           .eq("viewer_id", profile.id)
+          .eq("content_type", "story")
           .in("target_user_id", followedIds),
       ]);
 
@@ -409,6 +415,8 @@ export default async function ProfilePage({
             avatarUrl={avatarUrl}
             favoriteSong={favoriteSong}
             isOwnProfile={isOwner}
+            targetUserId={profile.id}
+            hasUnseenSong={unseenSong}
           />
         )}
 

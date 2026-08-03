@@ -107,6 +107,7 @@ export function FavoriteSongCard({
         favorite_song_artist: song.artist,
         favorite_song_preview_url: song.previewUrl,
         favorite_song_artwork_url: song.artworkUrl,
+        favorite_song_updated_at: new Date().toISOString(),
       })
       .eq("id", userId);
 
@@ -137,6 +138,7 @@ export function FavoriteSongCard({
         favorite_song_artist: null,
         favorite_song_preview_url: null,
         favorite_song_artwork_url: null,
+        favorite_song_updated_at: null,
       })
       .eq("id", userId);
 

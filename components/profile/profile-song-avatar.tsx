@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Square } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { STORY_RING_CLASS, STORY_RING_CLASS_INACTIVE } from "@/components/profile/story-ring-styles";
 
@@ -23,19 +24,30 @@ export type ProfileFavoriteSong = {
  * play() is called synchronously inside the onClick handler, with no
  * await before it -- required for iOS to treat it as a user gesture and
  * actually start playback instead of silently ignoring it.
+ *
+ * The ring itself doubles as a "Neu" indicator (same role it played for
+ * Stories): active/gradient while the current song is unheard by this
+ * viewer, pulsing while actually playing, plain once heard. "Heard" is
+ * recorded server-side (story_views, content_type "song") the moment
+ * playback starts -- reaching the end isn't required.
  */
 export function ProfileSongAvatar({
   username,
   avatarUrl,
   favoriteSong,
   isOwnProfile,
+  targetUserId,
+  hasUnseenSong,
 }: {
   username: string;
   avatarUrl: string | null;
   favoriteSong: ProfileFavoriteSong | null;
   isOwnProfile: boolean;
+  targetUserId: string;
+  hasUnseenSong: boolean;
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isUnseen, setIsUnseen] = useState(hasUnseenSong);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const stopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -74,6 +86,30 @@ export function ProfileSongAvatar({
     setIsPlaying(false);
   };
 
+  const markHeard = () => {
+    if (!isUnseen) return;
+    setIsUnseen(false);
+    // Fire-and-forget -- playback already started synchronously above and
+    // must not wait on this. Guests have no session to attribute a "heard"
+    // row to, so this silently no-ops for them (playback still works).
+    void (async () => {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      await supabase.from("story_views").upsert(
+        {
+          viewer_id: user.id,
+          target_user_id: targetUserId,
+          content_type: "song",
+          viewed_at: new Date().toISOString(),
+        },
+        { onConflict: "viewer_id,target_user_id,content_type" },
+      );
+    })();
+  };
+
   const handleClick = () => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -86,9 +122,16 @@ export function ProfileSongAvatar({
     audio.currentTime = 0;
     audio.play().catch(() => {});
     setIsPlaying(true);
+    markHeard();
     clearStopTimeout();
     stopTimeoutRef.current = setTimeout(stop, MAX_PLAYBACK_MS);
   };
+
+  const ringClass = isPlaying
+    ? `${STORY_RING_CLASS} animate-pulse`
+    : isUnseen
+      ? STORY_RING_CLASS
+      : STORY_RING_CLASS_INACTIVE;
 
   return (
     <button
@@ -99,7 +142,7 @@ export function ProfileSongAvatar({
           : `Lieblingssong von ${username} abspielen`
       }
       onClick={handleClick}
-      className={`relative ${isPlaying ? `${STORY_RING_CLASS} animate-pulse` : STORY_RING_CLASS_INACTIVE}`}
+      className={`relative ${ringClass}`}
     >
       {avatar}
       {isPlaying && (
