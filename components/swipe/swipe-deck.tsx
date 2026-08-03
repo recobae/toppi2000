@@ -238,6 +238,7 @@ export function SwipeDeck({ userId }: { userId: string }) {
           details={showDetailsFor.movieDetails}
           tmdbId={showDetailsFor.id}
           mediaType={showDetailsFor.mediaType}
+          watchProviders={showDetailsFor.watchProviders}
           onClose={() => setShowDetailsFor(null)}
           onSkip={() => handleDetailAction("skip")}
           onWatchlist={() => handleDetailAction("watchlist")}

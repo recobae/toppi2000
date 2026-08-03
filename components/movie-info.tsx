@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Ban, Bookmark, Check, Eye, HelpCircle, Play, Star, User, X } from "lucide-react";
-import type { MovieDetails } from "@/lib/tmdb";
+import type { MovieDetails, WatchProviderGroups } from "@/lib/tmdb";
+import { WatchProviderBadges } from "@/components/watch-provider-badges";
 import type {
   SocialProofBreakdown,
   SocialProofGroup,
@@ -128,6 +129,7 @@ export function MovieDetailModal({
   mediaType,
   socialProof,
   note,
+  watchProviders,
   onClose,
   onSkip,
   onWatchlist,
@@ -140,6 +142,8 @@ export function MovieDetailModal({
   mediaType: "movie" | "tv";
   socialProof?: SocialProofBreakdown;
   note?: string | null;
+  /** Full availability (flatrate + rent + buy) -- the card itself only ever shows the flatrate subset. */
+  watchProviders?: WatchProviderGroups;
   onClose: () => void;
   /**
    * Swipe-deck-only actions -- only rendered when passed, since every other
@@ -255,6 +259,15 @@ export function MovieDetailModal({
             )}
           </div>
         </div>
+
+        {watchProviders && (
+          <div className="flex flex-col gap-1">
+            <p className="text-xs font-medium text-muted-foreground">
+              Verfügbarkeit
+            </p>
+            <WatchProviderBadges providers={watchProviders} title={title} />
+          </div>
+        )}
 
         {(onSkip || onWatchlist) && (
           <div className="flex items-center gap-2">
