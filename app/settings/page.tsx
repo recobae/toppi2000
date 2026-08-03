@@ -24,6 +24,7 @@ import {
   type NotesVisibility,
 } from "@/lib/notes";
 import { PLACES_EXPERTISE_MIN_ITEMS } from "@/lib/places";
+import { FavoriteSongCard, type FavoriteSong } from "@/components/settings/favorite-song-card";
 
 const UNIQUE_VIOLATION_CODE = "23505";
 
@@ -55,6 +56,8 @@ export default function SettingsPage() {
   const [isSavingHomeCity, setIsSavingHomeCity] = useState(false);
   const [cityLabels, setCityLabels] = useState<string[]>([]);
 
+  const [favoriteSong, setFavoriteSong] = useState<FavoriteSong | null>(null);
+
   const usernameStatus = useUsernameAvailability(username, currentUsername);
   const isEmailProvider = user?.app_metadata?.provider === "email";
 
@@ -77,7 +80,9 @@ export default function SettingsPage() {
       const [{ data: profile }, { data: regionRows }, { data: placeRows }] = await Promise.all([
         supabase
           .from("profiles")
-          .select("username, notes_visibility, home_city")
+          .select(
+            "username, notes_visibility, home_city, favorite_song_title, favorite_song_artist, favorite_song_preview_url, favorite_song_artwork_url",
+          )
           .eq("id", currentUser.id)
           .maybeSingle(),
         supabase.from("place_regions").select("id, region_name").eq("user_id", currentUser.id),
@@ -91,6 +96,14 @@ export default function SettingsPage() {
       }
       setHomeCity(profile?.home_city ?? "");
       setCurrentHomeCity(profile?.home_city ?? "");
+      if (profile?.favorite_song_title && profile.favorite_song_preview_url) {
+        setFavoriteSong({
+          title: profile.favorite_song_title,
+          artist: profile.favorite_song_artist ?? null,
+          previewUrl: profile.favorite_song_preview_url,
+          artworkUrl: profile.favorite_song_artwork_url ?? null,
+        });
+      }
 
       // Only offer cities that actually show up as a tag under the username
       // (same PLACES_EXPERTISE_MIN_ITEMS threshold as the tag row) -- picking
@@ -343,6 +356,8 @@ export default function SettingsPage() {
             )}
           </CardContent>
         </Card>
+
+        {user && <FavoriteSongCard userId={user.id} initialSong={favoriteSong} />}
 
         <Card>
           <CardHeader>
