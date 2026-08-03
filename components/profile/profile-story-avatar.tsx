@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { StoryViewer } from "@/components/profile/story-viewer";
 import { STORY_RING_CLASS, STORY_RING_CLASS_INACTIVE } from "@/components/profile/story-ring-styles";
+import { STORY_FEATURE_ENABLED } from "@/lib/feature-flags";
 
 /**
  * The large avatar at the top of a profile page. Replaces the old
@@ -33,7 +34,7 @@ export function ProfileStoryAvatar({
     </span>
   );
 
-  if (!hasActiveStory) {
+  if (!STORY_FEATURE_ENABLED || !hasActiveStory) {
     return <span className={STORY_RING_CLASS_INACTIVE}>{avatar}</span>;
   }
 

@@ -9,6 +9,7 @@ import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { FollowSuggestionsModal } from "@/components/profile/follow-suggestions-modal";
 import { StoryViewer } from "@/components/profile/story-viewer";
 import { STORY_RING_CLASS, STORY_RING_CLASS_INACTIVE } from "@/components/profile/story-ring-styles";
+import { STORY_FEATURE_ENABLED } from "@/lib/feature-flags";
 import { ProgressRing } from "@/components/profile/progress-badges";
 import { markForMeUnlockNotified, type ForMeStatus } from "@/lib/for-me";
 import { getExpertiseIcon } from "@/lib/expertise";
@@ -203,7 +204,8 @@ export function FollowingBar({
       <ForMeWidget forMe={forMe} />
       <BarDivider />
       {followingProfiles.map((friend) => {
-        const hasUnseenStory = friend.hasUnseenStory && !locallyViewedIds.has(friend.id);
+        const hasUnseenStory =
+          STORY_FEATURE_ENABLED && friend.hasUnseenStory && !locallyViewedIds.has(friend.id);
         const avatar = (
           <span className="relative block">
             <span className={`block ${hasUnseenStory ? STORY_RING_CLASS : STORY_RING_CLASS_INACTIVE}`}>
@@ -248,7 +250,7 @@ export function FollowingBar({
         );
       })}
 
-      {storyUsername && (
+      {STORY_FEATURE_ENABLED && storyUsername && (
         <StoryViewer
           username={storyUsername}
           onClose={() => {

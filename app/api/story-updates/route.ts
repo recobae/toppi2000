@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { CATEGORY_LABELS, type SavedCategory } from "@/lib/categories";
 import { watchlistTransitionMessage, type WatchlistTransition } from "@/lib/story-events";
+import { STORY_FEATURE_ENABLED } from "@/lib/feature-flags";
 
 const STORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -26,6 +27,10 @@ export type StoryUpdate = {
  * the story IS "having seen it".
  */
 export async function GET(request: NextRequest) {
+  if (!STORY_FEATURE_ENABLED) {
+    return NextResponse.json({ error: "Nicht gefunden" }, { status: 404 });
+  }
+
   const username = request.nextUrl.searchParams.get("username");
   if (!username) {
     return NextResponse.json({ error: "Ungültige Anfrage" }, { status: 400 });
