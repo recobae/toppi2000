@@ -145,7 +145,7 @@ export function SwipeDeck({ userId }: { userId: string }) {
   const next = items[1];
 
   return (
-    <div className="w-full flex flex-col items-center gap-4">
+    <div className="w-full flex-1 min-h-0 flex flex-col items-center gap-4">
       {toastMessage && (
         <div className="fixed bottom-4 right-4 z-50">
           <div className="rounded-md bg-foreground text-background px-4 py-2 text-sm shadow-lg">
@@ -154,53 +154,63 @@ export function SwipeDeck({ userId }: { userId: string }) {
         </div>
       )}
 
-      <div className="relative w-full max-w-sm aspect-[3/5]">
-        {isLoading ? (
-          <div className="flex h-full w-full items-center justify-center rounded-2xl border border-dashed text-sm text-muted-foreground">
-            Lädt…
-          </div>
-        ) : current ? (
-          <>
-            {next && (
-              <div className="absolute inset-0 scale-[0.96] opacity-60 pointer-events-none">
-                <SwipeCard
-                  item={next}
-                  onLike={() => {}}
-                  onDislike={() => {}}
-                  onOpenDetails={() => {}}
-                  disabled
-                />
-              </div>
-            )}
-            <SwipeCard
-              key={itemKey(current)}
-              item={current}
-              onLike={() => handleAction(current, "top_list")}
-              onDislike={() => handleAction(current, "dont_watch")}
-              onOpenDetails={() => setShowDetailsFor(current)}
-              disabled={pending}
-            />
-          </>
-        ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed text-center px-6">
-            <p className="text-sm font-medium">
-              {exhausted ? "Tages-Limit erreicht" : "Keine weiteren Vorschläge"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {exhausted
-                ? "Morgen geht's weiter -- dann warten wieder 20 neue Titel auf dich."
-                : "Schau später nochmal vorbei."}
-            </p>
-          </div>
-        )}
+      {/*
+        Height-driven, not width-driven: the outer row gets the flexible
+        (viewport-dependent) dimension via flex-1/min-h-0, and the card
+        itself sizes off height (h-full) with aspect-ratio deriving width --
+        the reverse of a fixed aspect-[3/5] box, which would overflow a
+        short viewport (small iPhone + collapsed/expanded Safari address
+        bar) instead of shrinking to fit.
+      */}
+      <div className="flex-1 min-h-0 w-full flex items-center justify-center">
+        <div className="relative h-full max-h-[640px] aspect-[3/5] max-w-full">
+          {isLoading ? (
+            <div className="flex h-full w-full items-center justify-center rounded-2xl border border-dashed text-sm text-muted-foreground">
+              Lädt…
+            </div>
+          ) : current ? (
+            <>
+              {next && (
+                <div className="absolute inset-0 scale-[0.96] opacity-60 pointer-events-none">
+                  <SwipeCard
+                    item={next}
+                    onLike={() => {}}
+                    onDislike={() => {}}
+                    onOpenDetails={() => {}}
+                    disabled
+                  />
+                </div>
+              )}
+              <SwipeCard
+                key={itemKey(current)}
+                item={current}
+                onLike={() => handleAction(current, "top_list")}
+                onDislike={() => handleAction(current, "dont_watch")}
+                onOpenDetails={() => setShowDetailsFor(current)}
+                disabled={pending}
+              />
+            </>
+          ) : (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed text-center px-6">
+              <p className="text-sm font-medium">
+                {exhausted ? "Tages-Limit erreicht" : "Keine weiteren Vorschläge"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {exhausted
+                  ? "Morgen geht's weiter -- dann warten wieder 20 neue Titel auf dich."
+                  : "Schau später nochmal vorbei."}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {current && (
         <>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground shrink-0">
             ← Nicht mein Fall &nbsp;·&nbsp; Gefällt mir →
           </p>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <button
               type="button"
               disabled={pending}
