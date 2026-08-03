@@ -1,19 +1,36 @@
 "use client";
 
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef } from "react";
 import Image from "next/image";
+import {
+  motion,
+  useMotionValue,
+  useTransform,
+  animate,
+  type PanInfo,
+} from "framer-motion";
 import { Info, Star } from "lucide-react";
 import type { SearchResult } from "@/lib/tmdb";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w500";
 const PROVIDER_LOGO_BASE_URL = "https://image.tmdb.org/t/p/w45";
 const SWIPE_THRESHOLD = 100;
+// A fast flick counts as a decision even if released before crossing the
+// distance threshold -- px/s, matches Framer's PanInfo.velocity unit.
+const VELOCITY_THRESHOLD = 600;
+const EXIT_DISTANCE = 700;
 
 /**
- * The card face itself -- drag-to-swipe (mouse or touch, via pointer
- * events) for Like/Dislike, plus an info button opening the full detail
- * view. Watchlist/Skip live only in that detail view, not here -- the card
- * itself is gesture-only.
+ * The card face itself -- drag-to-swipe (mouse or touch) for Like/Dislike,
+ * plus an info button opening the full detail view. Watchlist/Skip live
+ * only in that detail view, not here -- the card itself is gesture-only.
+ *
+ * Drag position lives in a Framer Motion value (x), not React state, so a
+ * finger dragging the card doesn't trigger a re-render per pixel -- only
+ * the transform updates, which is what keeps this at 60fps. Release
+ * decides between a spring back to center or a velocity-carried fling off
+ * screen; exitDirection lets a parent (e.g. a decision made in the detail
+ * view instead of by dragging) trigger the same fling programmatically.
  */
 export function SwipeCard({
   item,
@@ -28,63 +45,58 @@ export function SwipeCard({
   onDislike: () => void;
   onOpenDetails: () => void;
   disabled?: boolean;
-  /** Programmatic swipe-away, e.g. for a decision made in the detail view rather than by dragging. */
   exitDirection?: "left" | "right" | null;
 }) {
-  const [dragX, setDragX] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const startXRef = useRef(0);
+  const x = useMotionValue(0);
+  const rotate = useTransform(x, [-300, 300], [-20, 20]);
+  const likeOpacity = useTransform(x, [20, SWIPE_THRESHOLD], [0, 1]);
+  const nopeOpacity = useTransform(x, [-SWIPE_THRESHOLD, -20], [1, 0]);
 
   const posterUrl = item.posterPath ? `${POSTER_BASE_URL}${item.posterPath}` : null;
+  // Guards against a second drag starting mid-fling, before the parent's
+  // `disabled` prop has had a chance to catch up (onComplete -> onLike ->
+  // async save -> re-render is not instant).
+  const decidedRef = useRef(false);
 
-  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (disabled) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    startXRef.current = event.clientX;
-    setIsDragging(true);
-  };
+  useEffect(() => {
+    if (!exitDirection) return;
+    const target = exitDirection === "right" ? EXIT_DISTANCE : -EXIT_DISTANCE;
+    const controls = animate(x, target, { type: "tween", duration: 0.35, ease: "easeIn" });
+    return () => controls.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exitDirection]);
 
-  const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!isDragging) return;
-    setDragX(event.clientX - startXRef.current);
-  };
+  const handleDragEnd = (_event: unknown, info: PanInfo) => {
+    if (disabled || decidedRef.current) return;
+    const offset = info.offset.x;
+    const velocity = info.velocity.x;
+    const pastThreshold = Math.abs(offset) > SWIPE_THRESHOLD;
+    const flicked = Math.abs(velocity) > VELOCITY_THRESHOLD;
 
-  const endDrag = () => {
-    if (!isDragging) return;
-    setIsDragging(false);
-    if (dragX > SWIPE_THRESHOLD) {
-      onLike();
-    } else if (dragX < -SWIPE_THRESHOLD) {
-      onDislike();
+    if (pastThreshold || flicked) {
+      decidedRef.current = true;
+      const direction = offset !== 0 ? Math.sign(offset) : Math.sign(velocity) || 1;
+      animate(x, direction * EXIT_DISTANCE, {
+        type: "spring",
+        velocity,
+        stiffness: 200,
+        damping: 24,
+        onComplete: () => (direction > 0 ? onLike() : onDislike()),
+      });
+    } else {
+      animate(x, 0, { type: "spring", stiffness: 400, damping: 30 });
     }
-    setDragX(0);
   };
 
-  const rotation = dragX / 20;
-  const hintOpacity = Math.min(Math.abs(dragX) / SWIPE_THRESHOLD, 1);
   const rating = item.movieDetails.voteAverage;
   const genres = item.movieDetails.genres.slice(0, 3);
 
   return (
-    <div
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-      style={
-        exitDirection
-          ? {
-              transform: `translateX(${exitDirection === "right" ? 700 : -700}px) rotate(${exitDirection === "right" ? 30 : -30}deg)`,
-              opacity: 0,
-              transition: "transform 0.35s ease-in, opacity 0.35s ease-in",
-              touchAction: "pan-y",
-            }
-          : {
-              transform: `translateX(${dragX}px) rotate(${rotation}deg)`,
-              transition: isDragging ? "none" : "transform 0.3s ease",
-              touchAction: "pan-y",
-            }
-      }
+    <motion.div
+      style={{ x, rotate, touchAction: "pan-y" }}
+      drag={disabled ? false : "x"}
+      dragMomentum={false}
+      onDragEnd={handleDragEnd}
       className="relative h-full w-full rounded-2xl overflow-hidden bg-muted shadow-xl select-none cursor-grab active:cursor-grabbing"
     >
       {posterUrl ? (
@@ -102,22 +114,18 @@ export function SwipeCard({
         </div>
       )}
 
-      {dragX > 20 && (
-        <div
-          style={{ opacity: hintOpacity }}
-          className="absolute top-6 left-6 rotate-[-12deg] rounded-md border-4 border-green-500 px-3 py-1 text-lg font-bold text-green-500"
-        >
-          LIKE
-        </div>
-      )}
-      {dragX < -20 && (
-        <div
-          style={{ opacity: hintOpacity }}
-          className="absolute top-6 right-6 rotate-[12deg] rounded-md border-4 border-red-500 px-3 py-1 text-lg font-bold text-red-500"
-        >
-          NOPE
-        </div>
-      )}
+      <motion.div
+        style={{ opacity: likeOpacity }}
+        className="absolute top-6 left-6 rotate-[-12deg] rounded-md border-4 border-green-500 px-3 py-1 text-lg font-bold text-green-500"
+      >
+        LIKE
+      </motion.div>
+      <motion.div
+        style={{ opacity: nopeOpacity }}
+        className="absolute top-6 right-6 rotate-[12deg] rounded-md border-4 border-red-500 px-3 py-1 text-lg font-bold text-red-500"
+      >
+        NOPE
+      </motion.div>
 
       <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1.5 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 pt-12 text-white">
         <div className="flex items-start justify-between gap-2">
@@ -183,6 +191,6 @@ export function SwipeCard({
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
