@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bookmark, HelpCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { saveToCategory, type SavableItem } from "@/lib/saved-items";
 import { recordSkip } from "@/lib/item-skips";
@@ -13,6 +12,7 @@ import type { SavedCategory } from "@/lib/categories";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w500";
 const REFILL_THRESHOLD = 3;
+const EXIT_ANIMATION_MS = 350;
 
 type DeckResponse = {
   results: SearchResult[];
@@ -33,6 +33,7 @@ export function SwipeDeck({ userId }: { userId: string }) {
   const [pending, setPending] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showDetailsFor, setShowDetailsFor] = useState<SearchResult | null>(null);
+  const [exitDirection, setExitDirection] = useState<"left" | "right" | null>(null);
   const pageRef = useRef(1);
   const seenKeysRef = useRef<Set<string>>(new Set());
 
@@ -141,6 +142,23 @@ export function SwipeDeck({ userId }: { userId: string }) {
     setPending(false);
   };
 
+  /**
+   * Detail-view-only decisions (Skip/Watchlist): close the modal, play the
+   * same swipe-away exit the card would show for a gesture-completed
+   * decision, and only persist + advance once that's finished -- so it's
+   * never abrupt, and there's no way back to the just-decided card either
+   * way a decision gets made.
+   */
+  const handleDetailAction = (target: "skip" | "watchlist") => {
+    if (!current || pending) return;
+    setShowDetailsFor(null);
+    setExitDirection(target === "skip" ? "left" : "right");
+    setTimeout(() => {
+      handleAction(current, target);
+      setExitDirection(null);
+    }, EXIT_ANIMATION_MS);
+  };
+
   const current = items[0];
   const next = items[1];
 
@@ -187,7 +205,8 @@ export function SwipeDeck({ userId }: { userId: string }) {
                 onLike={() => handleAction(current, "top_list")}
                 onDislike={() => handleAction(current, "dont_watch")}
                 onOpenDetails={() => setShowDetailsFor(current)}
-                disabled={pending}
+                disabled={pending || exitDirection !== null}
+                exitDirection={exitDirection}
               />
             </>
           ) : (
@@ -206,31 +225,9 @@ export function SwipeDeck({ userId }: { userId: string }) {
       </div>
 
       {current && (
-        <>
-          <p className="text-xs text-muted-foreground shrink-0">
-            ← Nicht mein Fall &nbsp;·&nbsp; Gefällt mir →
-          </p>
-          <div className="flex items-center gap-3 shrink-0">
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => handleAction(current, "skip")}
-              className="flex items-center gap-1.5 h-10 px-4 rounded-full border border-input text-sm font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
-            >
-              <HelpCircle className="size-4" />
-              Nicht jetzt
-            </button>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => handleAction(current, "watchlist")}
-              className="flex items-center gap-1.5 h-10 px-4 rounded-full border border-input text-sm font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
-            >
-              <Bookmark className="size-4" />
-              Watchlist
-            </button>
-          </div>
-        </>
+        <p className="text-xs text-muted-foreground shrink-0">
+          ← Nicht mein Fall &nbsp;·&nbsp; Gefällt mir →
+        </p>
       )}
 
       {showDetailsFor && (
@@ -242,6 +239,8 @@ export function SwipeDeck({ userId }: { userId: string }) {
           tmdbId={showDetailsFor.id}
           mediaType={showDetailsFor.mediaType}
           onClose={() => setShowDetailsFor(null)}
+          onSkip={() => handleDetailAction("skip")}
+          onWatchlist={() => handleDetailAction("watchlist")}
         />
       )}
     </div>

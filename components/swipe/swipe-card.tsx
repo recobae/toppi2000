@@ -11,9 +11,9 @@ const SWIPE_THRESHOLD = 100;
 
 /**
  * The card face itself -- drag-to-swipe (mouse or touch, via pointer
- * events) for Like/Dislike, plus an info button opening the existing full
- * detail view. Watchlist/Skip are deliberately NOT on this card -- they're
- * separate buttons rendered by the deck around it.
+ * events) for Like/Dislike, plus an info button opening the full detail
+ * view. Watchlist/Skip live only in that detail view, not here -- the card
+ * itself is gesture-only.
  */
 export function SwipeCard({
   item,
@@ -21,12 +21,15 @@ export function SwipeCard({
   onDislike,
   onOpenDetails,
   disabled,
+  exitDirection,
 }: {
   item: SearchResult;
   onLike: () => void;
   onDislike: () => void;
   onOpenDetails: () => void;
   disabled?: boolean;
+  /** Programmatic swipe-away, e.g. for a decision made in the detail view rather than by dragging. */
+  exitDirection?: "left" | "right" | null;
 }) {
   const [dragX, setDragX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -68,11 +71,20 @@ export function SwipeCard({
       onPointerMove={handlePointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
-      style={{
-        transform: `translateX(${dragX}px) rotate(${rotation}deg)`,
-        transition: isDragging ? "none" : "transform 0.3s ease",
-        touchAction: "pan-y",
-      }}
+      style={
+        exitDirection
+          ? {
+              transform: `translateX(${exitDirection === "right" ? 700 : -700}px) rotate(${exitDirection === "right" ? 30 : -30}deg)`,
+              opacity: 0,
+              transition: "transform 0.35s ease-in, opacity 0.35s ease-in",
+              touchAction: "pan-y",
+            }
+          : {
+              transform: `translateX(${dragX}px) rotate(${rotation}deg)`,
+              transition: isDragging ? "none" : "transform 0.3s ease",
+              touchAction: "pan-y",
+            }
+      }
       className="relative h-full w-full rounded-2xl overflow-hidden bg-muted shadow-xl select-none cursor-grab active:cursor-grabbing"
     >
       {posterUrl ? (
