@@ -14,6 +14,15 @@ type ItunesResult = {
   collectionName?: string;
   artistName?: string;
   artworkUrl100?: string;
+  previewUrl?: string;
+};
+
+export type SongResult = {
+  id: string;
+  title: string;
+  artist: string | null;
+  artworkUrl: string | null;
+  previewUrl: string;
 };
 
 const ITUNES_PARAMS: Record<"music" | "podcast", { media: string; entity: string }> = {
@@ -57,5 +66,43 @@ export async function searchBestMediaMatch(
     };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Full result list for a song search UI (favorite-song-snippet feature),
+ * as opposed to searchBestMediaMatch's single best guess for auto-
+ * classification. Only tracks with a previewUrl are kept -- without one
+ * there'd be nothing to play, so they're not worth offering as a choice.
+ */
+export async function searchSongs(query: string, limit = 12): Promise<SongResult[]> {
+  const term = query.trim();
+  if (!term) return [];
+
+  try {
+    const url = new URL(ITUNES_SEARCH_URL);
+    url.searchParams.set("term", term);
+    url.searchParams.set("media", "music");
+    url.searchParams.set("entity", "song");
+    url.searchParams.set("limit", String(limit));
+    url.searchParams.set("country", "DE");
+
+    const response = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!response.ok) return [];
+
+    const data: { results?: ItunesResult[] } = await response.json();
+    return (data.results ?? [])
+      .filter((result): result is ItunesResult & { trackId: number; previewUrl: string } =>
+        result.trackId !== undefined && !!result.previewUrl,
+      )
+      .map((result) => ({
+        id: String(result.trackId),
+        title: result.trackName ?? term,
+        artist: result.artistName ?? null,
+        artworkUrl: result.artworkUrl100 ? result.artworkUrl100.replace("100x100", "300x300") : null,
+        previewUrl: result.previewUrl,
+      }));
+  } catch {
+    return [];
   }
 }
