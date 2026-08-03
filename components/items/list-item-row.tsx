@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import type { MouseEvent, ReactNode } from "react";
-import { Ban, Check, Heart, Pencil, Plus, SkipForward, Star, X } from "lucide-react";
+import { Ban, Check, Heart, HeartHandshake, Pencil, Plus, SkipForward, Star, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MovieMetaBadges, SocialProofIcons } from "@/components/movie-info";
@@ -64,6 +64,18 @@ export type ListItemRowActions =
       variant: "simple";
       isSaved: boolean;
       onToggleSave: () => void;
+      pending?: boolean;
+    }
+  | {
+      /**
+       * "Mein Topf" recommender attribution row: thanking is a one-way,
+       * server-enforced action (unique constraint on recommendation_thanks)
+       * -- once `alreadyThanked`, the button stays permanently disabled,
+       * never a toggle/"undo".
+       */
+      variant: "thank";
+      alreadyThanked: boolean;
+      onThank: () => void;
       pending?: boolean;
     };
 
@@ -219,20 +231,41 @@ export function ActionBar({
     );
   }
 
+  if (actions.variant === "simple") {
+    return (
+      <div className="mt-auto pt-2">
+        <button
+          type="button"
+          disabled={actions.pending}
+          onClick={stop(actions.onToggleSave)}
+          className={`w-full flex items-center justify-center gap-1.5 h-9 rounded-md text-sm font-medium transition-colors disabled:opacity-50 ${
+            actions.isSaved
+              ? "border border-input hover:bg-accent"
+              : "bg-primary text-primary-foreground hover:bg-primary/90"
+          }`}
+        >
+          {actions.isSaved ? <Check className="size-4" /> : <Plus className="size-4" />}
+          {actions.isSaved ? "Gespeichert" : "Hinzufügen"}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-auto pt-2">
       <button
         type="button"
-        disabled={actions.pending}
-        onClick={stop(actions.onToggleSave)}
-        className={`w-full flex items-center justify-center gap-1.5 h-9 rounded-md text-sm font-medium transition-colors disabled:opacity-50 ${
-          actions.isSaved
-            ? "border border-input hover:bg-accent"
-            : "bg-primary text-primary-foreground hover:bg-primary/90"
+        aria-label={actions.alreadyThanked ? "Bereits bedankt" : "Bedanken"}
+        disabled={actions.pending || actions.alreadyThanked}
+        onClick={stop(actions.onThank)}
+        className={`flex items-center gap-1.5 h-8 px-3 rounded-full border text-xs font-medium transition-colors disabled:opacity-50 ${
+          actions.alreadyThanked
+            ? "border-primary bg-primary/10 text-primary"
+            : "border-input text-muted-foreground hover:bg-accent"
         }`}
       >
-        {actions.isSaved ? <Check className="size-4" /> : <Plus className="size-4" />}
-        {actions.isSaved ? "Gespeichert" : "Hinzufügen"}
+        <HeartHandshake className={`size-3.5 ${actions.alreadyThanked ? "fill-current" : ""}`} />
+        {actions.alreadyThanked ? "Bedankt" : "Bedanken"}
       </button>
     </div>
   );

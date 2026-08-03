@@ -201,6 +201,7 @@ export default async function ProfilePage({
     { ownInteractionRows, tasteMatch },
     { count: followerCount },
     { data: existingFollowRow },
+    { count: thanksGivenCount },
   ] = await Promise.all([
     Promise.all([
       supabase
@@ -238,6 +239,11 @@ export default async function ProfilePage({
           .eq("followed_id", profile.id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
+    // "Mein Topf": how many recommenders this profile has thanked.
+    supabase
+      .from("recommendation_thanks")
+      .select("id", { count: "exact", head: true })
+      .eq("thanked_by_user_id", profile.id),
   ]);
 
   const movieInteractionCount = ownInteractionRows.filter((row) => row.media_type !== "place").length;
@@ -424,6 +430,7 @@ export default async function ProfilePage({
         <ProgressBadges
           movieCount={movieInteractionCount ?? 0}
           placeCount={placeInteractionCount ?? 0}
+          thanksGivenCount={thanksGivenCount ?? 0}
           showRing={isOwner}
         />
 

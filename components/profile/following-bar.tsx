@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Compass, Plus, Zap } from "lucide-react";
+import { CookingPot, Compass, Plus, Zap } from "lucide-react";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { FollowSuggestionsModal } from "@/components/profile/follow-suggestions-modal";
 import { StoryViewer } from "@/components/profile/story-viewer";
@@ -74,7 +74,24 @@ function SwipeWidget() {
   );
 }
 
-/** Separates the fixed Inspiration/Swipe tiles from the scrollable followed-profile avatars. */
+function TopfWidget() {
+  return (
+    <Link
+      href="/topf"
+      aria-label="Mein Topf"
+      className="shrink-0 flex flex-col items-center gap-1 w-14"
+    >
+      <span className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/60 text-primary-foreground">
+        <CookingPot className="size-6" />
+      </span>
+      <span className="w-full text-center text-[10px] font-medium truncate">
+        Mein Topf
+      </span>
+    </Link>
+  );
+}
+
+/** Separates the fixed Inspiration/Swipe/Mein-Topf tiles from the scrollable followed-profile avatars. */
 function BarDivider() {
   return <div className="w-px self-stretch bg-border shrink-0" />;
 }
@@ -114,6 +131,7 @@ export function FollowingBar({
       <div className="w-full flex items-center gap-3">
         <InspoWidget />
         <SwipeWidget />
+        <TopfWidget />
         <BarDivider />
         <button
           type="button"
@@ -137,6 +155,7 @@ export function FollowingBar({
     <div className="w-full flex items-start gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <InspoWidget />
       <SwipeWidget />
+      <TopfWidget />
       <BarDivider />
       {followingProfiles.map((friend) => {
         const hasUnseenStory = friend.hasUnseenStory && !locallyViewedIds.has(friend.id);

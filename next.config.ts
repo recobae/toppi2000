@@ -14,6 +14,16 @@ const nextConfig: NextConfig = {
         hostname: "places.googleapis.com",
         pathname: "/v1/**",
       },
+      {
+        protocol: "https",
+        hostname: "books.google.com",
+        pathname: "/books/**",
+      },
+      {
+        protocol: "https",
+        hostname: "**.mzstatic.com",
+        pathname: "/image/**",
+      },
     ],
   },
 };

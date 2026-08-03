@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MapPin, Star, type LucideIcon } from "lucide-react";
+import { HeartHandshake, MapPin, Star, type LucideIcon } from "lucide-react";
 import {
   resolveProgressTier,
   MOVIE_PROGRESS_TIERS,
@@ -98,16 +98,25 @@ function ProgressBadge({
 export function ProgressBadges({
   movieCount,
   placeCount,
+  thanksGivenCount,
   showRing,
 }: {
   movieCount: number;
   placeCount: number;
+  /** "Mein Topf": how many recommenders this profile has thanked, not how many they received. No tiers/ring -- optional, only rendered when > 0. */
+  thanksGivenCount?: number;
   showRing: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
       <ProgressBadge icon={Star} count={movieCount} unit="Filme" showRing={showRing} />
       <ProgressBadge icon={MapPin} count={placeCount} unit="Orte" showRing={showRing} />
+      {typeof thanksGivenCount === "number" && thanksGivenCount > 0 && (
+        <div className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+          <HeartHandshake className="size-4" />
+          <span>{thanksGivenCount} mal bedankt</span>
+        </div>
+      )}
     </div>
   );
 }
