@@ -43,11 +43,14 @@ export function SiteHeader() {
 
   // Own profile overview or any of its own list detail pages already carry
   // an equivalent "back to profile" affordance -- showing the avatar there
-  // too would be a redundant link to the page you're already on.
+  // too would be a redundant link to the page you're already on. The swipe
+  // screen has its own BackToProfileLink text link in-flow for the same
+  // reason -- a second, floating icon button for the identical action is
+  // redundant chrome on an already tight mobile viewport.
   const onOwnProfile =
     pathname === `/u/${username}` || pathname.startsWith(`/u/${username}/`);
 
-  if (onOwnProfile) return null;
+  if (onOwnProfile || pathname === "/swipe") return null;
 
   return (
     <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
