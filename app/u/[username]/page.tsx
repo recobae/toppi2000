@@ -5,6 +5,8 @@ import type { Metadata } from "next";
 import { Heart, ListChecks, MapPin, Plus, Repeat2, Settings, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileStoryAvatar } from "@/components/profile/profile-story-avatar";
+import { ProfileSongAvatar } from "@/components/profile/profile-song-avatar";
+import { STORY_FEATURE_ENABLED } from "@/lib/feature-flags";
 import { ListOverviewRow } from "@/components/profile/list-overview-row";
 import { GuestProfileCta } from "@/components/profile/guest-profile-cta";
 import { TrackLastVisitedProfile } from "@/components/profile/track-last-visited";
@@ -62,7 +64,9 @@ export default async function ProfilePage({
   const [{ data: profile }, { data: { user: viewer } }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, username, total_likes_received, home_city")
+      .select(
+        "id, username, total_likes_received, home_city, favorite_song_title, favorite_song_artist, favorite_song_preview_url, favorite_song_artwork_url",
+      )
       .eq("username", username)
       .single(),
     supabase.auth.getUser(),
@@ -74,6 +78,15 @@ export default async function ProfilePage({
 
   const isOwner = viewer?.id === profile.id;
   const isGuest = !viewer;
+  const favoriteSong =
+    profile.favorite_song_title && profile.favorite_song_preview_url
+      ? {
+          title: profile.favorite_song_title,
+          artist: profile.favorite_song_artist,
+          previewUrl: profile.favorite_song_preview_url,
+          artworkUrl: profile.favorite_song_artwork_url,
+        }
+      : null;
 
   const previewByCategory = await Promise.all(
     VISIBLE_SAVED_CATEGORIES.map(async (category) => {
@@ -382,13 +395,22 @@ export default async function ProfilePage({
     <main className="min-h-screen flex flex-col items-center">
       <TrackLastVisitedProfile username={profile.username} />
       <div className="flex-1 w-full flex flex-col items-center gap-4 max-w-2xl p-5 pt-6">
-        <ProfileStoryAvatar
-          username={profile.username}
-          avatarUrl={avatarUrl}
-          hasActiveStory={hasActiveStory}
-          isOwnStory={isOwner}
-          canInteract={!isGuest}
-        />
+        {STORY_FEATURE_ENABLED ? (
+          <ProfileStoryAvatar
+            username={profile.username}
+            avatarUrl={avatarUrl}
+            hasActiveStory={hasActiveStory}
+            isOwnStory={isOwner}
+            canInteract={!isGuest}
+          />
+        ) : (
+          <ProfileSongAvatar
+            username={profile.username}
+            avatarUrl={avatarUrl}
+            favoriteSong={favoriteSong}
+            isOwnProfile={isOwner}
+          />
+        )}
 
         <div className="flex items-center justify-center gap-1.5">
           {isOwner && (
