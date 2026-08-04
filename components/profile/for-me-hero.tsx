@@ -3,13 +3,73 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Lock, Plus, Sparkles } from "lucide-react";
+import { Lock, Plus, Sparkles, Star, UserPlus, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ProgressRing } from "@/components/profile/progress-badges";
 import { markForMeUnlockNotified, type ForMeStatus } from "@/lib/for-me";
 
 const HERO_SIZE = 96;
 const HERO_STROKE = 4;
+
+const COLD_START_USECASES = [
+  { icon: Star, text: "Bewerte Filme & Serien in My Taste" },
+  { icon: UserPlus, text: "Verbinde dich mit Freunden, um ihre Empfehlungen zu sehen" },
+  { icon: Sparkles, text: "Lege eigene Listen an, damit wir dein Interesse besser verstehen" },
+];
+
+/**
+ * Shown instead of navigating to /topf while For Me is still locked --
+ * same unlock threshold as always (lib/for-me.ts), just explains what
+ * feeds it instead of landing on an empty Mein-Topf page.
+ */
+function ColdStartExplainer({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="For Me ist noch gesperrt"
+    >
+      <div
+        className="relative w-full max-w-sm rounded-lg bg-background border p-4 flex flex-col gap-4"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          aria-label="Schließen"
+          onClick={onClose}
+          className="absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent"
+        >
+          <X className="size-4" />
+        </button>
+
+        <div className="flex flex-col gap-1 pr-8">
+          <Lock className="size-5 text-muted-foreground" />
+          <p className="text-sm font-medium leading-snug">
+            Sammle mehr persönliche Empfehlungen, damit Du hier Deine Top Picks siehst.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-2.5">
+          {COLD_START_USECASES.map(({ icon: Icon, text }) => (
+            <div key={text} className="flex items-start gap-2 text-sm text-muted-foreground">
+              <Icon className="size-4 mt-0.5 shrink-0 text-primary" />
+              <span>{text}</span>
+            </div>
+          ))}
+        </div>
+
+        <Link
+          href="/swipe"
+          className="flex items-center justify-center h-10 rounded-full bg-primary text-primary-foreground text-sm font-medium"
+        >
+          Zu My Taste
+        </Link>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Own-profile hero: replaces the avatar at the top of the page (same size/
@@ -20,6 +80,7 @@ const HERO_STROKE = 4;
  */
 export function ForMeHero({ userId, forMe }: { userId: string; forMe: ForMeStatus }) {
   const [unlockToast, setUnlockToast] = useState(false);
+  const [showExplainer, setShowExplainer] = useState(false);
 
   // Fires exactly once, at the actual unlock moment (server already
   // confirmed topf_unlocked_notified was still false) -- never re-shown.
@@ -45,7 +106,15 @@ export function ForMeHero({ userId, forMe }: { userId: string; forMe: ForMeStatu
       <div className="h-4 w-px bg-border" aria-hidden="true" />
 
       <Link
-        href="/topf"
+        href={forMe.isUnlocked ? "/topf" : "#"}
+        onClick={
+          forMe.isUnlocked
+            ? undefined
+            : (event) => {
+                event.preventDefault();
+                setShowExplainer(true);
+              }
+        }
         aria-label={forMe.isUnlocked ? "For Me" : "For Me (noch gesperrt)"}
         className="relative flex items-center justify-center rounded-full overflow-hidden bg-muted border border-border"
         style={{ height: HERO_SIZE, width: HERO_SIZE }}
@@ -94,6 +163,8 @@ export function ForMeHero({ userId, forMe }: { userId: string; forMe: ForMeStatu
           </div>
         </div>
       )}
+
+      {showExplainer && <ColdStartExplainer onClose={() => setShowExplainer(false)} />}
     </div>
   );
 }
