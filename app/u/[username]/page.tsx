@@ -4,9 +4,8 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Heart, ListChecks, MapPin, Plus, Repeat2, Settings, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { ProfileStoryAvatar } from "@/components/profile/profile-story-avatar";
-import { ProfileSongAvatar } from "@/components/profile/profile-song-avatar";
-import { STORY_FEATURE_ENABLED } from "@/lib/feature-flags";
+import { ForeignProfileHero } from "@/components/profile/foreign-profile-hero";
+import { ForMeHero } from "@/components/profile/for-me-hero";
 import { ListOverviewRow } from "@/components/profile/list-overview-row";
 import { GuestProfileCta } from "@/components/profile/guest-profile-cta";
 import { TrackLastVisitedProfile } from "@/components/profile/track-last-visited";
@@ -401,20 +400,21 @@ export default async function ProfilePage({
     <main className="min-h-screen flex flex-col items-center">
       <TrackLastVisitedProfile username={profile.username} />
       <div className="flex-1 w-full flex flex-col items-center gap-4 max-w-2xl p-5 pt-6">
-        {STORY_FEATURE_ENABLED ? (
-          <ProfileStoryAvatar
+        {/*
+          Eigenansicht/Fremdansicht-Weiche: in der Eigenansicht ersetzt "For
+          Me" den Avatar komplett (gleiche Position/Dominanz wie zuvor das
+          Profilbild) -- die Fremdansicht behält den unveränderten Avatar
+          samt Song-Trigger.
+        */}
+        {isOwner ? (
+          forMe && <ForMeHero userId={profile.id} forMe={forMe} />
+        ) : (
+          <ForeignProfileHero
             username={profile.username}
             avatarUrl={avatarUrl}
             hasActiveStory={hasActiveStory}
-            isOwnStory={isOwner}
-            canInteract={!isGuest}
-          />
-        ) : (
-          <ProfileSongAvatar
-            username={profile.username}
-            avatarUrl={avatarUrl}
+            isGuest={isGuest}
             favoriteSong={favoriteSong}
-            isOwnProfile={isOwner}
             targetUserId={profile.id}
             hasUnseenSong={unseenSong}
           />
@@ -491,11 +491,10 @@ export default async function ProfilePage({
           </Link>
         )}
 
-        {isOwner && forMe && (
+        {isOwner && (
           <FollowingBar
             currentUserId={profile.id}
             followingProfiles={followingProfiles}
-            forMe={forMe}
           />
         )}
 
