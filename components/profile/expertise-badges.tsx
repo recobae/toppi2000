@@ -21,7 +21,7 @@ export function ExpertiseBadges({
           className="inline-flex items-center gap-1 rounded-full bg-secondary text-secondary-foreground text-[11px] font-medium px-2.5 py-0.5 hover:bg-secondary/70 active:bg-secondary/60 transition-colors"
         >
           {homeCity && entry.label === homeCity && (
-            <MapPin aria-label="Heimatstadt" className="size-3 fill-current" />
+            <MapPin aria-label="Aktueller Ort" className="size-3 fill-current" />
           )}
           {entry.label}
         </Link>

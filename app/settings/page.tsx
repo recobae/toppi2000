@@ -213,7 +213,7 @@ export default function SettingsPage() {
       .eq("id", user.id);
 
     if (error) {
-      setHomeCityMessage("Heimatstadt konnte nicht gespeichert werden.");
+      setHomeCityMessage("Konnte nicht gespeichert werden.");
     } else {
       setCurrentHomeCity(homeCity);
       setHomeCityMessage("Gespeichert!");
@@ -311,7 +311,7 @@ export default function SettingsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Heimatstadt</CardTitle>
+            <CardTitle className="text-lg">Wo bist du gerade</CardTitle>
             <CardDescription>
               Erscheint als Pin neben dem passenden Tag unter deinem Namen und bestimmt den
               Orte-Feed in Inspiration.
@@ -320,9 +320,8 @@ export default function SettingsPage() {
           <CardContent>
             {cityLabels.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Lege zuerst genug Orte in einer Stadt an, damit dort ein Tag erscheint
-                (z. B. über „Ort hinzufügen“ auf deinem Profil), dann kannst du hier eine
-                Heimatstadt auswählen.
+                Lege zuerst genug Orte in einer Stadt an, damit dort ein Tag erscheint,
+                dann kannst du hier auswählen, wo du gerade bist.
               </p>
             ) : (
               <form onSubmit={handleHomeCitySubmit} className="flex flex-col gap-3">
