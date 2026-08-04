@@ -12,6 +12,7 @@ import { GuestProfileCta } from "@/components/profile/guest-profile-cta";
 import { TrackLastVisitedProfile } from "@/components/profile/track-last-visited";
 import { FollowButton } from "@/components/profile/follow-button";
 import { FollowerCount } from "@/components/profile/follower-count";
+import { FollowerQuickbar } from "@/components/profile/follower-quickbar";
 import { ShareListButton } from "@/components/lists/share-list-button";
 import { TasteMatchExpandable } from "@/components/profile/taste-match-expandable";
 import { ProgressBadges } from "@/components/profile/progress-badges";
@@ -423,6 +424,9 @@ export default async function ProfilePage({
           />
         )}
 
+        {/* Kompakt an den Profilanfang, direkt unter dem Hero (Punkt 4). */}
+        {isOwner && <FollowerQuickbar currentUserId={profile.id} count={followerCount ?? 0} />}
+
         <div className="flex items-center justify-center gap-1.5">
           {isOwner && (
             <>
@@ -468,7 +472,7 @@ export default async function ProfilePage({
               </div>
             </>
           )}
-          <FollowerCount targetUserId={profile.id} count={followerCount ?? 0} />
+          {!isOwner && <FollowerCount targetUserId={profile.id} count={followerCount ?? 0} />}
         </div>
 
         {tasteMatch && (
