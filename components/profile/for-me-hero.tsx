@@ -82,11 +82,13 @@ function ColdStartExplainer({ onClose }: { onClose: () => void }) {
 export function ForMeHero({
   userId,
   forMe,
+  followerCount,
   followingProfiles,
   contributorIds,
 }: {
   userId: string;
   forMe: ForMeStatus;
+  followerCount: number;
   followingProfiles: FollowingProfile[];
   contributorIds?: string[];
 }) {
@@ -106,15 +108,21 @@ export function ForMeHero({
 
   return (
     <div className="w-full flex flex-col items-center gap-1.5">
+      {/*
+        Haupt-CTA für Input (Runde 2, Punkt 5) -- deutlich prominenter als
+        zuvor, aber die Größen-Hierarchie For Me > My Taste bleibt: der
+        Connector darunter ist entsprechend etwas kürzer, damit der
+        Gesamtabstand zum Hero nicht wächst.
+      */}
       <Link
         href="/swipe"
         aria-label="My Taste"
-        className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-gradient-to-br from-primary to-primary/60 text-primary-foreground text-xs font-medium"
+        className="inline-flex items-center gap-2 h-11 px-5 rounded-full bg-gradient-to-br from-primary to-primary/60 text-primary-foreground text-base font-semibold shadow-sm"
       >
-        <Plus className="size-3.5" />
+        <Plus className="size-5" />
         My Taste
       </Link>
-      <div className="h-4 w-px bg-border" aria-hidden="true" />
+      <div className="h-3 w-px bg-border" aria-hidden="true" />
 
       <Link
         href={forMe.isUnlocked ? "/topf" : "#"}
@@ -176,6 +184,7 @@ export function ForMeHero({
 
       <FollowingBar
         currentUserId={userId}
+        followerCount={followerCount}
         followingProfiles={followingProfiles}
         contributorIds={contributorIds}
       />

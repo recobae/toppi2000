@@ -1,20 +1,14 @@
-"use client";
-
-import { useState } from "react";
-import { HeartHandshake, MapPin, Star, type LucideIcon } from "lucide-react";
-import {
-  resolveProgressTier,
-  MOVIE_PROGRESS_TIERS,
-  PLACE_PROGRESS_TIERS,
-} from "@/lib/progress-tiers";
+import { HeartHandshake } from "lucide-react";
 
 const RING_SIZE = 20;
 const RING_STROKE = 2;
 
 /**
- * Exported so other progress-ring surfaces (e.g. FollowingBar's "For Me"
- * tile) reuse this exact ring instead of a second implementation -- size/
- * stroke are configurable, defaulting to the small inline badge usage below.
+ * Shared progress ring (For Me hero, formerly also the removed movie/Orte
+ * aggregate badges below the username -- that aggregated "Experte · 65
+ * Filme"/"Local Experte · 54 Orte" text is gone now, superseded by the
+ * per-list tier badges on each ListOverviewRow, which are more precise
+ * since they're computed per list instead of summed across everything).
  */
 export function ProgressRing({
   fraction,
@@ -55,83 +49,13 @@ export function ProgressRing({
   );
 }
 
-function ProgressBadge({
-  icon: Icon,
-  count,
-  unit,
-  showRing,
-}: {
-  icon: LucideIcon;
-  count: number;
-  unit: "Filme" | "Orte";
-  showRing: boolean;
-}) {
-  const [showTooltip, setShowTooltip] = useState(false);
-  const tiers = unit === "Filme" ? MOVIE_PROGRESS_TIERS : PLACE_PROGRESS_TIERS;
-  const { current, next, progressFraction } = resolveProgressTier(count, tiers);
-
-  const tooltipText = next
-    ? `${count} von ${next.threshold} bis ${next.label}`
-    : "Maximale Stufe erreicht";
-
+/** "Mein Topf": how many recommenders this profile has thanked. Only rendered when > 0. */
+export function ThanksStat({ count }: { count: number }) {
+  if (count <= 0) return null;
   return (
-    <div className="relative inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-      {showRing ? (
-        <button
-          type="button"
-          aria-label={`Fortschritt: ${tooltipText}`}
-          onClick={() => setShowTooltip((prev) => !prev)}
-          onMouseEnter={() => setShowTooltip(true)}
-          onMouseLeave={() => setShowTooltip(false)}
-          className="relative flex items-center justify-center"
-        >
-          <ProgressRing fraction={progressFraction} />
-          <Icon className="absolute size-2.5 text-primary" />
-        </button>
-      ) : (
-        <Icon className="size-4" />
-      )}
-      <span>
-        {current.label} · {count} {unit}
-      </span>
-      {showRing && showTooltip && (
-        <span className="absolute top-full left-0 mt-1 whitespace-nowrap rounded bg-foreground text-background text-[10px] px-2 py-1 z-10">
-          {tooltipText}
-        </span>
-      )}
-    </div>
-  );
-}
-
-/**
- * Two independent progress rows -- movies and places -- driven purely by
- * item_interactions counts (like + dislike, never watchlist/Merken/skip).
- * The label ("Filmkenner · 20 Filme") is visible to every profile visitor;
- * the ring + hover/click tooltip around the icon is owner-only (`showRing`),
- * per spec -- visitors see the same text with a plain icon, no progress UI.
- */
-export function ProgressBadges({
-  movieCount,
-  placeCount,
-  thanksGivenCount,
-  showRing,
-}: {
-  movieCount: number;
-  placeCount: number;
-  /** "Mein Topf": how many recommenders this profile has thanked, not how many they received. No tiers/ring -- optional, only rendered when > 0. */
-  thanksGivenCount?: number;
-  showRing: boolean;
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
-      <ProgressBadge icon={Star} count={movieCount} unit="Filme" showRing={showRing} />
-      <ProgressBadge icon={MapPin} count={placeCount} unit="Orte" showRing={showRing} />
-      {typeof thanksGivenCount === "number" && thanksGivenCount > 0 && (
-        <div className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <HeartHandshake className="size-4" />
-          <span>{thanksGivenCount} mal bedankt</span>
-        </div>
-      )}
+    <div className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+      <HeartHandshake className="size-4" />
+      <span>{count} mal bedankt</span>
     </div>
   );
 }

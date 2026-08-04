@@ -12,11 +12,10 @@ import { GuestProfileCta } from "@/components/profile/guest-profile-cta";
 import { TrackLastVisitedProfile } from "@/components/profile/track-last-visited";
 import { FollowButton } from "@/components/profile/follow-button";
 import { FollowerCount } from "@/components/profile/follower-count";
-import { FollowerQuickbar } from "@/components/profile/follower-quickbar";
 import { NewListPicker } from "@/components/profile/new-list-picker";
 import { ShareListButton } from "@/components/lists/share-list-button";
 import { TasteMatchExpandable } from "@/components/profile/taste-match-expandable";
-import { ProgressBadges } from "@/components/profile/progress-badges";
+import { ThanksStat } from "@/components/profile/progress-badges";
 import { getForMeStatus, type ForMeStatus } from "@/lib/for-me";
 import {
   MOVIE_LIST_LABEL,
@@ -419,22 +418,32 @@ export default async function ProfilePage({
   return (
     <main className="min-h-screen flex flex-col items-center">
       <TrackLastVisitedProfile username={profile.username} />
-      {/* Sticky oben rechts, bleibt beim Scrollen sichtbar (Punkt 5) -- Username-Zeile bleibt reiner Text. */}
+      {/*
+        Sticky oben, bleibt beim Scrollen sichtbar (Runde 2, Punkt 3+5):
+        Mini-Avatar + Name links, Settings + Teilen rechts -- die mittlere
+        Seite ist dadurch komplett frei von Identitäts-Elementen.
+      */}
       {isOwner && (
-        <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
-          <Link
-            href="/settings"
-            aria-label="Einstellungen"
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-background/80 backdrop-blur shadow-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Settings className="size-5" />
-          </Link>
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-background/80 backdrop-blur shadow-sm">
-            <ShareListButton
-              shareTitle={`Schau dir ${profile.username}s Filmgeschmack an`}
-              url={profileUrl}
-              iconOnly
-            />
+        <div className="fixed top-4 left-4 right-4 z-50 flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2 rounded-full bg-background/80 backdrop-blur shadow-sm py-1 pl-1 pr-3 min-w-0">
+            <ProfileAvatar username={profile.username} imageUrl={avatarUrl} size="sm" />
+            <span className="text-sm font-medium truncate">{profile.username}</span>
+          </span>
+          <span className="flex items-center gap-2 shrink-0">
+            <Link
+              href="/settings"
+              aria-label="Einstellungen"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-background/80 backdrop-blur shadow-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Settings className="size-5" />
+            </Link>
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-background/80 backdrop-blur shadow-sm">
+              <ShareListButton
+                shareTitle={`Schau dir ${profile.username}s Filmgeschmack an`}
+                url={profileUrl}
+                iconOnly
+              />
+            </span>
           </span>
         </div>
       )}
@@ -450,6 +459,7 @@ export default async function ProfilePage({
             <ForMeHero
               userId={profile.id}
               forMe={forMe}
+              followerCount={followerCount ?? 0}
               followingProfiles={followingProfiles}
               contributorIds={forMe.contributorUserIds}
             />
@@ -466,25 +476,18 @@ export default async function ProfilePage({
           />
         )}
 
-        {/* Kompakt an den Profilanfang, direkt unter dem Hero (Punkt 4). */}
-        {isOwner && <FollowerQuickbar currentUserId={profile.id} count={followerCount ?? 0} />}
-
-        <div className="flex items-center justify-center gap-1.5">
-          {isOwner && (
-            /*
-              Kleiner, nicht-dominanter Identitäts-Anker (Schritt 5) -- rein
-              dekorativ, kein eigener Tap-Handler, da der große Avatar-Slot
-              jetzt "For Me" gehört. Settings/Teilen sitzen jetzt oben rechts
-              (Punkt 5), die Username-Zeile bleibt reiner Text + Mini-Avatar.
-            */
-            <span className="shrink-0">
-              <ProfileAvatar username={profile.username} imageUrl={avatarUrl} size="sm" />
-            </span>
-          )}
-          <h1 className="text-xl font-semibold text-center truncate">
-            {profile.username}
-          </h1>
-        </div>
+        {/*
+          Eigenansicht: Name/Avatar sitzen jetzt oben sticky (Punkt 3), hier
+          also keine eigene Username-Zeile mehr. Fremdansicht behält den
+          Namen an dieser Stelle unverändert.
+        */}
+        {!isOwner && (
+          <div className="flex items-center justify-center gap-1.5">
+            <h1 className="text-xl font-semibold text-center truncate">
+              {profile.username}
+            </h1>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
           {SHOW_LEGACY_LIKE_STATS && (
@@ -506,12 +509,7 @@ export default async function ProfilePage({
           <TasteMatchExpandable username={profile.username} tasteMatch={tasteMatch} />
         )}
 
-        <ProgressBadges
-          movieCount={movieInteractionCount ?? 0}
-          placeCount={placeInteractionCount ?? 0}
-          thanksGivenCount={thanksGivenCount ?? 0}
-          showRing={isOwner}
-        />
+        <ThanksStat count={thanksGivenCount ?? 0} />
 
         {!isOwner && !isGuest && (
           <FollowButton

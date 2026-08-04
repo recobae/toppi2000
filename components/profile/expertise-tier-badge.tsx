@@ -11,11 +11,12 @@ const TIER_LABEL: Record<ExpertiseTier, string> = {
 };
 
 /**
- * Small icon attached directly to a category/Orte row's title (Design-
- * Iteration 2, Punkt 3) -- replaces the separate expertise-pill row.
- * Einsteiger renders nothing (badges should feel earned, not given from
- * item #1). Progress ("42/60 bis Experte") only ever passed in for the
- * profile owner -- visitors get the bare icon, no numbers.
+ * Icon + tier word attached directly to a category/Orte row's title
+ * (Runde 2, Punkt 4: the word itself must be visible to everyone, not
+ * just implied by the icon) -- replaces the removed aggregated
+ * "Experte · 65 Filme" pill row. Einsteiger renders nothing (badges
+ * should feel earned, not given from item #1). Numeric progress
+ * ("42/60 bis Experte") stays owner-only, via tap.
  */
 export function ExpertiseTierBadge({
   tier,
@@ -28,17 +29,21 @@ export function ExpertiseTierBadge({
 
   if (tier === "einsteiger") return null;
 
-  const icon =
-    tier === "experte" ? (
-      <Star className="size-3.5 fill-current text-yellow-500" />
-    ) : (
-      <Star className="size-3.5 text-amber-700" />
-    );
+  const content = (
+    <span className="inline-flex items-center gap-0.5">
+      {tier === "experte" ? (
+        <Star className="size-3.5 fill-current text-yellow-500" />
+      ) : (
+        <Star className="size-3.5 text-amber-700" />
+      )}
+      <span className="text-[10px] font-medium text-muted-foreground">{TIER_LABEL[tier]}</span>
+    </span>
+  );
 
   if (!progressLabel) {
     return (
       <span className="shrink-0" aria-label={TIER_LABEL[tier]}>
-        {icon}
+        {content}
       </span>
     );
   }
@@ -57,7 +62,7 @@ export function ExpertiseTierBadge({
         onMouseLeave={() => setShowTooltip(false)}
         className="flex items-center justify-center"
       >
-        {icon}
+        {content}
       </button>
       {showTooltip && (
         <span className="absolute top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap rounded bg-foreground text-background text-[10px] px-2 py-1 z-20">
