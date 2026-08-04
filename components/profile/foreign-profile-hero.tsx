@@ -1,5 +1,7 @@
 import { ProfileStoryAvatar } from "@/components/profile/profile-story-avatar";
 import { ProfileSongAvatar, type ProfileFavoriteSong } from "@/components/profile/profile-song-avatar";
+import { SongPlaybackProvider } from "@/components/profile/song-playback-context";
+import { SongMiniIcon } from "@/components/profile/song-mini-icon";
 import { STORY_FEATURE_ENABLED } from "@/lib/feature-flags";
 
 /**
@@ -38,14 +40,31 @@ export function ForeignProfileHero({
     );
   }
 
+  if (!favoriteSong) {
+    // No empty/inactive sticky icon when there's nothing to play.
+    return (
+      <ProfileSongAvatar
+        username={username}
+        avatarUrl={avatarUrl}
+        favoriteSong={null}
+        isOwnProfile={false}
+        targetUserId={targetUserId}
+        hasUnseenSong={false}
+      />
+    );
+  }
+
   return (
-    <ProfileSongAvatar
-      username={username}
-      avatarUrl={avatarUrl}
-      favoriteSong={favoriteSong}
-      isOwnProfile={false}
-      targetUserId={targetUserId}
-      hasUnseenSong={hasUnseenSong}
-    />
+    <SongPlaybackProvider previewUrl={favoriteSong.previewUrl}>
+      <ProfileSongAvatar
+        username={username}
+        avatarUrl={avatarUrl}
+        favoriteSong={favoriteSong}
+        isOwnProfile={false}
+        targetUserId={targetUserId}
+        hasUnseenSong={hasUnseenSong}
+      />
+      <SongMiniIcon username={username} avatarUrl={avatarUrl} />
+    </SongPlaybackProvider>
   );
 }
