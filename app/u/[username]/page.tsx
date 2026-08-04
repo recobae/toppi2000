@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Heart, ListChecks, MapPin, Repeat2, Settings, Star } from "lucide-react";
+import { Heart, ListChecks, MapPin, Plus, Repeat2, Settings, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ForeignProfileHero } from "@/components/profile/foreign-profile-hero";
 import { ForMeHero } from "@/components/profile/for-me-hero";
@@ -419,18 +419,22 @@ export default async function ProfilePage({
     <main className="min-h-screen flex flex-col items-center">
       <TrackLastVisitedProfile username={profile.username} />
       {/*
-        Sticky oben, bleibt beim Scrollen sichtbar (Runde 2, Punkt 3+5):
-        Mini-Avatar + Name links, Settings + Teilen rechts -- die mittlere
-        Seite ist dadurch komplett frei von Identitäts-Elementen.
+        Sticky oben, bleibt beim Scrollen sichtbar -- Avatar, My Taste,
+        Settings, Teilen in einer Zeile, vertikal zentriert. Kein
+        Username-Text mehr hier (Abschlussrunde, Punkt 1).
       */}
       {isOwner && (
         <div className="fixed top-4 left-4 right-4 z-50 flex items-center justify-between gap-2">
-          {/* Gleicher Stil wie die Beschriftung unter den Follower-Avataren (following-bar.tsx). */}
-          <span className="flex flex-col items-center gap-0.5 w-14">
+          <span className="flex items-center gap-2 shrink-0">
             <ProfileAvatar username={profile.username} imageUrl={avatarUrl} size="sm" />
-            <span className="w-full text-center text-[10px] text-muted-foreground truncate">
-              {profile.username}
-            </span>
+            <Link
+              href="/swipe"
+              aria-label="My Taste"
+              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full bg-gradient-to-br from-primary to-primary/60 text-primary-foreground text-sm font-semibold shadow-sm"
+            >
+              <Plus className="size-4" />
+              My Taste
+            </Link>
           </span>
           <span className="flex items-center gap-2 shrink-0">
             <Link
@@ -461,6 +465,7 @@ export default async function ProfilePage({
           forMe && (
             <ForMeHero
               userId={profile.id}
+              username={profile.username}
               forMe={forMe}
               followerCount={followerCount ?? 0}
               followingProfiles={followingProfiles}

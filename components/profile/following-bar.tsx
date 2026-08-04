@@ -98,23 +98,37 @@ export function FollowingBar({
 
   return (
     <div className="w-full flex items-start justify-start gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {/* Gleiche Kreisgröße (h-10 w-10) wie die Beitragenden-Avatare darunter. */}
-      <div className="shrink-0 flex items-center gap-2">
+      {/*
+        Gleiche Verschachtelung (p-[3px] x2) wie die Avatare unten, damit die
+        Kreise selbst exakt auf gleicher Höhe sitzen -- der Avatar-Ring
+        (STORY_RING_CLASS_INACTIVE) fügt sonst unsichtbares Padding hinzu,
+        das die Kreismitte nach unten verschiebt, wenn man nur die Höhe
+        angleicht.
+      */}
+      <div className="shrink-0 flex items-start gap-2">
         <button
           type="button"
           onClick={() => setShowFollowers(true)}
           aria-label={`${followerCount} Inspirierte ansehen`}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-muted border border-border text-sm font-semibold hover:border-primary transition-colors"
+          className={`block ${STORY_RING_CLASS_INACTIVE}`}
         >
-          {followerCount}
+          <span className="block rounded-full bg-background p-[3px]">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted border border-border text-sm font-semibold">
+              {followerCount}
+            </span>
+          </span>
         </button>
         <button
           type="button"
           onClick={() => setShowSuggestions(true)}
           aria-label="Freunde hinzufügen"
-          className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+          className={`block ${STORY_RING_CLASS_INACTIVE}`}
         >
-          <Plus className="size-4" />
+          <span className="block rounded-full bg-background p-[3px]">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors">
+              <Plus className="size-4" />
+            </span>
+          </span>
         </button>
       </div>
 
