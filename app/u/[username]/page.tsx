@@ -396,6 +396,25 @@ export default async function ProfilePage({
   return (
     <main className="min-h-screen flex flex-col items-center">
       <TrackLastVisitedProfile username={profile.username} />
+      {/* Sticky oben rechts, bleibt beim Scrollen sichtbar (Punkt 5) -- Username-Zeile bleibt reiner Text. */}
+      {isOwner && (
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
+          <Link
+            href="/settings"
+            aria-label="Einstellungen"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-background/80 backdrop-blur shadow-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Settings className="size-5" />
+          </Link>
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-background/80 backdrop-blur shadow-sm">
+            <ShareListButton
+              shareTitle={`Schau dir ${profile.username}s Filmgeschmack an`}
+              url={profileUrl}
+              iconOnly
+            />
+          </span>
+        </div>
+      )}
       <div className="flex-1 w-full flex flex-col items-center gap-4 max-w-2xl p-5 pt-6">
         {/*
           Eigenansicht/Fremdansicht-Weiche: in der Eigenansicht ersetzt "For
@@ -429,34 +448,19 @@ export default async function ProfilePage({
 
         <div className="flex items-center justify-center gap-1.5">
           {isOwner && (
-            <>
-              {/*
-                Kleiner, nicht-dominanter Identitäts-Anker (Schritt 5) --
-                rein dekorativ, kein eigener Tap-Handler, da der große
-                Avatar-Slot jetzt "For Me" gehört.
-              */}
-              <span className="shrink-0">
-                <ProfileAvatar username={profile.username} imageUrl={avatarUrl} size="sm" />
-              </span>
-              <Link
-                href="/settings"
-                aria-label="Einstellungen"
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Settings className="size-5" />
-              </Link>
-            </>
+            /*
+              Kleiner, nicht-dominanter Identitäts-Anker (Schritt 5) -- rein
+              dekorativ, kein eigener Tap-Handler, da der große Avatar-Slot
+              jetzt "For Me" gehört. Settings/Teilen sitzen jetzt oben rechts
+              (Punkt 5), die Username-Zeile bleibt reiner Text + Mini-Avatar.
+            */
+            <span className="shrink-0">
+              <ProfileAvatar username={profile.username} imageUrl={avatarUrl} size="sm" />
+            </span>
           )}
           <h1 className="text-xl font-semibold text-center truncate">
             {profile.username}
           </h1>
-          {isOwner && (
-            <ShareListButton
-              shareTitle={`Schau dir ${profile.username}s Filmgeschmack an`}
-              url={profileUrl}
-              iconOnly
-            />
-          )}
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
