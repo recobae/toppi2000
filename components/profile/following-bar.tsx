@@ -10,7 +10,7 @@ import { STORY_RING_CLASS, STORY_RING_CLASS_INACTIVE } from "@/components/profil
 import { STORY_FEATURE_ENABLED } from "@/lib/feature-flags";
 import { getExpertiseIcon } from "@/lib/expertise";
 
-type FollowingProfile = {
+export type FollowingProfile = {
   id: string;
   username: string;
   avatarUrl: string | null;

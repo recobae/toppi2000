@@ -7,6 +7,7 @@ import { Lock, Plus, Sparkles, Star, UserPlus, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ProgressRing } from "@/components/profile/progress-badges";
 import { markForMeUnlockNotified, type ForMeStatus } from "@/lib/for-me";
+import { FollowingBar, type FollowingProfile } from "@/components/profile/following-bar";
 
 const HERO_SIZE = 96;
 const HERO_STROKE = 4;
@@ -78,7 +79,17 @@ function ColdStartExplainer({ onClose }: { onClose: () => void }) {
  * this. The ring/lock/sparkle logic itself is unchanged from the old
  * FollowingBar ForMeWidget, just sized up to hero scale.
  */
-export function ForMeHero({ userId, forMe }: { userId: string; forMe: ForMeStatus }) {
+export function ForMeHero({
+  userId,
+  forMe,
+  followingProfiles,
+  contributorIds,
+}: {
+  userId: string;
+  forMe: ForMeStatus;
+  followingProfiles: FollowingProfile[];
+  contributorIds?: string[];
+}) {
   const [unlockToast, setUnlockToast] = useState(false);
   const [showExplainer, setShowExplainer] = useState(false);
 
@@ -94,7 +105,7 @@ export function ForMeHero({ userId, forMe }: { userId: string; forMe: ForMeStatu
   }, [forMe.justUnlocked, userId]);
 
   return (
-    <div className="flex flex-col items-center gap-1.5">
+    <div className="w-full flex flex-col items-center gap-1.5">
       <Link
         href="/swipe"
         aria-label="My Taste"
@@ -155,6 +166,19 @@ export function ForMeHero({ userId, forMe }: { userId: string; forMe: ForMeStatu
         <span className="font-medium text-green-600 whitespace-nowrap">{forMe.ownCount} von dir</span>
         <span className="font-medium text-blue-600 whitespace-nowrap">{forMe.friendCount} von Freunden</span>
       </span>
+
+      {/*
+        Zweiter Zufluss, gleiche Technik wie der My-Taste-Connector oben --
+        die Freunde, deren Empfehlungen mit einfließen, münden von unten in
+        dieselbe Fläche.
+      */}
+      <div className="h-4 w-px bg-border" aria-hidden="true" />
+
+      <FollowingBar
+        currentUserId={userId}
+        followingProfiles={followingProfiles}
+        contributorIds={contributorIds}
+      />
 
       {unlockToast && (
         <div className="fixed bottom-4 right-4 z-50">

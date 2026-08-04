@@ -11,7 +11,6 @@ import { ListOverviewRow } from "@/components/profile/list-overview-row";
 import { GuestProfileCta } from "@/components/profile/guest-profile-cta";
 import { TrackLastVisitedProfile } from "@/components/profile/track-last-visited";
 import { FollowButton } from "@/components/profile/follow-button";
-import { FollowingBar } from "@/components/profile/following-bar";
 import { FollowerCount } from "@/components/profile/follower-count";
 import { ShareListButton } from "@/components/lists/share-list-button";
 import { ExpertiseBadges } from "@/components/profile/expertise-badges";
@@ -408,7 +407,14 @@ export default async function ProfilePage({
           samt Song-Trigger.
         */}
         {isOwner ? (
-          forMe && <ForMeHero userId={profile.id} forMe={forMe} />
+          forMe && (
+            <ForMeHero
+              userId={profile.id}
+              forMe={forMe}
+              followingProfiles={followingProfiles}
+              contributorIds={forMe.contributorUserIds}
+            />
+          )
         ) : (
           <ForeignProfileHero
             username={profile.username}
@@ -418,19 +424,6 @@ export default async function ProfilePage({
             favoriteSong={favoriteSong}
             targetUserId={profile.id}
             hasUnseenSong={unseenSong}
-          />
-        )}
-
-        {/*
-          Direkt unterhalb des Hero-Bereichs (Schritt 3) -- die Follower, aus
-          deren Empfehlungen "For Me" sich mitspeist, gehören visuell zum
-          Funnel, nicht zum Identitäts-/Stats-Block darunter.
-        */}
-        {isOwner && (
-          <FollowingBar
-            currentUserId={profile.id}
-            followingProfiles={followingProfiles}
-            contributorIds={forMe?.contributorUserIds}
           />
         )}
 
