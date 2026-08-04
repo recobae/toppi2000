@@ -515,50 +515,59 @@ export default async function ProfilePage({
           </Link>
         )}
 
+        {/*
+          Kategorien und Orte als eine gemeinsame, nach Größe sortierte Liste
+          (Schritt 7) statt fester Film-Zeile + separater "Orte"-Sektion --
+          die aktivste Liste steht immer oben, unabhängig vom Typ.
+        */}
         <div className="w-full flex flex-col gap-2 mt-2">
-          <ListOverviewRow
-            title={MOVIE_LIST_LABEL}
-            icon={Star}
-            preview={{ type: "stack", urls: movieListPosterUrls }}
-            itemCount={movieListItemCount}
-            noteCount={movieListNoteCount}
-            href={movieListHref(profile.username)}
-            shareUrl={movieListHref(profile.username)}
-          />
+          {[
+            {
+              key: "movies",
+              title: MOVIE_LIST_LABEL,
+              icon: Star,
+              preview: { type: "stack" as const, urls: movieListPosterUrls },
+              itemCount: movieListItemCount,
+              noteCount: movieListNoteCount,
+              savedCount: undefined,
+              href: movieListHref(profile.username),
+            },
+            ...regions.map((region) => ({
+              key: region.key,
+              title: region.name,
+              icon: MapPin,
+              preview: { type: "collage" as const, urls: region.photoUrls },
+              itemCount: region.itemCount,
+              noteCount: region.noteCount,
+              savedCount: region.savedCount,
+              href: `/u/${profile.username}/orte/${region.key}`,
+            })),
+          ]
+            .sort((a, b) => b.itemCount - a.itemCount)
+            .map((row) => (
+              <ListOverviewRow
+                key={row.key}
+                title={row.title}
+                icon={row.icon}
+                preview={row.preview}
+                itemCount={row.itemCount}
+                noteCount={row.noteCount}
+                savedCount={row.savedCount}
+                href={row.href}
+                shareUrl={row.href}
+              />
+            ))}
           {isGuest && <GuestProfileCta variant="row" />}
+          {isOwner && (
+            <Link
+              href="/inspiration?tab=orte"
+              className="flex items-center justify-center gap-2 h-14 w-full rounded-lg border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+            >
+              <Plus className="size-5" />
+              <span className="text-sm font-medium">Ort hinzufügen</span>
+            </Link>
+          )}
         </div>
-
-        {(regions.length > 0 || isOwner) && (
-          <div className="w-full flex flex-col gap-3">
-            <h2 className="text-sm font-medium text-muted-foreground">Orte</h2>
-            <div className="w-full flex flex-col gap-2">
-              {regions.map((region) => (
-                <ListOverviewRow
-                  key={region.key}
-                  title={region.name}
-                  icon={MapPin}
-                  preview={{ type: "collage", urls: region.photoUrls }}
-                  itemCount={region.itemCount}
-                  noteCount={region.noteCount}
-                  savedCount={region.savedCount}
-                  href={`/u/${profile.username}/orte/${region.key}`}
-                  shareUrl={`/u/${profile.username}/orte/${region.key}`}
-                />
-              ))}
-              {isOwner && (
-                <Link
-                  href="/inspiration?tab=orte"
-                  className="flex items-center justify-center gap-2 h-14 w-full rounded-lg border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
-                >
-                  <Plus className="size-5" />
-                  <span className="text-sm font-medium">
-                    Ort hinzufügen
-                  </span>
-                </Link>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </main>
   );
