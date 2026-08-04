@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { FollowSuggestionsModal } from "@/components/profile/follow-suggestions-modal";
 import { StoryViewer } from "@/components/profile/story-viewer";
@@ -41,13 +41,27 @@ function TasteMatchCornerBadge({ percentage }: { percentage: number | null }) {
   );
 }
 
+/** Marks a friend who actually contributed a recommendation feeding this user's own For-Me/Topf -- not just anyone followed. */
+function ContributorCornerBadge({ isContributor }: { isContributor: boolean }) {
+  if (!isContributor) return null;
+  return (
+    <span className="absolute -bottom-0.5 -left-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary border border-background">
+      <Sparkles className="size-2.5 fill-current text-primary-foreground" />
+    </span>
+  );
+}
+
 export function FollowingBar({
   currentUserId,
   followingProfiles,
+  contributorIds,
 }: {
   currentUserId: string;
   followingProfiles: FollowingProfile[];
+  /** Followed friends who actually contributed to this user's For-Me/Topf -- highlighted instead of every followed profile getting the same badge regardless of contribution. */
+  contributorIds?: string[];
 }) {
+  const contributorIdSet = new Set(contributorIds ?? []);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [storyUsername, setStoryUsername] = useState<string | null>(null);
   // Opening a story marks it viewed server-side; track that locally too so
@@ -110,6 +124,7 @@ export function FollowingBar({
             </span>
             <ExpertiseCornerBadge expertiseKeys={friend.expertiseKeys} />
             <TasteMatchCornerBadge percentage={friend.tasteMatchBadge} />
+            <ContributorCornerBadge isContributor={contributorIdSet.has(friend.id)} />
           </span>
         );
 

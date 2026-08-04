@@ -22,6 +22,8 @@ export type ForMeStatus = {
   /** True only the moment this call is the first to observe isUnlocked while topf_unlocked_notified was still false. */
   justUnlocked: boolean;
   previewImageUrls: string[];
+  /** Distinct followed friends who actually contributed a recommendation feeding this user's Topf -- not just anyone followed. */
+  contributorUserIds: string[];
 };
 
 function rollThreshold(): number {
@@ -68,6 +70,7 @@ export async function getForMeStatus(
   ]);
 
   let friendCount = 0;
+  let contributorUserIds: string[] = [];
   const allIds = (allIdRows ?? []).map((row) => row.id);
   if (allIds.length > 0) {
     const { data: recommenderRows } = await supabase
@@ -75,7 +78,11 @@ export async function getForMeStatus(
       .select("recommender_user_id")
       .in("recommendation_id", allIds)
       .neq("recommender_user_id", userId);
-    friendCount = new Set((recommenderRows ?? []).map((row) => row.recommender_user_id)).size;
+    const distinctContributors = new Set(
+      (recommenderRows ?? []).map((row) => row.recommender_user_id),
+    );
+    friendCount = distinctContributors.size;
+    contributorUserIds = [...distinctContributors];
   }
 
   const previewImageUrls = (recentRows ?? [])
@@ -96,6 +103,7 @@ export async function getForMeStatus(
     isUnlocked,
     justUnlocked,
     previewImageUrls,
+    contributorUserIds,
   };
 }
 

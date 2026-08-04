@@ -420,6 +420,19 @@ export default async function ProfilePage({
           />
         )}
 
+        {/*
+          Direkt unterhalb des Hero-Bereichs (Schritt 3) -- die Follower, aus
+          deren Empfehlungen "For Me" sich mitspeist, gehören visuell zum
+          Funnel, nicht zum Identitäts-/Stats-Block darunter.
+        */}
+        {isOwner && (
+          <FollowingBar
+            currentUserId={profile.id}
+            followingProfiles={followingProfiles}
+            contributorIds={forMe?.contributorUserIds}
+          />
+        )}
+
         <div className="flex items-center justify-center gap-1.5">
           {isOwner && (
             <Link
@@ -489,13 +502,6 @@ export default async function ProfilePage({
             <ListChecks className="size-3.5" />
             Meine Aktivität
           </Link>
-        )}
-
-        {isOwner && (
-          <FollowingBar
-            currentUserId={profile.id}
-            followingProfiles={followingProfiles}
-          />
         )}
 
         <div className="w-full flex flex-col gap-2 mt-2">
