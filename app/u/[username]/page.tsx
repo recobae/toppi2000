@@ -6,6 +6,7 @@ import { Heart, ListChecks, MapPin, Plus, Repeat2, Settings, Star } from "lucide
 import { createClient } from "@/lib/supabase/server";
 import { ForeignProfileHero } from "@/components/profile/foreign-profile-hero";
 import { ForMeHero } from "@/components/profile/for-me-hero";
+import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { ListOverviewRow } from "@/components/profile/list-overview-row";
 import { GuestProfileCta } from "@/components/profile/guest-profile-cta";
 import { TrackLastVisitedProfile } from "@/components/profile/track-last-visited";
@@ -435,13 +436,23 @@ export default async function ProfilePage({
 
         <div className="flex items-center justify-center gap-1.5">
           {isOwner && (
-            <Link
-              href="/settings"
-              aria-label="Einstellungen"
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Settings className="size-5" />
-            </Link>
+            <>
+              {/*
+                Kleiner, nicht-dominanter Identitäts-Anker (Schritt 5) --
+                rein dekorativ, kein eigener Tap-Handler, da der große
+                Avatar-Slot jetzt "For Me" gehört.
+              */}
+              <span className="shrink-0">
+                <ProfileAvatar username={profile.username} imageUrl={avatarUrl} size="sm" />
+              </span>
+              <Link
+                href="/settings"
+                aria-label="Einstellungen"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Settings className="size-5" />
+              </Link>
+            </>
           )}
           <h1 className="text-xl font-semibold text-center truncate">
             {profile.username}
