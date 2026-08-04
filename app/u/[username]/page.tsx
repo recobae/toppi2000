@@ -425,9 +425,12 @@ export default async function ProfilePage({
       */}
       {isOwner && (
         <div className="fixed top-4 left-4 right-4 z-50 flex items-center justify-between gap-2">
-          <span className="flex items-center gap-2 rounded-full bg-background/80 backdrop-blur shadow-sm py-1 pl-1 pr-3 min-w-0">
+          {/* Gleicher Stil wie die Beschriftung unter den Follower-Avataren (following-bar.tsx). */}
+          <span className="flex flex-col items-center gap-0.5 w-14">
             <ProfileAvatar username={profile.username} imageUrl={avatarUrl} size="sm" />
-            <span className="text-sm font-medium truncate">{profile.username}</span>
+            <span className="w-full text-center text-[10px] text-muted-foreground truncate">
+              {profile.username}
+            </span>
           </span>
           <span className="flex items-center gap-2 shrink-0">
             <Link

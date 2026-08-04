@@ -124,6 +124,10 @@ export function ForMeHero({
       </Link>
       <div className="h-3 w-px bg-border" aria-hidden="true" />
 
+      <span className="font-medium text-green-600 text-[11px] whitespace-nowrap">
+        {forMe.ownCount} von dir
+      </span>
+
       <Link
         href={forMe.isUnlocked ? "/topf" : "#"}
         onClick={
@@ -170,9 +174,8 @@ export function ForMeHero({
       </Link>
 
       <span className="text-sm font-semibold">For Me</span>
-      <span className="flex items-center gap-2 text-[11px]">
-        <span className="font-medium text-green-600 whitespace-nowrap">{forMe.ownCount} von dir</span>
-        <span className="font-medium text-blue-600 whitespace-nowrap">{forMe.friendCount} von Freunden</span>
+      <span className="font-medium text-blue-600 text-[11px] whitespace-nowrap">
+        {forMe.friendCount} von Freunden
       </span>
 
       {/*

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plus, Sparkles, Users } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { FollowSuggestionsModal } from "@/components/profile/follow-suggestions-modal";
 import { FollowerListModal } from "@/components/profile/follower-list-modal";
@@ -97,24 +97,24 @@ export function FollowingBar({
   };
 
   return (
-    <div className="w-full flex items-start justify-center gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <div className="shrink-0 flex items-center gap-2 pt-2">
+    <div className="w-full flex items-start justify-start gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {/* Gleiche Kreisgröße (h-10 w-10) wie die Beitragenden-Avatare darunter. */}
+      <div className="shrink-0 flex items-center gap-2">
         <button
           type="button"
           onClick={() => setShowFollowers(true)}
           aria-label={`${followerCount} Inspirierte ansehen`}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-muted border border-border text-sm font-semibold hover:border-primary transition-colors"
         >
-          <Users className="size-4" />
-          <span>{followerCount}</span>
+          {followerCount}
         </button>
         <button
           type="button"
           onClick={() => setShowSuggestions(true)}
           aria-label="Freunde hinzufügen"
-          className="flex h-6 w-6 items-center justify-center rounded-full border border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+          className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
         >
-          <Plus className="size-3.5" />
+          <Plus className="size-4" />
         </button>
       </div>
 
