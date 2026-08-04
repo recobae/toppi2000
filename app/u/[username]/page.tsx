@@ -13,7 +13,6 @@ import { TrackLastVisitedProfile } from "@/components/profile/track-last-visited
 import { FollowButton } from "@/components/profile/follow-button";
 import { FollowerCount } from "@/components/profile/follower-count";
 import { ShareListButton } from "@/components/lists/share-list-button";
-import { ExpertiseBadges } from "@/components/profile/expertise-badges";
 import { TasteMatchExpandable } from "@/components/profile/taste-match-expandable";
 import { ProgressBadges } from "@/components/profile/progress-badges";
 import { getForMeStatus, type ForMeStatus } from "@/lib/for-me";
@@ -23,7 +22,13 @@ import {
   movieListHref,
   type SavedCategory,
 } from "@/lib/categories";
-import { resolveEarnedExpertiseLabels, resolvePlaceExpertiseLabels } from "@/lib/expertise";
+import { resolveEarnedExpertiseLabels } from "@/lib/expertise";
+import {
+  resolveExpertiseTier,
+  tierProgressLabel,
+  CONTENT_TIER_THRESHOLDS,
+  PLACE_TIER_THRESHOLDS,
+} from "@/lib/expertise-tiers";
 import { hasActiveStory as checkHasActiveStory, storyWindowSince } from "@/lib/story-activity";
 import { hasUnseenSong } from "@/lib/song-activity";
 import {
@@ -142,10 +147,6 @@ export default async function ProfilePage({
     ...(watchlistPreview?.posterUrls ?? []),
   ].slice(0, 4);
 
-  const itemCountByCategory = Object.fromEntries(
-    previewByCategory.map((entry) => [entry.category, entry.itemCount]),
-  ) as Partial<Record<SavedCategory, number>>;
-
   const { data: regionRows } = await supabase
     .from("place_regions")
     .select("id, region_name, region_key")
@@ -194,11 +195,6 @@ export default async function ProfilePage({
   // A region list auto-empties out of the overview once its last place is
   // removed, instead of lingering as a dead 0-item row.
   const regions = allRegions.filter((region) => region.itemCount > 0);
-
-  const earnedExpertiseLabels = [
-    ...resolveEarnedExpertiseLabels(itemCountByCategory, profile.username),
-    ...resolvePlaceExpertiseLabels(regions, profile.username),
-  ];
 
   // Two distinct stats, both sourced from interaction_credits -- a ledger of
   // (actor, owner, item, credit_type) rows written at the moment someone
@@ -459,8 +455,6 @@ export default async function ProfilePage({
           )}
         </div>
 
-        <ExpertiseBadges labels={earnedExpertiseLabels} homeCity={profile.home_city} />
-
         <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
           {SHOW_LEGACY_LIKE_STATS && (
             <>
@@ -524,6 +518,11 @@ export default async function ProfilePage({
               noteCount: movieListNoteCount,
               savedCount: undefined,
               href: movieListHref(profile.username),
+              tier: resolveExpertiseTier(movieListItemCount, CONTENT_TIER_THRESHOLDS),
+              tierProgress: isOwner
+                ? tierProgressLabel(movieListItemCount, CONTENT_TIER_THRESHOLDS)
+                : null,
+              isCurrentLocation: false,
             },
             ...regions.map((region) => ({
               key: region.key,
@@ -534,6 +533,11 @@ export default async function ProfilePage({
               noteCount: region.noteCount,
               savedCount: region.savedCount,
               href: `/u/${profile.username}/orte/${region.key}`,
+              tier: resolveExpertiseTier(region.itemCount, PLACE_TIER_THRESHOLDS),
+              tierProgress: isOwner
+                ? tierProgressLabel(region.itemCount, PLACE_TIER_THRESHOLDS)
+                : null,
+              isCurrentLocation: region.name === profile.home_city,
             })),
           ]
             .sort((a, b) => b.itemCount - a.itemCount)
@@ -548,6 +552,9 @@ export default async function ProfilePage({
                 savedCount={row.savedCount}
                 href={row.href}
                 shareUrl={row.href}
+                tier={row.tier}
+                tierProgressLabel={row.tierProgress}
+                isCurrentLocation={row.isCurrentLocation}
               />
             ))}
           {isGuest && <GuestProfileCta variant="row" />}

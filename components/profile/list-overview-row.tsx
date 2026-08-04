@@ -1,7 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
-import { type LucideIcon } from "lucide-react";
+import { MapPin, type LucideIcon } from "lucide-react";
 import { ShareListButton } from "@/components/lists/share-list-button";
+import { ExpertiseTierBadge } from "@/components/profile/expertise-tier-badge";
+import type { ExpertiseTier } from "@/lib/expertise-tiers";
 
 const PREVIEW_SIZE = "56px";
 
@@ -76,6 +78,9 @@ export function ListOverviewRow({
   savedCount,
   href,
   shareUrl,
+  tier,
+  tierProgressLabel,
+  isCurrentLocation,
 }: {
   title: string;
   icon: LucideIcon;
@@ -86,6 +91,14 @@ export function ListOverviewRow({
   savedCount?: number;
   href: string;
   shareUrl: string;
+  /** Einsteiger renders no icon at all. */
+  tier?: ExpertiseTier;
+  /** Owner-only progress tooltip text, e.g. "42/60 bis Experte" -- omitted entirely for visitors. */
+  tierProgressLabel?: string | null;
+  /** Shows the "Wo bist du gerade" pin next to the title when this row matches it. */
+  isCurrentLocation?: boolean;
+  /** Overrides the default "N Einträge · ..." line, e.g. for the movies row's split empfohlen/gemerkt stats. */
+  statsText?: string;
 }) {
   return (
     <div className="relative flex items-center gap-3 rounded-lg border p-2.5 hover:bg-accent transition-colors">
@@ -99,6 +112,17 @@ export function ListOverviewRow({
       <div className="flex-1 min-w-0 flex flex-col gap-0.5">
         <div className="flex items-center gap-1">
           <p className="text-sm font-medium leading-tight truncate">{title}</p>
+          {isCurrentLocation && (
+            <MapPin
+              aria-label="Aktueller Ort"
+              className="size-3 shrink-0 fill-current text-primary"
+            />
+          )}
+          {tier && (
+            <span className="relative z-10">
+              <ExpertiseTierBadge tier={tier} progressLabel={tierProgressLabel} />
+            </span>
+          )}
           <span className="relative z-10 ml-auto">
             <ShareListButton shareTitle={title} url={shareUrl} iconOnly />
           </span>
