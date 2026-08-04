@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Heart, ListChecks, MapPin, Plus, Repeat2, Settings, Star } from "lucide-react";
+import { Heart, ListChecks, MapPin, Repeat2, Settings, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ForeignProfileHero } from "@/components/profile/foreign-profile-hero";
 import { ForMeHero } from "@/components/profile/for-me-hero";
@@ -13,6 +13,7 @@ import { TrackLastVisitedProfile } from "@/components/profile/track-last-visited
 import { FollowButton } from "@/components/profile/follow-button";
 import { FollowerCount } from "@/components/profile/follower-count";
 import { FollowerQuickbar } from "@/components/profile/follower-quickbar";
+import { NewListPicker } from "@/components/profile/new-list-picker";
 import { ShareListButton } from "@/components/lists/share-list-button";
 import { TasteMatchExpandable } from "@/components/profile/taste-match-expandable";
 import { ProgressBadges } from "@/components/profile/progress-badges";
@@ -591,15 +592,7 @@ export default async function ProfilePage({
               />
             ))}
           {isGuest && <GuestProfileCta variant="row" />}
-          {isOwner && (
-            <Link
-              href="/inspiration?tab=orte"
-              className="flex items-center justify-center gap-2 h-14 w-full rounded-lg border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
-            >
-              <Plus className="size-5" />
-              <span className="text-sm font-medium">Ort hinzufügen</span>
-            </Link>
-          )}
+          {isOwner && <NewListPicker />}
         </div>
       </div>
     </main>
