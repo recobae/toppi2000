@@ -148,6 +148,28 @@ export default async function ProfilePage({
     ...(watchlistPreview?.posterUrls ?? []),
   ].slice(0, 4);
 
+  // Stats-parity with the Orte tiles (Punkt 8): Empfohlen split by
+  // media_type (movie vs. tv), Watchlist shown as "gemerkt" -- the same
+  // empfohlen/gemerkt semantic Orte already uses via places.status.
+  const [{ count: moviesRecommendedCount }, { count: seriesRecommendedCount }] = await Promise.all([
+    supabase
+      .from("top_list")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", profile.id)
+      .eq("media_type", "movie"),
+    supabase
+      .from("top_list")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", profile.id)
+      .eq("media_type", "tv"),
+  ]);
+  const movieListStatsText = [
+    `${moviesRecommendedCount ?? 0} Filme empfohlen`,
+    `${seriesRecommendedCount ?? 0} Serien empfohlen`,
+    ...(movieListNoteCount > 0 ? [`${movieListNoteCount} mit Notiz`] : []),
+    ...((watchlistPreview?.itemCount ?? 0) > 0 ? [`${watchlistPreview?.itemCount} gemerkt`] : []),
+  ].join(" · ");
+
   const { data: regionRows } = await supabase
     .from("place_regions")
     .select("id, region_name, region_key")
@@ -531,6 +553,7 @@ export default async function ProfilePage({
                 ? tierProgressLabel(movieListItemCount, CONTENT_TIER_THRESHOLDS)
                 : null,
               isCurrentLocation: false,
+              statsText: movieListStatsText,
             },
             ...regions.map((region) => ({
               key: region.key,
@@ -546,6 +569,7 @@ export default async function ProfilePage({
                 ? tierProgressLabel(region.itemCount, PLACE_TIER_THRESHOLDS)
                 : null,
               isCurrentLocation: region.name === profile.home_city,
+              statsText: undefined as string | undefined,
             })),
           ]
             .sort((a, b) => b.itemCount - a.itemCount)
@@ -563,6 +587,7 @@ export default async function ProfilePage({
                 tier={row.tier}
                 tierProgressLabel={row.tierProgress}
                 isCurrentLocation={row.isCurrentLocation}
+                statsText={row.statsText}
               />
             ))}
           {isGuest && <GuestProfileCta variant="row" />}

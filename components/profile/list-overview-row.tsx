@@ -81,6 +81,7 @@ export function ListOverviewRow({
   tier,
   tierProgressLabel,
   isCurrentLocation,
+  statsText,
 }: {
   title: string;
   icon: LucideIcon;
@@ -128,9 +129,13 @@ export function ListOverviewRow({
           </span>
         </div>
         <p className="text-xs text-muted-foreground">
-          {itemCount} {itemCount === 1 ? "Eintrag" : "Einträge"}
-          {noteCount > 0 && ` · ${noteCount} mit Notiz`}
-          {typeof savedCount === "number" && savedCount > 0 && ` · ${savedCount} gemerkt`}
+          {statsText ?? (
+            <>
+              {itemCount} {itemCount === 1 ? "Eintrag" : "Einträge"}
+              {noteCount > 0 && ` · ${noteCount} mit Notiz`}
+              {typeof savedCount === "number" && savedCount > 0 && ` · ${savedCount} gemerkt`}
+            </>
+          )}
         </p>
       </div>
       <Link href={href} aria-label={title} className="absolute inset-0 z-0 rounded-lg" />
