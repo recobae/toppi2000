@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Lock, Sparkles, Star, UserPlus, X } from "lucide-react";
+import { Lock, Plus, Sparkles, Star, UserPlus, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ProgressRing } from "@/components/profile/progress-badges";
 import { markForMeUnlockNotified, type ForMeStatus } from "@/lib/for-me";
@@ -110,9 +110,24 @@ export function ForMeHero({
 
   return (
     <div className="w-full flex flex-col items-center gap-1.5">
-      {/* My Taste ist in die sticky Kopfzeile gewandert (Abschlussrunde, Punkt 1) -- kein Connector mehr nötig, der ins Leere zeigt. */}
+      {/*
+        Haupt-CTA für Input -- deutlich prominenter als zuvor, aber die
+        Größen-Hierarchie For Me > My Taste bleibt: der Connector darunter
+        ist entsprechend etwas kürzer, damit der Gesamtabstand zum Hero
+        nicht wächst.
+      */}
+      <Link
+        href="/swipe"
+        aria-label="My Taste"
+        className="inline-flex items-center gap-2 h-11 px-5 rounded-full bg-gradient-to-br from-primary to-primary/60 text-primary-foreground text-base font-semibold shadow-sm"
+      >
+        <Plus className="size-5" />
+        My Taste
+      </Link>
+      <div className="h-3 w-px bg-border" aria-hidden="true" />
+
       <span className="font-medium text-green-600 text-[11px] whitespace-nowrap">
-        {forMe.ownCount} von dir
+        {forMe.ownCount} Empfehlungen von dir
       </span>
 
       <Link
@@ -162,7 +177,7 @@ export function ForMeHero({
 
       <span className="text-sm font-semibold">{username}</span>
       <span className="font-medium text-blue-600 text-[11px] whitespace-nowrap">
-        {forMe.friendCount} von Freunden
+        {forMe.friendCount} Empfehlungen von Freunden
       </span>
 
       {/*

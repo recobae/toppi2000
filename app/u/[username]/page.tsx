@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Heart, ListChecks, MapPin, Plus, Repeat2, Settings, Star } from "lucide-react";
+import { Heart, ListChecks, MapPin, Repeat2, Settings, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ForeignProfileHero } from "@/components/profile/foreign-profile-hero";
 import { ForMeHero } from "@/components/profile/for-me-hero";
@@ -419,22 +419,14 @@ export default async function ProfilePage({
     <main className="min-h-screen flex flex-col items-center">
       <TrackLastVisitedProfile username={profile.username} />
       {/*
-        Sticky oben, bleibt beim Scrollen sichtbar -- Avatar, My Taste,
-        Settings, Teilen in einer Zeile, vertikal zentriert. Kein
-        Username-Text mehr hier (Abschlussrunde, Punkt 1).
+        Sticky oben, bleibt beim Scrollen sichtbar -- nur Avatar links,
+        Settings + Teilen rechts. My Taste ist zurück im Funnel (ForMeHero),
+        kein Username-Text hier.
       */}
       {isOwner && (
         <div className="fixed top-4 left-4 right-4 z-50 flex items-center justify-between gap-2">
           <span className="flex items-center gap-2 shrink-0">
             <ProfileAvatar username={profile.username} imageUrl={avatarUrl} size="sm" />
-            <Link
-              href="/swipe"
-              aria-label="My Taste"
-              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full bg-gradient-to-br from-primary to-primary/60 text-primary-foreground text-sm font-semibold shadow-sm"
-            >
-              <Plus className="size-4" />
-              My Taste
-            </Link>
           </span>
           <span className="flex items-center gap-2 shrink-0">
             <Link
