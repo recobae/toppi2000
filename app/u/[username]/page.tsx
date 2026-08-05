@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { ListChecks, MapPin, Settings, Star } from "lucide-react";
+import { MapPin, Settings, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ForeignProfileHero } from "@/components/profile/foreign-profile-hero";
 import { ForMeHero } from "@/components/profile/for-me-hero";
@@ -568,16 +568,6 @@ export default async function ProfilePage({
           />
         )}
         {isGuest && <GuestProfileCta variant="button" />}
-
-        {isOwner && (
-          <Link
-            href="/meine-aktivitaet"
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ListChecks className="size-3.5" />
-            Meine Aktivität
-          </Link>
-        )}
 
         {/*
           Kategorien und Orte als eine gemeinsame, nach Größe sortierte Liste
