@@ -83,14 +83,12 @@ export function ForMeHero({
   userId,
   username,
   forMe,
-  followerCount,
   followingProfiles,
   contributorIds,
 }: {
   userId: string;
   username: string;
   forMe: ForMeStatus;
-  followerCount: number;
   followingProfiles: FollowingProfile[];
   contributorIds?: string[];
 }) {
@@ -110,16 +108,6 @@ export function ForMeHero({
 
   return (
     <div className="w-full flex flex-col items-center gap-1.5">
-      {/* Klein, zentriert, oberhalb von My Taste -- public/logo.png. */}
-      <Image
-        src="/logo.png"
-        alt="Toppi"
-        width={120}
-        height={64}
-        className="h-6 w-auto"
-        priority
-      />
-
       {/*
         Haupt-CTA für Input -- deutlich prominenter als zuvor, aber die
         Größen-Hierarchie For Me > My Taste bleibt: der Connector darunter
@@ -217,7 +205,6 @@ export function ForMeHero({
 
       <FollowingBar
         currentUserId={userId}
-        followerCount={followerCount}
         followingProfiles={followingProfiles}
         contributorIds={contributorIds}
       />

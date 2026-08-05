@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
+import Image from "next/image";
 import type { Metadata } from "next";
 import { MapPin, Settings, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -226,7 +227,6 @@ export default async function ProfilePage({
   const [
     hasActiveStory,
     { ownInteractionRows, tasteMatch },
-    { count: followerCount },
     { data: existingFollowRow },
     { count: thanksGivenCount },
     { count: dontWatchCount },
@@ -241,10 +241,6 @@ export default async function ProfilePage({
           : null;
       return { ownInteractionRows, tasteMatch };
     })(),
-    supabase
-      .from("user_follows")
-      .select("id", { count: "exact", head: true })
-      .eq("followed_id", profile.id),
     // Resolved here (instead of inside FollowButton on mount) so the button
     // never needs its own client-side getUser()+user_follows roundtrip --
     // both ids are already known on this page.
@@ -437,15 +433,23 @@ export default async function ProfilePage({
       <div className="flex-1 w-full flex flex-col items-center gap-4 max-w-2xl p-5 pt-6">
         {/*
           Scrollt normal mit dem restlichen Content -- nicht mehr sticky/
-          fixed. Nur Avatar links, Settings + Teilen rechts. My Taste ist im
-          Funnel (ForMeHero), kein Username-Text hier.
+          fixed. Avatar links, Logo mittig auf derselben Zeile (nicht mehr
+          im My-Taste-Bereich), Settings + Teilen rechts.
         */}
         {isOwner && (
-          <div className="w-full flex items-center justify-between gap-2">
-            <span className="flex items-center gap-2 shrink-0">
+          <div className="w-full grid grid-cols-3 items-center gap-2">
+            <span className="flex items-center gap-2 shrink-0 justify-self-start">
               <ProfileAvatar username={profile.username} imageUrl={avatarUrl} size="sm" />
             </span>
-            <span className="flex items-center gap-2 shrink-0">
+            <Image
+              src="/logo.png"
+              alt="Toppi"
+              width={160}
+              height={86}
+              className="h-8 w-auto justify-self-center"
+              priority
+            />
+            <span className="flex items-center gap-2 shrink-0 justify-self-end">
               <Link
                 href="/settings"
                 aria-label="Einstellungen"
@@ -475,7 +479,6 @@ export default async function ProfilePage({
               userId={profile.id}
               username={profile.username}
               forMe={forMe}
-              followerCount={followerCount ?? 0}
               followingProfiles={followingProfiles}
               contributorIds={forMe.contributorUserIds}
             />
@@ -496,7 +499,6 @@ export default async function ProfilePage({
         {!isOwner && (
           <FollowingBar
             currentUserId={profile.id}
-            followerCount={followerCount ?? 0}
             followingProfiles={followingProfiles}
             contributorIds={foreignContributorIds}
             showAddButton={false}
