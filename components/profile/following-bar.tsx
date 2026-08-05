@@ -66,16 +66,22 @@ function ContributorCornerBadge({ isContributor }: { isContributor: boolean }) {
  * followed-friend avatars -- previously two separate rows (FollowerQuickbar
  * + this bar), which is also why the "friends -> For Me" connector line
  * above it had nothing single to visually anchor to (Punkt 1).
+ *
+ * The left circle's number is `followingProfiles.length` -- the exact same
+ * array the avatars below are rendered from -- instead of a separately
+ * queried count. It used to show inbound followers (people following THIS
+ * profile) while the avatars show outbound following (people this profile
+ * follows), two different populations that happened to sit in the same bar
+ * and could show a different number than visible avatars (e.g. "2" next to
+ * 3 avatars). There is now exactly one source for both.
  */
 export function FollowingBar({
   currentUserId,
-  followerCount,
   followingProfiles,
   contributorIds,
   showAddButton = true,
 }: {
   currentUserId: string;
-  followerCount: number;
   followingProfiles: FollowingProfile[];
   /** Followed friends who actually contributed to this user's For-Me/Topf -- highlighted instead of every followed profile getting the same badge regardless of contribution. */
   contributorIds?: string[];
@@ -120,12 +126,12 @@ export function FollowingBar({
         <button
           type="button"
           onClick={() => setShowFollowers(true)}
-          aria-label={`${followerCount} Inspirierte ansehen`}
+          aria-label={`${followingProfiles.length} Gefolgte ansehen`}
           className={`block ${STORY_RING_CLASS_INACTIVE}`}
         >
           <span className="block rounded-full bg-background p-[3px]">
             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted border border-border text-sm font-semibold">
-              {followerCount}
+              {followingProfiles.length}
             </span>
           </span>
         </button>
@@ -196,7 +202,14 @@ export function FollowingBar({
       })}
 
       {showFollowers && (
-        <FollowerListModal targetUserId={currentUserId} onClose={() => setShowFollowers(false)} />
+        <FollowerListModal
+          profiles={followingProfiles.map((friend) => ({
+            id: friend.id,
+            username: friend.username,
+            avatarUrl: friend.avatarUrl,
+          }))}
+          onClose={() => setShowFollowers(false)}
+        />
       )}
       {showSuggestions && (
         <FollowSuggestionsModal currentUserId={currentUserId} onClose={() => setShowSuggestions(false)} />
