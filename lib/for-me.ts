@@ -33,6 +33,34 @@ function rollThreshold(): number {
 }
 
 /**
+ * Distinct followed friends explicitly tagged as "Wer empfiehlt das?" on
+ * one of `userId`'s own active Topf entries -- drives the Sparkles corner
+ * badge on FollowingBar avatars. Extracted out of getForMeStatus so the
+ * profile page can compute it for a FOREIGN profile's FollowingBar too,
+ * without paying for the unlock-threshold/preview-image work that's own-
+ * profile-only.
+ */
+export async function getTopfContributorIds(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<string[]> {
+  const { data: allIdRows } = await supabase
+    .from("recommendations")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("status", "active");
+  const allIds = (allIdRows ?? []).map((row) => row.id);
+  if (allIds.length === 0) return [];
+
+  const { data: recommenderRows } = await supabase
+    .from("recommendation_recommenders")
+    .select("recommender_user_id")
+    .in("recommendation_id", allIds)
+    .neq("recommender_user_id", userId);
+  return [...new Set((recommenderRows ?? []).map((row) => row.recommender_user_id))];
+}
+
+/**
  * Resolves everything the "For Me" tile needs: own rating count, distinct
  * friend-contribution count to the viewer's own Topf, the (lazily rolled,
  * then persisted) unlock threshold, and a couple of real recent Topf
@@ -58,7 +86,7 @@ export async function getForMeStatus(
     await supabase.from("profiles").update({ topf_unlock_threshold: threshold }).eq("id", userId);
   }
 
-  const [{ data: recentRows }, { data: allIdRows }, { data: followRows }] = await Promise.all([
+  const [{ data: recentRows }, contributorUserIds, { data: followRows }] = await Promise.all([
     supabase
       .from("recommendations")
       .select("metadata")
@@ -66,25 +94,9 @@ export async function getForMeStatus(
       .eq("status", "active")
       .order("created_at", { ascending: false })
       .limit(6),
-    supabase.from("recommendations").select("id").eq("user_id", userId).eq("status", "active"),
+    getTopfContributorIds(supabase, userId),
     supabase.from("user_follows").select("followed_id").eq("follower_id", userId),
   ]);
-
-  // contributorUserIds: still attribution-based (who was explicitly tagged
-  // as "Wer empfiehlt das?" on one of THIS user's own entries) -- drives the
-  // Sparkles corner badge on FollowingBar avatars, unchanged.
-  let contributorUserIds: string[] = [];
-  const allIds = (allIdRows ?? []).map((row) => row.id);
-  if (allIds.length > 0) {
-    const { data: recommenderRows } = await supabase
-      .from("recommendation_recommenders")
-      .select("recommender_user_id")
-      .in("recommendation_id", allIds)
-      .neq("recommender_user_id", userId);
-    contributorUserIds = [
-      ...new Set((recommenderRows ?? []).map((row) => row.recommender_user_id)),
-    ];
-  }
 
   // friendCount: sum of ALL active recommendations followed friends have of
   // their own, regardless of explicit attribution -- deliberately a

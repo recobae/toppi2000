@@ -64,12 +64,15 @@ export function FollowingBar({
   followerCount,
   followingProfiles,
   contributorIds,
+  showAddButton = true,
 }: {
   currentUserId: string;
   followerCount: number;
   followingProfiles: FollowingProfile[];
   /** Followed friends who actually contributed to this user's For-Me/Topf -- highlighted instead of every followed profile getting the same badge regardless of contribution. */
   contributorIds?: string[];
+  /** Off on a foreign profile -- adding to someone else's follow list from their page doesn't make sense. */
+  showAddButton?: boolean;
 }) {
   const contributorIdSet = new Set(contributorIds ?? []);
   const [showFollowers, setShowFollowers] = useState(false);
@@ -118,18 +121,20 @@ export function FollowingBar({
             </span>
           </span>
         </button>
-        <button
-          type="button"
-          onClick={() => setShowSuggestions(true)}
-          aria-label="Freunde hinzufügen"
-          className={`block ${STORY_RING_CLASS_INACTIVE}`}
-        >
-          <span className="block rounded-full bg-background p-[3px]">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors">
-              <Plus className="size-4" />
+        {showAddButton && (
+          <button
+            type="button"
+            onClick={() => setShowSuggestions(true)}
+            aria-label="Freunde hinzufügen"
+            className={`block ${STORY_RING_CLASS_INACTIVE}`}
+          >
+            <span className="block rounded-full bg-background p-[3px]">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors">
+                <Plus className="size-4" />
+              </span>
             </span>
-          </span>
-        </button>
+          </button>
+        )}
       </div>
 
       <div className="h-10 w-px bg-border shrink-0 self-center" aria-hidden="true" />

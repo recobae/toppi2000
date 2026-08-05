@@ -11,12 +11,12 @@ import { ListOverviewRow } from "@/components/profile/list-overview-row";
 import { GuestProfileCta } from "@/components/profile/guest-profile-cta";
 import { TrackLastVisitedProfile } from "@/components/profile/track-last-visited";
 import { FollowButton } from "@/components/profile/follow-button";
-import { FollowerCount } from "@/components/profile/follower-count";
 import { NewListPicker } from "@/components/profile/new-list-picker";
 import { ShareListButton } from "@/components/lists/share-list-button";
 import { TasteMatchExpandable } from "@/components/profile/taste-match-expandable";
 import { ThanksStat } from "@/components/profile/progress-badges";
-import { getForMeStatus, type ForMeStatus } from "@/lib/for-me";
+import { getForMeStatus, getTopfContributorIds, type ForMeStatus } from "@/lib/for-me";
+import { FollowingBar } from "@/components/profile/following-bar";
 import {
   MOVIE_LIST_LABEL,
   VISIBLE_SAVED_CATEGORIES,
@@ -302,7 +302,10 @@ export default async function ProfilePage({
   };
 
   let followingProfiles: FollowingProfile[] = [];
-  if (isOwner) {
+  // Now used by both views (Bug/Ausbau-Runde, Punkt 7) -- the query was
+  // already generic over profile.id, only the surrounding `if` was
+  // needlessly own-view-only.
+  {
     const { data: followRows } = await supabase
       .from("user_follows")
       .select("followed_id")
@@ -412,6 +415,11 @@ export default async function ProfilePage({
     }
   }
 
+  // Foreign view has no `forMe` (own-only), so its FollowingBar's contributor
+  // badges need this computed directly -- lean helper, skips the unlock-
+  // threshold/preview-image work getForMeStatus also does.
+  const foreignContributorIds = !isOwner ? await getTopfContributorIds(supabase, profile.id) : [];
+
   const avatarUrl = topListPreview?.posterUrls[0] ?? null;
   const profileUrl = await getProfileUrl(profile.username);
 
@@ -476,6 +484,17 @@ export default async function ProfilePage({
           />
         )}
 
+        {/* Fremdansicht: dieses Profils eigene Follower/Beitragende, nicht die des Betrachters (Punkt 7). */}
+        {!isOwner && (
+          <FollowingBar
+            currentUserId={profile.id}
+            followerCount={followerCount ?? 0}
+            followingProfiles={followingProfiles}
+            contributorIds={foreignContributorIds}
+            showAddButton={false}
+          />
+        )}
+
         {/*
           Eigenansicht: Name/Avatar sitzen jetzt oben sticky (Punkt 3), hier
           also keine eigene Username-Zeile mehr. Fremdansicht behält den
@@ -502,7 +521,6 @@ export default async function ProfilePage({
               </div>
             </>
           )}
-          {!isOwner && <FollowerCount targetUserId={profile.id} count={followerCount ?? 0} />}
         </div>
 
         {tasteMatch && (
