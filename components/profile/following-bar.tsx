@@ -97,7 +97,7 @@ export function FollowingBar({
   };
 
   return (
-    <div className="w-full flex items-start justify-start gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="w-full flex items-start justify-start gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {/*
         Gleiche Verschachtelung (p-[3px] x2) wie die Avatare unten, damit die
         Kreise selbst exakt auf gleicher Höhe sitzen -- der Avatar-Ring
@@ -105,7 +105,7 @@ export function FollowingBar({
         das die Kreismitte nach unten verschiebt, wenn man nur die Höhe
         angleicht.
       */}
-      <div className="shrink-0 flex items-start gap-2">
+      <div className="shrink-0 flex items-start gap-1.5">
         <button
           type="button"
           onClick={() => setShowFollowers(true)}
