@@ -230,9 +230,19 @@ export async function getCategoryCounts(
   return counts;
 }
 
-export type TopfOverview = { totalItems: number; friendCount: number; categoryCount: number };
+export type TopfOverview = { totalItems: number; distinctRecommenderCount: number; categoryCount: number };
 
-/** Backs the home screen's "1.847 Empfehlungen von 6 Freunden · 12 Kategorien" counter line. */
+/**
+ * Backs the home screen's "1.847 Empfehlungen von 6 Beiträgern · 12
+ * Kategorien" counter line. `distinctRecommenderCount` (Metriken-Audit,
+ * Punkt C -- renamed from `friendCount`) counts distinct people explicitly
+ * attributed via "Wer empfiehlt das?" on the viewer's own entries, which can
+ * include the viewer themselves -- a different population from
+ * lib/for-me.ts's `friendCount` (a live sum over followed users' own
+ * entries) or lib/for-me.ts's `contributorUserIds` (the same attribution,
+ * but excluding the viewer). Calling all three "Freunde" invited exactly
+ * the kind of confusion this rename fixes.
+ */
 export async function getTopfOverview(supabase: SupabaseClient, userId: string): Promise<TopfOverview> {
   const { data: rows } = await supabase
     .from("recommendations")
@@ -242,18 +252,18 @@ export async function getTopfOverview(supabase: SupabaseClient, userId: string):
   const items = rows ?? [];
   const ids = items.map((row) => row.id);
 
-  let friendCount = 0;
+  let distinctRecommenderCount = 0;
   if (ids.length > 0) {
     const { data: recommenderRows } = await supabase
       .from("recommendation_recommenders")
       .select("recommender_user_id")
       .in("recommendation_id", ids);
-    friendCount = new Set((recommenderRows ?? []).map((row) => row.recommender_user_id)).size;
+    distinctRecommenderCount = new Set((recommenderRows ?? []).map((row) => row.recommender_user_id)).size;
   }
 
   return {
     totalItems: items.length,
-    friendCount,
+    distinctRecommenderCount,
     categoryCount: new Set(items.map((row) => row.category_key)).size,
   };
 }

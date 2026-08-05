@@ -52,8 +52,8 @@ export default async function TopfPage() {
         <p className="text-sm text-muted-foreground">
           {overview.totalItems === 0
             ? "Noch leer -- trag deine erste Empfehlung ein."
-            : `${overview.totalItems} Empfehlungen von ${overview.friendCount} ${
-                overview.friendCount === 1 ? "Freund" : "Freunden"
+            : `${overview.totalItems} Empfehlungen von ${overview.distinctRecommenderCount} ${
+                overview.distinctRecommenderCount === 1 ? "Beiträger" : "Beiträgern"
               } · ${overview.categoryCount} ${overview.categoryCount === 1 ? "Kategorie" : "Kategorien"}`}
         </p>
 
