@@ -9,7 +9,7 @@ import { ArrowLeft } from "lucide-react";
  * list's back link goes to the foreign profile it belongs to (Regel A),
  * never straight to the viewer's own profile (Regel C) -- getting from a
  * foreign list to your own profile takes two steps: this link to the
- * visited profile, then that profile's own SiteHeader avatar (Regel B).
+ * visited profile, then the bottom nav's "Profil" tab from there (Regel B).
  * This replaced a resolver that deliberately always pointed at the
  * viewer's own profile, and a localStorage "last visited" tracker that
  * could point at neither.

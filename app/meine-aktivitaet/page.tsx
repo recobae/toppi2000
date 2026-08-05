@@ -108,10 +108,9 @@ export default function MeineAktivitaetPage() {
     <main className="min-h-screen flex flex-col items-center">
       <div className="flex-1 w-full flex flex-col gap-4 max-w-2xl p-5 pt-8">
         {/*
-          Kein eigener BackToProfileLink-Text mehr hier -- der floatende
-          SiteHeader-Avatar (oben links, auf jeder Nicht-Profilseite sichtbar,
-          jetzt mit Rückpfeil-Badge) deckt "zurück zum Profil" bereits ab.
-          Titel zentriert, damit er nicht mit diesem Avatar kollidiert.
+          Kein eigener BackToProfileLink-Text mehr hier -- der "Profil"-Tab
+          der unteren Hauptnavigation deckt "zurück zum Profil" bereits ab.
+          Titel bleibt trotzdem zentriert für ein ruhiges Layout.
         */}
         <h1 className="w-full text-center font-medium text-xl">Meine Aktivität</h1>
 

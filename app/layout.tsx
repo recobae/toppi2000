@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Suspense } from "react";
-import { SiteHeader } from "@/components/site-header";
+import { BottomNav } from "@/components/nav/bottom-nav";
 import "./globals.css";
 
 const defaultUrl = process.env.VERCEL_URL
@@ -44,10 +44,10 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <Suspense fallback={null}>
-            <SiteHeader />
-          </Suspense>
           {children}
+          <Suspense fallback={null}>
+            <BottomNav />
+          </Suspense>
         </ThemeProvider>
       </body>
     </html>

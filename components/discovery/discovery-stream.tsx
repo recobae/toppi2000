@@ -1,24 +1,31 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { recordInteraction } from "@/lib/interactions";
 import { recordSkip } from "@/lib/item-skips";
-import { DiscoveryCard, DiscoveryCardActions } from "@/components/discovery/discovery-card";
+import { DiscoveryListRow } from "@/components/discovery/discovery-list-row";
 import type { DiscoveryCandidate } from "@/lib/discovery";
 
 const REFILL_THRESHOLD = 3;
-const EXIT_ANIMATION_MS = 350;
+const VISIBLE_COUNT = 8;
 
 type FeedResponse = { results: DiscoveryCandidate[]; exhausted: boolean };
 
+/**
+ * Main "Für Dich" stream -- a live, self-refilling list (not a swipe deck):
+ * every visible row has its own Like/Dislike/Skip, and acting on ANY row
+ * removes just that one and the next candidate takes its place at the
+ * bottom of the visible set. Refills from the API once the buffer runs low
+ * so the list never bottoms out.
+ */
 export function DiscoveryStream({ userId }: { userId: string }) {
   const [items, setItems] = useState<DiscoveryCandidate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [exhausted, setExhausted] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [exitDirection, setExitDirection] = useState<"left" | "right" | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
   const seenIdsRef = useRef<Set<string>>(new Set());
 
   const fetchFeed = useCallback(async (): Promise<FeedResponse | null> => {
@@ -59,8 +66,6 @@ export function DiscoveryStream({ userId }: { userId: string }) {
     if (isLoading || isLoadingMore || exhausted) return;
     if (items.length < REFILL_THRESHOLD) loadMore();
   }, [items.length, isLoading, isLoadingMore, exhausted, loadMore]);
-
-  const dismissCurrent = () => setItems((prev) => prev.slice(1));
 
   const persistDecision = async (candidate: DiscoveryCandidate, action: "like" | "dislike" | "skip") => {
     const supabase = createClient();
@@ -104,72 +109,41 @@ export function DiscoveryStream({ userId }: { userId: string }) {
   };
 
   const handleAction = async (candidate: DiscoveryCandidate, action: "like" | "dislike" | "skip") => {
-    if (pending) return;
-    setPending(true);
+    if (pendingId) return;
+    setPendingId(candidate.id);
     await persistDecision(candidate, action);
-    dismissCurrent();
-    setPending(false);
+    setItems((prev) => prev.filter((item) => item.id !== candidate.id));
+    setPendingId(null);
   };
 
-  const handleGesture = (candidate: DiscoveryCandidate, action: "like" | "dislike") => {
-    if (pending) return;
-    handleAction(candidate, action);
-  };
-
-  const handleButtonAction = (candidate: DiscoveryCandidate, action: "like" | "dislike" | "skip") => {
-    if (pending) return;
-    setExitDirection(action === "dislike" ? "left" : "right");
-    setTimeout(() => {
-      handleAction(candidate, action);
-      setExitDirection(null);
-    }, EXIT_ANIMATION_MS);
-  };
-
-  const current = items[0];
-  const next = items[1];
+  const visible = items.slice(0, VISIBLE_COUNT);
 
   return (
-    <div className="w-full flex-1 min-h-0 flex flex-col items-center gap-4">
-      <div className="flex-1 min-h-0 w-full flex items-center justify-center">
-        <div className="relative h-full max-h-[560px] aspect-[3/5] max-w-full">
-          {isLoading ? (
-            <div className="flex h-full w-full items-center justify-center rounded-2xl border border-dashed text-sm text-muted-foreground">
-              Lädt…
-            </div>
-          ) : current ? (
-            <>
-              {next && (
-                <div className="absolute inset-0 scale-[0.96] opacity-60 pointer-events-none">
-                  <DiscoveryCard candidate={next} onLike={() => {}} onDislike={() => {}} disabled />
-                </div>
-              )}
-              <DiscoveryCard
-                key={current.id}
-                candidate={current}
-                onLike={() => handleGesture(current, "like")}
-                onDislike={() => handleGesture(current, "dislike")}
-                disabled={pending || exitDirection !== null}
-                exitDirection={exitDirection}
-              />
-            </>
-          ) : (
-            <div className="flex h-full w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed text-center px-6">
-              <p className="text-sm font-medium">Für den Moment alles gesehen</p>
-              <p className="text-xs text-muted-foreground">
-                Schau bald wieder vorbei -- neue Aktivität aus deinem Netzwerk landet direkt hier.
-              </p>
-            </div>
-          )}
+    <div className="w-full flex flex-col gap-2.5">
+      {isLoading ? (
+        <div className="flex items-center justify-center rounded-lg border border-dashed p-8 text-sm text-muted-foreground">
+          Lädt…
         </div>
-      </div>
-
-      {current && (
-        <DiscoveryCardActions
-          onDislike={() => handleButtonAction(current, "dislike")}
-          onSkip={() => handleButtonAction(current, "skip")}
-          onLike={() => handleButtonAction(current, "like")}
-          disabled={pending || exitDirection !== null}
-        />
+      ) : visible.length > 0 ? (
+        <AnimatePresence mode="popLayout">
+          {visible.map((candidate) => (
+            <DiscoveryListRow
+              key={candidate.id}
+              candidate={candidate}
+              onLike={() => handleAction(candidate, "like")}
+              onDislike={() => handleAction(candidate, "dislike")}
+              onSkip={() => handleAction(candidate, "skip")}
+              pending={pendingId === candidate.id}
+            />
+          ))}
+        </AnimatePresence>
+      ) : (
+        <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed p-8 text-center">
+          <p className="text-sm font-medium">Für den Moment alles gesehen</p>
+          <p className="text-xs text-muted-foreground">
+            Schau bald wieder vorbei -- neue Aktivität aus deinem Netzwerk landet direkt hier.
+          </p>
+        </div>
       )}
     </div>
   );

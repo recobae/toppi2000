@@ -17,9 +17,10 @@ export default async function SwipePage() {
     redirect("/auth/login?next=/swipe");
   }
 
-  // SiteHeader deliberately hides itself on /swipe (tight card viewport) --
-  // this inline link is the only "back to my profile" affordance here, so
-  // it (uniquely among the own-only utility pages) still needs a username.
+  // The bottom nav deliberately hides itself on /swipe (tight card
+  // viewport) -- this inline link is the only "back to my profile"
+  // affordance here, so it (uniquely among the own-only utility pages)
+  // still needs a username.
   const { data: profile } = await supabase
     .from("profiles")
     .select("username")

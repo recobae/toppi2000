@@ -3,28 +3,21 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import Image from "next/image";
 import type { Metadata } from "next";
-import { MapPin, Settings, Star } from "lucide-react";
+import { Settings } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ForeignProfileHero } from "@/components/profile/foreign-profile-hero";
 import { OwnProfileHero } from "@/components/profile/own-profile-hero";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
-import { ListOverviewRow } from "@/components/profile/list-overview-row";
+import { ListOverviewSection } from "@/components/profile/list-overview-section";
 import { GuestProfileCta } from "@/components/profile/guest-profile-cta";
 import { FollowButton } from "@/components/profile/follow-button";
-import { NewListPicker } from "@/components/profile/new-list-picker";
 import { ShareListButton } from "@/components/lists/share-list-button";
 import { TasteMatchExpandable } from "@/components/profile/taste-match-expandable";
 import { ThanksStat } from "@/components/profile/progress-badges";
 import { getForMeStatus, getTopfContributorIds, type ForMeStatus } from "@/lib/for-me";
 import { FollowingBar } from "@/components/profile/following-bar";
-import { MOVIE_LIST_LABEL, VISIBLE_SAVED_CATEGORIES, movieListHref } from "@/lib/categories";
-import {
-  resolveExpertiseTier,
-  tierProgressLabel,
-  CONTENT_TIER_THRESHOLDS,
-  PLACE_TIER_THRESHOLDS,
-  type ExpertiseTier,
-} from "@/lib/expertise-tiers";
+import { getListOverviewData } from "@/lib/list-overview";
+import { resolveExpertiseTier, CONTENT_TIER_THRESHOLDS, type ExpertiseTier } from "@/lib/expertise-tiers";
 import { hasActiveStory as checkHasActiveStory, storyWindowSince } from "@/lib/story-activity";
 import { hasUnseenSong } from "@/lib/song-activity";
 import {
@@ -89,127 +82,16 @@ export default async function ProfilePage({
       ? await hasUnseenSong(supabase, viewer.id, profile.id, profile.favorite_song_updated_at)
       : false;
 
-  const previewByCategory = await Promise.all(
-    VISIBLE_SAVED_CATEGORIES.map(async (category) => {
-      // Empfohlen (top_list) preview posters follow the same favorite-first,
-      // then-newest order as the full list -- manual position no longer
-      // drives display anywhere.
-      let previewQuery = supabase.from(category).select("image_url").eq("user_id", profile.id);
-      previewQuery =
-        category === "top_list"
-          ? previewQuery
-              .order("is_favorite", { ascending: false })
-              .order("favorited_at", { ascending: false, nullsFirst: false })
-              .order("created_at", { ascending: false })
-          : previewQuery.order("position", { ascending: true });
-
-      const [{ data: previewRows }, { count }, { count: noteCount }] = await Promise.all([
-        previewQuery.limit(4),
-        supabase
-          .from(category)
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", profile.id),
-        supabase
-          .from(category)
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", profile.id)
-          .not("note", "is", null),
-      ]);
-
-      return {
-        category,
-        posterUrls: (previewRows ?? [])
-          .map((row) => row.image_url)
-          .filter((url): url is string => !!url),
-        itemCount: count ?? 0,
-        noteCount: noteCount ?? 0,
-      };
-    }),
-  );
-
-  const topListPreview = previewByCategory.find((p) => p.category === "top_list");
-  const watchlistPreview = previewByCategory.find((p) => p.category === "watchlist");
-  // Empfohlen and Watchlist show as one merged row on the profile now (see
-  // /u/[username]/filme) -- posters favor Empfohlen first, same priority the
-  // merged list itself uses when an item could theoretically sit in both.
-  const movieListItemCount = (topListPreview?.itemCount ?? 0) + (watchlistPreview?.itemCount ?? 0);
-  const movieListNoteCount = (topListPreview?.noteCount ?? 0) + (watchlistPreview?.noteCount ?? 0);
-  const movieListPosterUrls = [
-    ...(topListPreview?.posterUrls ?? []),
-    ...(watchlistPreview?.posterUrls ?? []),
-  ].slice(0, 4);
-
-  // Stats-parity with the Orte tiles (Punkt 8): Empfohlen split by
-  // media_type (movie vs. tv), Watchlist shown as "gemerkt" -- the same
-  // empfohlen/gemerkt semantic Orte already uses via places.status.
-  const [{ count: moviesRecommendedCount }, { count: seriesRecommendedCount }] = await Promise.all([
-    supabase
-      .from("top_list")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", profile.id)
-      .eq("media_type", "movie"),
-    supabase
-      .from("top_list")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", profile.id)
-      .eq("media_type", "tv"),
-  ]);
-  const movieListStatsText = [
-    `${moviesRecommendedCount ?? 0} Filme empfohlen`,
-    `${seriesRecommendedCount ?? 0} Serien empfohlen`,
-    ...(movieListNoteCount > 0 ? [`${movieListNoteCount} mit Notiz`] : []),
-    ...((watchlistPreview?.itemCount ?? 0) > 0 ? [`${watchlistPreview?.itemCount} gemerkt`] : []),
-  ].join(" · ");
-
-  const { data: regionRows } = await supabase
-    .from("place_regions")
-    .select("id, region_name, region_key, general_note")
-    .eq("user_id", profile.id)
-    .order("created_at", { ascending: true });
-
-  const allRegions = await Promise.all(
-    (regionRows ?? []).map(async (region) => {
-      const [{ data: previewRows }, { count }, { count: noteCount }, { count: savedCount }] =
-        await Promise.all([
-          supabase
-            .from("places")
-            .select("photo_url")
-            .eq("region_id", region.id)
-            .order("position", { ascending: true })
-            .limit(4),
-          supabase
-            .from("places")
-            .select("id", { count: "exact", head: true })
-            .eq("region_id", region.id),
-          supabase
-            .from("places")
-            .select("id", { count: "exact", head: true })
-            .eq("region_id", region.id)
-            .not("note", "is", null),
-          supabase
-            .from("places")
-            .select("id", { count: "exact", head: true })
-            .eq("region_id", region.id)
-            .eq("status", "want_to_visit"),
-        ]);
-
-      return {
-        key: region.region_key,
-        name: region.region_name,
-        photoUrls: (previewRows ?? [])
-          .map((row) => row.photo_url)
-          .filter((url): url is string => !!url),
-        itemCount: count ?? 0,
-        noteCount: noteCount ?? 0,
-        savedCount: savedCount ?? 0,
-        hasTip: !!region.general_note,
-      };
-    }),
-  );
-
-  // A region list auto-empties out of the overview once its last place is
-  // removed, instead of lingering as a dead 0-item row.
-  const regions = allRegions.filter((region) => region.itemCount > 0);
+  // Own view no longer renders this grid at all (moved to /my-taste), but
+  // still needs movieListItemCount/totalPlacesCount for totalActivityCount
+  // below -- cheaper to compute it once here for both views than to branch
+  // the whole query set on isOwner.
+  const listOverview = await getListOverviewData(supabase, {
+    userId: profile.id,
+    username: profile.username,
+    homeCity: profile.home_city,
+    showTierProgress: isOwner,
+  });
 
   // Two distinct stats, both sourced from interaction_credits -- a ledger of
   // (actor, owner, item, credit_type) rows written at the moment someone
@@ -282,13 +164,11 @@ export default async function ProfilePage({
   // unterschiedliche Identitätsschemata: TMDB-item_id+media_type für Filme,
   // place_id für Orte, category_key+external_id für Mein-Topf) -- "Summe"
   // war explizit die Anforderung, kein Dedupe.
-  const totalPlacesCount = allRegions.reduce((sum, region) => sum + region.itemCount, 0);
   const totalActivityCount =
     ownInteractionRows.length +
-    (topListPreview?.itemCount ?? 0) +
-    (watchlistPreview?.itemCount ?? 0) +
+    listOverview.movieListItemCount +
     (dontWatchCount ?? 0) +
-    totalPlacesCount +
+    listOverview.totalPlacesCount +
     (topfEntryCount ?? 0);
 
   // Only ever needed for the owner's own FollowingBar tile -- a foreign
@@ -424,7 +304,7 @@ export default async function ProfilePage({
   // threshold/preview-image work getForMeStatus also does.
   const foreignContributorIds = !isOwner ? await getTopfContributorIds(supabase, profile.id) : [];
 
-  const avatarUrl = topListPreview?.posterUrls[0] ?? null;
+  const avatarUrl = listOverview.rows.find((row) => row.key === "movies")?.preview.urls[0] ?? null;
   const profileUrl = await getProfileUrl(profile.username);
 
   return (
@@ -572,69 +452,13 @@ export default async function ProfilePage({
         {isGuest && <GuestProfileCta variant="button" />}
 
         {/*
-          Kategorien und Orte als eine gemeinsame, nach Größe sortierte Liste
-          (Schritt 7) statt fester Film-Zeile + separater "Orte"-Sektion --
-          die aktivste Liste steht immer oben, unabhängig vom Typ.
+          Nur die Fremdansicht zeigt die kuratierten Listen noch hier -- die
+          eigene Sicht bleibt bewusst listenfrei (sozial/ruhig lesbar), die
+          eigenen Listen leben jetzt vollständig unter /my-taste.
         */}
-        <div className="w-full flex flex-col gap-2 mt-2">
-          {[
-            {
-              key: "movies",
-              title: MOVIE_LIST_LABEL,
-              icon: Star,
-              preview: { type: "stack" as const, urls: movieListPosterUrls },
-              itemCount: movieListItemCount,
-              noteCount: movieListNoteCount,
-              savedCount: undefined,
-              href: movieListHref(profile.username),
-              tier: resolveExpertiseTier(movieListItemCount, CONTENT_TIER_THRESHOLDS),
-              tierProgress: isOwner
-                ? tierProgressLabel(movieListItemCount, CONTENT_TIER_THRESHOLDS)
-                : null,
-              isCurrentLocation: false,
-              statsText: movieListStatsText,
-              hasTip: false,
-            },
-            ...regions.map((region) => ({
-              key: region.key,
-              title: region.name,
-              icon: MapPin,
-              preview: { type: "collage" as const, urls: region.photoUrls },
-              itemCount: region.itemCount,
-              noteCount: region.noteCount,
-              savedCount: region.savedCount,
-              href: `/u/${profile.username}/orte/${region.key}`,
-              tier: resolveExpertiseTier(region.itemCount, PLACE_TIER_THRESHOLDS),
-              tierProgress: isOwner
-                ? tierProgressLabel(region.itemCount, PLACE_TIER_THRESHOLDS)
-                : null,
-              isCurrentLocation: region.name === profile.home_city,
-              statsText: undefined as string | undefined,
-              hasTip: region.hasTip,
-            })),
-          ]
-            .sort((a, b) => b.itemCount - a.itemCount)
-            .map((row) => (
-              <ListOverviewRow
-                key={row.key}
-                title={row.title}
-                icon={row.icon}
-                preview={row.preview}
-                itemCount={row.itemCount}
-                noteCount={row.noteCount}
-                savedCount={row.savedCount}
-                href={row.href}
-                shareUrl={row.href}
-                tier={row.tier}
-                tierProgressLabel={row.tierProgress}
-                isCurrentLocation={row.isCurrentLocation}
-                statsText={row.statsText}
-                hasTip={row.hasTip}
-              />
-            ))}
-          {isGuest && <GuestProfileCta variant="row" />}
-          {isOwner && <NewListPicker />}
-        </div>
+        {!isOwner && (
+          <ListOverviewSection rows={listOverview.rows} isGuest={isGuest} isOwner={false} />
+        )}
       </div>
     </main>
   );

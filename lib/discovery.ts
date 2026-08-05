@@ -166,21 +166,17 @@ type RecommendationRow = {
 };
 
 /**
- * Builds the ranked "Für Dich" card stream from the same 6 activity tables
- * used elsewhere in the app (item_interactions only for exclusion --
- * top_list/watchlist/places/recommendations for candidates, since those are
- * the tables that actually carry a title/image/note to show on a card;
- * dont_watch and item_interactions dislikes only ever exclude, never
- * surface). Candidates are always someone else's (followed) activity --
- * your own items never need "discovering". If the viewer follows nobody
- * yet, falls back entirely to the existing generic recommendation engine
- * (lib/recommendations.ts) so the stream is never empty.
+ * Gathers every scored candidate from the viewer's network (followed
+ * friends' top_list/watchlist/places/recommendations rows -- the tables
+ * that actually carry a title/image/note to show on a card; dont_watch and
+ * item_interactions dislikes only ever exclude, never surface). Candidates
+ * are always someone else's activity -- your own items never need
+ * "discovering". Unordered by nothing in particular by the time it returns;
+ * callers (the main "Für Dich" stream, and the supplementary sections) each
+ * sort/slice this same pool their own way instead of re-querying the DB
+ * per section.
  */
-export async function getDiscoveryFeed(
-  supabase: SupabaseClient,
-  userId: string,
-  params: { excludeIds: Set<string>; limit: number; homeCity: string | null; tmdbApiKey?: string; placesApiKey?: string },
-): Promise<{ candidates: DiscoveryCandidate[]; hasNetworkContent: boolean }> {
+async function gatherNetworkCandidates(supabase: SupabaseClient, userId: string): Promise<DiscoveryCandidate[]> {
   const { data: followRows } = await supabase
     .from("user_follows")
     .select("followed_id")
@@ -362,6 +358,22 @@ export async function getDiscoveryFeed(
     }
   }
 
+  return candidates;
+}
+
+/**
+ * Ranked "Für Dich" main-stream page -- the live, interactive queue.
+ * Excludes anything the client already showed this session and, if the
+ * network pool runs short, tops up with the same generic recommendation
+ * engine used elsewhere (lib/recommendations.ts) so the stream never runs
+ * dry.
+ */
+export async function getDiscoveryFeed(
+  supabase: SupabaseClient,
+  userId: string,
+  params: { excludeIds: Set<string>; limit: number; homeCity: string | null; tmdbApiKey?: string; placesApiKey?: string },
+): Promise<{ candidates: DiscoveryCandidate[]; hasNetworkContent: boolean }> {
+  const candidates = await gatherNetworkCandidates(supabase, userId);
   const hasNetworkContent = candidates.length > 0;
   let ranked = candidates
     .filter((candidate) => !params.excludeIds.has(candidate.id))
@@ -385,6 +397,63 @@ export async function getDiscoveryFeed(
   }
 
   return { candidates: ranked.slice(0, params.limit), hasNetworkContent };
+}
+
+export type DiscoverySections = {
+  freshFromFriends: DiscoveryCandidate[];
+  popularInNetwork: DiscoveryCandidate[];
+  related: DiscoveryCandidate[];
+  moreFromRegion: DiscoveryCandidate[];
+  newForYou: DiscoveryCandidate[];
+};
+
+/**
+ * The 5 supplementary sections under the main stream -- reads from the same
+ * gathered pool the main stream itself is built from (one DB round-trip),
+ * just sorted/filtered differently per section. "Neu für dich" is the one
+ * exception: genuinely novel content the network hasn't already surfaced,
+ * so it goes through the exploration fallback engine instead of re-slicing
+ * network data under a different label.
+ */
+export async function getDiscoverySections(
+  supabase: SupabaseClient,
+  userId: string,
+  params: { homeCity: string | null; tmdbApiKey?: string; placesApiKey?: string; perSection?: number },
+): Promise<DiscoverySections> {
+  const perSection = params.perSection ?? 6;
+  const all = await gatherNetworkCandidates(supabase, userId);
+
+  const freshFromFriends = [...all]
+    .sort((a, b) => new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime())
+    .slice(0, perSection);
+
+  const popularInNetwork = [...all]
+    .filter((c) => c.socialSupportCount >= 2)
+    .sort((a, b) => b.socialSupportCount - a.socialSupportCount)
+    .slice(0, perSection);
+
+  const related = [...all]
+    .filter((c) => c.personalSupportCount > 0)
+    .sort((a, b) => b.personalSupportCount - a.personalSupportCount)
+    .slice(0, perSection);
+
+  const moreFromRegion = all
+    .filter((c) => c.sourceType === "place" && (!params.homeCity || c.location?.includes(params.homeCity)))
+    .slice(0, perSection);
+
+  const usedIds = new Set(
+    [...freshFromFriends, ...popularInNetwork, ...related, ...moreFromRegion].map((c) => c.id),
+  );
+  const newForYou = await buildExplorationFallback(supabase, userId, {
+    need: perSection,
+    excludeIds: usedIds,
+    alreadyIncludedIds: usedIds,
+    homeCity: params.homeCity,
+    tmdbApiKey: params.tmdbApiKey,
+    placesApiKey: params.placesApiKey,
+  });
+
+  return { freshFromFriends, popularInNetwork, related, moreFromRegion, newForYou };
 }
 
 async function buildExplorationFallback(
