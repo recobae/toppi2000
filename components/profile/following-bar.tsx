@@ -2,33 +2,41 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plus, Sparkles } from "lucide-react";
+import { Plus, Sparkles, Star } from "lucide-react";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { FollowSuggestionsModal } from "@/components/profile/follow-suggestions-modal";
 import { FollowerListModal } from "@/components/profile/follower-list-modal";
 import { StoryViewer } from "@/components/profile/story-viewer";
 import { STORY_RING_CLASS, STORY_RING_CLASS_INACTIVE } from "@/components/profile/story-ring-styles";
 import { STORY_FEATURE_ENABLED } from "@/lib/feature-flags";
-import { getExpertiseIcon } from "@/lib/expertise";
+import type { ExpertiseTier } from "@/lib/expertise-tiers";
 
 export type FollowingProfile = {
   id: string;
   username: string;
   avatarUrl: string | null;
-  expertiseKeys: string[];
+  tier: ExpertiseTier;
   hasUnseenStory: boolean;
   /** Higher of the two Taste-Match category percentages, or null if neither has enough shared ratings yet. */
   tasteMatchBadge: number | null;
 };
 
-function ExpertiseCornerBadge({ expertiseKeys }: { expertiseKeys: string[] }) {
-  const key = expertiseKeys[0];
-  if (!key) return null;
-  const Icon = getExpertiseIcon(key);
+/**
+ * Metriken-Audit, Punkt E: the one tiered Kenner/Experte system (same
+ * thresholds/table as the profile page's own list-row badges) is now the
+ * only "expertise" signal in the app -- this replaced a separate
+ * minItems:1 label badge that fired for almost every followed friend and
+ * carried no real signal. Einsteiger renders nothing, same rule as
+ * ExpertiseTierBadge on the list rows.
+ */
+function TierCornerBadge({ tier }: { tier: ExpertiseTier }) {
+  if (tier === "einsteiger") return null;
 
   return (
     <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-background border border-border">
-      <Icon className="size-2.5 fill-current text-primary" />
+      <Star
+        className={`size-2.5 ${tier === "experte" ? "fill-current text-yellow-500" : "text-amber-700"}`}
+      />
     </span>
   );
 }
@@ -153,7 +161,7 @@ export function FollowingBar({
                 />
               </span>
             </span>
-            <ExpertiseCornerBadge expertiseKeys={friend.expertiseKeys} />
+            <TierCornerBadge tier={friend.tier} />
             <TasteMatchCornerBadge percentage={friend.tasteMatchBadge} />
             <ContributorCornerBadge isContributor={contributorIdSet.has(friend.id)} />
           </span>
