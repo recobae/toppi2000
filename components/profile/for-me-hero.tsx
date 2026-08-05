@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Lock, Plus, Sparkles, Star, UserPlus, X } from "lucide-react";
+import { ListChecks, Lock, Plus, Sparkles, Star, UserPlus, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ProgressRing } from "@/components/profile/progress-badges";
 import { markForMeUnlockNotified, type ForMeStatus } from "@/lib/for-me";
@@ -132,10 +132,20 @@ export function ForMeHero({
         siehe app/u/[username]/page.tsx's totalActivityCount), nicht mehr
         nur item_interactions. Nie eine recommendations-Zeile im engeren
         Sinne -- "Empfehlung" bleibt dafür das falsche Wort.
+
+        Anklickbar -> öffnet die bestehende Meine-Aktivität-Liste (ersetzt
+        den separaten Link, der zuvor weiter unten im Profil stand). Das
+        ListChecks-Icon steht bewusst VOR dem Text, damit sofort klar ist,
+        dass die Zeile etwas öffnet statt nur eine reine Stat-Anzeige zu
+        sein.
       */}
-      <span className="font-medium text-green-600 text-[11px] whitespace-nowrap">
+      <Link
+        href="/meine-aktivitaet"
+        className="inline-flex items-center gap-1 font-medium text-green-600 text-[11px] whitespace-nowrap hover:underline"
+      >
+        <ListChecks className="size-3" />
         {forMe.ownCount} Bewertungen von dir
-      </span>
+      </Link>
 
       <Link
         href={forMe.isUnlocked ? "/topf" : "#"}
@@ -183,15 +193,10 @@ export function ForMeHero({
       </Link>
 
       <span className="text-sm font-semibold">{username}</span>
-
-      {/*
-        Keine zweite, sichtbare "Empfehlungen von Freunden"-Zahl mehr --
-        Freundes-Empfehlungen fließen weiterhin in forMe.combinedCount (Ring-
-        Füllung/Unlock-Schwelle) ein, werden aber nicht mehr als eigene Zeile
-        im Profil dargestellt. Das Profil zeigt nur noch eine Gesamtzahl
-        ("Bewertungen von dir"), Empfehlungen bleiben zentral über den For-Me-
-        Ring selbst sichtbar.
-      */}
+      {/* Wieder eingefügt, gleiche Stelle/Stil wie zuvor -- Berechnung (forMe.friendCount) unverändert. */}
+      <span className="font-medium text-blue-600 text-[11px] whitespace-nowrap">
+        {forMe.friendCount} Bewertungen von Freunden
+      </span>
 
       {/*
         Zweiter Zufluss, gleiche Technik wie der My-Taste-Connector oben --
