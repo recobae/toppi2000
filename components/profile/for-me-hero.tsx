@@ -126,8 +126,9 @@ export function ForMeHero({
       </Link>
       <div className="h-3 w-px bg-border" aria-hidden="true" />
 
+      {/* Metriken-Audit, Punkt A: ownCount ist item_interactions-basiert (Bewertungsaktivität), nie eine recommendations-Zeile -- "Empfehlung" ist dafür das falsche Wort. */}
       <span className="font-medium text-green-600 text-[11px] whitespace-nowrap">
-        {forMe.ownCount} Empfehlungen von dir
+        {forMe.ownCount} Bewertungen von dir
       </span>
 
       <Link
