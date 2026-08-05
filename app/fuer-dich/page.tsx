@@ -3,7 +3,10 @@ import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { DiscoveryStream } from "@/components/discovery/discovery-stream";
 import { DiscoverySection } from "@/components/discovery/discovery-section";
-import { getDiscoverySections } from "@/lib/discovery";
+import { RegionPrompts } from "@/components/discovery/region-prompts";
+import { QuestionPrompts } from "@/components/discovery/question-prompts";
+import { getDiscoverySections, getNetworkRegionPrompts } from "@/lib/discovery";
+import { buildQuestionPrompts } from "@/lib/question-prompts";
 import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
 
 export const metadata: Metadata = { title: "Für Dich" };
@@ -23,12 +26,17 @@ export default async function FuerDichPage() {
     .select("home_city")
     .eq("id", user.id)
     .maybeSingle();
+  const homeCity = profile?.home_city ?? null;
 
-  const sections = await getDiscoverySections(supabase, user.id, {
-    homeCity: profile?.home_city ?? null,
-    tmdbApiKey: process.env.TMDB_API_KEY,
-    placesApiKey: process.env.GOOGLE_PLACES_API_KEY,
-  });
+  const [sections, regionPrompts] = await Promise.all([
+    getDiscoverySections(supabase, user.id, {
+      homeCity,
+      tmdbApiKey: process.env.TMDB_API_KEY,
+      placesApiKey: process.env.GOOGLE_PLACES_API_KEY,
+    }),
+    getNetworkRegionPrompts(supabase, user.id),
+  ]);
+  const questionPrompts = buildQuestionPrompts(homeCity);
 
   return (
     <main className="min-h-screen flex flex-col items-center">
@@ -37,6 +45,9 @@ export default async function FuerDichPage() {
         <h1 className="text-lg font-semibold">Für Dich</h1>
 
         <DiscoveryStream userId={user.id} />
+
+        <RegionPrompts prompts={regionPrompts} />
+        <QuestionPrompts userId={user.id} prompts={questionPrompts} />
 
         <DiscoverySection title="Gerade neu von Freunden" candidates={sections.freshFromFriends} userId={user.id} />
         <DiscoverySection title="Beliebt im Netzwerk" candidates={sections.popularInNetwork} userId={user.id} />

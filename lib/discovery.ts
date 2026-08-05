@@ -2,7 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getExcludedMovieKeys, getExcludedPlaceIds } from "@/lib/exclusions";
 import { getRecommendationCategory } from "@/lib/recommendation-categories";
 import { getCityPlaceRecommendations, getGenreProfileMovieRecommendations } from "@/lib/recommendations";
-import { PLACE_CATEGORY_LABELS, isPlaceCategory } from "@/lib/places";
+import { PLACE_CATEGORY_LABELS, isPlaceCategory, type PlaceCategory } from "@/lib/places";
+import type { SourceType } from "@/lib/topf";
 
 export type DiscoverySourceType = "movie" | "tv" | "place" | "topf";
 
@@ -32,7 +33,15 @@ export type DiscoveryCandidate = {
     mediaType?: "movie" | "tv";
     tmdbId?: number;
     placeId?: string;
+    lat?: number;
+    lng?: number;
+    regionName?: string;
+    placeCategory?: PlaceCategory;
     recommendationId?: string;
+    recommendationCategoryKey?: string;
+    recommendationSourceType?: SourceType;
+    recommendationExternalId?: string | null;
+    recommendationMetadata?: Record<string, unknown> | null;
   };
 };
 
@@ -153,6 +162,9 @@ type PlaceRow = {
   created_at: string;
   rating: number | null;
   places_category: string;
+  lat: number;
+  lng: number;
+  region_id: string;
 };
 
 type RecommendationRow = {
@@ -163,6 +175,8 @@ type RecommendationRow = {
   note: string | null;
   metadata: Record<string, unknown> | null;
   created_at: string;
+  source_type: SourceType;
+  external_id: string | null;
 };
 
 /**
@@ -209,15 +223,27 @@ async function gatherNetworkCandidates(supabase: SupabaseClient, userId: string)
           .in("user_id", followedIds),
         supabase
           .from("places")
-          .select("user_id, google_place_id, name, address, photo_url, note, created_at, rating, places_category")
+          .select(
+            "user_id, google_place_id, name, address, photo_url, note, created_at, rating, places_category, lat, lng, region_id",
+          )
           .in("user_id", followedIds),
         supabase
           .from("recommendations")
-          .select("id, user_id, category_key, title, note, metadata, created_at")
+          .select("id, user_id, category_key, title, note, metadata, created_at, source_type, external_id")
           .in("user_id", followedIds)
           .eq("status", "active"),
       ]);
     const usernameById = new Map((usernameRows ?? []).map((row) => [row.id, row.username]));
+
+    // Regionsnamen für die Like->savePlaceToRegion-Übernahme -- welche
+    // Stadt/Region ein Ort beim Freund gehört, ist nicht auf der places-Zeile
+    // selbst gespeichert (nur region_id), deshalb ein separater Lookup.
+    const placeRegionIds = [...new Set(((placeRows ?? []) as PlaceRow[]).map((row) => row.region_id))];
+    const { data: placeRegionRows } =
+      placeRegionIds.length > 0
+        ? await supabase.from("place_regions").select("id, region_name").in("id", placeRegionIds)
+        : { data: [] as { id: string; region_name: string }[] };
+    const regionNameById = new Map((placeRegionRows ?? []).map((row) => [row.id, row.region_name]));
 
     // --- Movies/TV: group top_list + watchlist rows by item identity ---
     type MovieGroup = { rows: MovieRow[]; userIds: Set<string> };
@@ -306,7 +332,13 @@ async function gatherNetworkCandidates(supabase: SupabaseClient, userId: string)
           freshness,
           isExploration: false,
         }),
-        ref: { placeId },
+        ref: {
+          placeId,
+          lat: withNote.lat,
+          lng: withNote.lng,
+          regionName: regionNameById.get(withNote.region_id),
+          placeCategory: isPlaceCategory(withNote.places_category) ? withNote.places_category : undefined,
+        },
       });
     }
 
@@ -353,12 +385,74 @@ async function gatherNetworkCandidates(supabase: SupabaseClient, userId: string)
           freshness,
           isExploration: false,
         }),
-        ref: { recommendationId: withNote.id },
+        ref: {
+          recommendationId: withNote.id,
+          recommendationCategoryKey: withNote.category_key,
+          recommendationSourceType: withNote.source_type,
+          recommendationExternalId: withNote.external_id,
+          recommendationMetadata: withNote.metadata,
+        },
       });
     }
   }
 
   return candidates;
+}
+
+export type RegionPrompt = { key: string; name: string; itemCount: number; friendCount: number };
+
+/**
+ * Backs the "Warst du schon mal hier?" nudge -- cities/regions the
+ * viewer's network already has active Orte-lists for, ranked by activity.
+ * Deliberately not scoped to the viewer's own home_city -- the whole point
+ * is to surface places the viewer probably HASN'T built a list for yet.
+ */
+export async function getNetworkRegionPrompts(
+  supabase: SupabaseClient,
+  userId: string,
+  limit = 6,
+): Promise<RegionPrompt[]> {
+  const { data: followRows } = await supabase
+    .from("user_follows")
+    .select("followed_id")
+    .eq("follower_id", userId);
+  const followedIds = (followRows ?? []).map((row) => row.followed_id);
+  if (followedIds.length === 0) return [];
+
+  const { data: regionRows } = await supabase
+    .from("place_regions")
+    .select("id, region_key, region_name, user_id")
+    .in("user_id", followedIds);
+  if (!regionRows || regionRows.length === 0) return [];
+
+  const { data: placeRows } = await supabase
+    .from("places")
+    .select("region_id")
+    .in(
+      "region_id",
+      regionRows.map((row) => row.id),
+    );
+  const itemCountByRegionId = new Map<string, number>();
+  for (const row of placeRows ?? []) {
+    itemCountByRegionId.set(row.region_id, (itemCountByRegionId.get(row.region_id) ?? 0) + 1);
+  }
+
+  // Merged by normalized region_key -- two friends' own "Berlin" region
+  // rows count as one prompt with a combined friend/item count, not two.
+  const byKey = new Map<string, { name: string; itemCount: number; userIds: Set<string> }>();
+  for (const region of regionRows) {
+    const itemCount = itemCountByRegionId.get(region.id) ?? 0;
+    if (itemCount === 0) continue;
+    const entry = byKey.get(region.region_key) ?? { name: region.region_name, itemCount: 0, userIds: new Set() };
+    entry.itemCount += itemCount;
+    entry.userIds.add(region.user_id);
+    byKey.set(region.region_key, entry);
+  }
+
+  return [...byKey.entries()]
+    .map(([key, entry]) => ({ key, name: entry.name, itemCount: entry.itemCount, friendCount: entry.userIds.size }))
+    .sort((a, b) => b.itemCount - a.itemCount)
+    .slice(0, limit);
 }
 
 /**
@@ -525,7 +619,13 @@ async function buildExplorationFallback(
         promptMatchScore: 0.3,
         finalScore: 0,
         reason: "Beliebt in deiner Nähe",
-        ref: { placeId: place.placeId },
+        ref: {
+          placeId: place.placeId,
+          lat: place.lat,
+          lng: place.lng,
+          regionName: params.homeCity ?? undefined,
+          placeCategory: place.category,
+        },
       });
     }
   }

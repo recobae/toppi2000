@@ -5,6 +5,7 @@ import { AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { recordInteraction } from "@/lib/interactions";
 import { recordSkip } from "@/lib/item-skips";
+import { likeAndSaveCandidate } from "@/lib/discovery-like";
 import { DiscoveryListRow } from "@/components/discovery/discovery-list-row";
 import type { DiscoveryCandidate } from "@/lib/discovery";
 
@@ -33,39 +34,43 @@ export function DiscoverySection({
     if (pendingId) return;
     setPendingId(candidate.id);
     const supabase = createClient();
-    switch (candidate.sourceType) {
-      case "movie":
-      case "tv":
-        if (candidate.ref.tmdbId) {
-          if (action === "skip") {
-            await recordSkip(supabase, userId, String(candidate.ref.tmdbId), candidate.sourceType);
-          } else {
-            await recordInteraction(supabase, userId, {
-              itemId: String(candidate.ref.tmdbId),
-              mediaType: candidate.sourceType,
-              interactionType: action,
-              targetUserId: candidate.sourceUserId,
-            });
+    if (action === "like") {
+      await likeAndSaveCandidate(supabase, userId, candidate);
+    } else {
+      switch (candidate.sourceType) {
+        case "movie":
+        case "tv":
+          if (candidate.ref.tmdbId !== undefined) {
+            if (action === "skip") {
+              await recordSkip(supabase, userId, String(candidate.ref.tmdbId), candidate.sourceType);
+            } else {
+              await recordInteraction(supabase, userId, {
+                itemId: String(candidate.ref.tmdbId),
+                mediaType: candidate.sourceType,
+                interactionType: action,
+                targetUserId: candidate.sourceUserId,
+              });
+            }
           }
-        }
-        break;
-      case "place":
-        if (candidate.ref.placeId) {
-          if (action === "skip") {
-            await recordSkip(supabase, userId, candidate.ref.placeId, "place");
-          } else {
-            await recordInteraction(supabase, userId, {
-              itemId: candidate.ref.placeId,
-              mediaType: "place",
-              interactionType: action,
-              targetUserId: candidate.sourceUserId,
-            });
+          break;
+        case "place":
+          if (candidate.ref.placeId) {
+            if (action === "skip") {
+              await recordSkip(supabase, userId, candidate.ref.placeId, "place");
+            } else {
+              await recordInteraction(supabase, userId, {
+                itemId: candidate.ref.placeId,
+                mediaType: "place",
+                interactionType: action,
+                targetUserId: candidate.sourceUserId,
+              });
+            }
           }
-        }
-        break;
-      case "topf":
-        // Kein Like/Dislike-Table für Mein-Topf-Einträge -- siehe DiscoveryStream.
-        break;
+          break;
+        case "topf":
+          // Kein Dislike-Table für Mein-Topf-Einträge -- siehe DiscoveryStream.
+          break;
+      }
     }
     setItems((prev) => prev.filter((item) => item.id !== candidate.id));
     setPendingId(null);

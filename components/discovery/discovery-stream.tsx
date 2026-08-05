@@ -5,27 +5,27 @@ import { AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { recordInteraction } from "@/lib/interactions";
 import { recordSkip } from "@/lib/item-skips";
+import { likeAndSaveCandidate } from "@/lib/discovery-like";
 import { DiscoveryListRow } from "@/components/discovery/discovery-list-row";
 import type { DiscoveryCandidate } from "@/lib/discovery";
 
 const REFILL_THRESHOLD = 3;
-const VISIBLE_COUNT = 8;
 
 type FeedResponse = { results: DiscoveryCandidate[]; exhausted: boolean };
 
 /**
- * Main "Für Dich" stream -- a live, self-refilling list (not a swipe deck):
- * every visible row has its own Like/Dislike/Skip, and acting on ANY row
- * removes just that one and the next candidate takes its place at the
- * bottom of the visible set. Refills from the API once the buffer runs low
- * so the list never bottoms out.
+ * Main "Für Dich" stream -- one card at a time, in place, not a growing
+ * downward list: acting on the current candidate removes it and the next
+ * one in the queue takes its exact spot. Refills from the API once the
+ * buffer runs low so it never bottoms out mid-session.
  */
 export function DiscoveryStream({ userId }: { userId: string }) {
   const [items, setItems] = useState<DiscoveryCandidate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [exhausted, setExhausted] = useState(false);
-  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const seenIdsRef = useRef<Set<string>>(new Set());
 
   const fetchFeed = useCallback(async (): Promise<FeedResponse | null> => {
@@ -69,10 +69,14 @@ export function DiscoveryStream({ userId }: { userId: string }) {
 
   const persistDecision = async (candidate: DiscoveryCandidate, action: "like" | "dislike" | "skip") => {
     const supabase = createClient();
+    if (action === "like") {
+      await likeAndSaveCandidate(supabase, userId, candidate);
+      return;
+    }
     switch (candidate.sourceType) {
       case "movie":
       case "tv": {
-        if (!candidate.ref.tmdbId) return;
+        if (candidate.ref.tmdbId === undefined) return;
         if (action === "skip") {
           await recordSkip(supabase, userId, String(candidate.ref.tmdbId), candidate.sourceType);
         } else {
@@ -100,42 +104,55 @@ export function DiscoveryStream({ userId }: { userId: string }) {
         return;
       }
       case "topf":
-        // Mein-Topf-Einträge haben keine eigene Like/Dislike-Tabelle wie
-        // Filme/Orte (nur "bedanken", siehe lib/topf.ts) -- die Entscheidung
-        // hier ist deshalb bewusst nur eine Sitzungs-Auswahl (blendet die
-        // Karte aus dem aktuellen Stream aus), ohne Datenbank-Schreibzugriff.
+        // Mein-Topf-Einträge haben keine eigene Dislike-Tabelle wie Filme/
+        // Orte -- eine Ablehnung hier ist deshalb bewusst nur eine Sitzungs-
+        // Auswahl (blendet die Karte aus dem aktuellen Stream aus), ohne
+        // Datenbank-Schreibzugriff.
         return;
     }
   };
 
   const handleAction = async (candidate: DiscoveryCandidate, action: "like" | "dislike" | "skip") => {
-    if (pendingId) return;
-    setPendingId(candidate.id);
+    if (pending) return;
+    setPending(true);
     await persistDecision(candidate, action);
     setItems((prev) => prev.filter((item) => item.id !== candidate.id));
-    setPendingId(null);
+    setPending(false);
+    // Einzige "Erklärung" fürs neue Like-Verhalten: eine kurze Bestätigung
+    // NACH der Aktion statt Vorab-Text -- die Karte selbst muss nicht
+    // erklärt werden, aber dass Like jetzt direkt speichert, darf sichtbar
+    // sein.
+    if (action === "like") {
+      setToast("✓ Auf deine Liste gespeichert");
+      setTimeout(() => setToast(null), 2200);
+    }
   };
 
-  const visible = items.slice(0, VISIBLE_COUNT);
+  const current = items[0];
 
   return (
     <div className="w-full flex flex-col gap-2.5">
+      {toast && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50">
+          <div className="rounded-full bg-foreground text-background px-4 py-2 text-xs font-medium shadow-lg">
+            {toast}
+          </div>
+        </div>
+      )}
       {isLoading ? (
         <div className="flex items-center justify-center rounded-lg border border-dashed p-8 text-sm text-muted-foreground">
           Lädt…
         </div>
-      ) : visible.length > 0 ? (
+      ) : current ? (
         <AnimatePresence mode="popLayout">
-          {visible.map((candidate) => (
-            <DiscoveryListRow
-              key={candidate.id}
-              candidate={candidate}
-              onLike={() => handleAction(candidate, "like")}
-              onDislike={() => handleAction(candidate, "dislike")}
-              onSkip={() => handleAction(candidate, "skip")}
-              pending={pendingId === candidate.id}
-            />
-          ))}
+          <DiscoveryListRow
+            key={current.id}
+            candidate={current}
+            onLike={() => handleAction(current, "like")}
+            onDislike={() => handleAction(current, "dislike")}
+            onSkip={() => handleAction(current, "skip")}
+            pending={pending}
+          />
         </AnimatePresence>
       ) : (
         <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed p-8 text-center">
