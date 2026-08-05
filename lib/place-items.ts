@@ -172,3 +172,17 @@ export async function updatePlaceNote(
     .eq("user_id", userId)
     .eq("google_place_id", googlePlaceId);
 }
+
+/** The one general tip/hack note attached to an entire region list, not a single place. */
+export async function updateRegionNote(
+  supabase: SupabaseClient,
+  userId: string,
+  regionId: string,
+  note: string | null,
+) {
+  return supabase
+    .from("place_regions")
+    .update({ general_note: note })
+    .eq("user_id", userId)
+    .eq("id", regionId);
+}

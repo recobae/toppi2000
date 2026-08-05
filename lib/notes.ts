@@ -7,6 +7,11 @@ import type { SavedCategory } from "@/lib/categories";
 // shape and gets note support the same way, with no changes here).
 export const NOTE_MAX_LENGTH = 150;
 
+// General region-level tip ("wo man in Bali am besten Roller leiht" etc.) --
+// one per place_regions row, not tied to a single item, so it gets more room
+// than a per-item note.
+export const REGION_NOTE_MAX_LENGTH = 500;
+
 export type NotesVisibility = "all" | "followers" | "self";
 
 export const NOTES_VISIBILITY_OPTIONS: {

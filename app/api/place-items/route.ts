@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
 
   const { data: region } = await supabase
     .from("place_regions")
-    .select("id, region_name, region_key")
+    .select("id, region_name, region_key, general_note")
     .eq("user_id", profile.id)
     .eq("region_key", regionKey)
     .single();
@@ -89,5 +89,6 @@ export async function GET(request: NextRequest) {
     ownerId: profile.id,
     regionId: region.id,
     regionName: region.region_name,
+    generalNote: canViewNotes ? (region.general_note ?? null) : null,
   });
 }

@@ -163,7 +163,7 @@ export default async function ProfilePage({
 
   const { data: regionRows } = await supabase
     .from("place_regions")
-    .select("id, region_name, region_key")
+    .select("id, region_name, region_key, general_note")
     .eq("user_id", profile.id)
     .order("created_at", { ascending: true });
 
@@ -202,6 +202,7 @@ export default async function ProfilePage({
         itemCount: count ?? 0,
         noteCount: noteCount ?? 0,
         savedCount: savedCount ?? 0,
+        hasTip: !!region.general_note,
       };
     }),
   );
@@ -591,6 +592,7 @@ export default async function ProfilePage({
                 : null,
               isCurrentLocation: false,
               statsText: movieListStatsText,
+              hasTip: false,
             },
             ...regions.map((region) => ({
               key: region.key,
@@ -607,6 +609,7 @@ export default async function ProfilePage({
                 : null,
               isCurrentLocation: region.name === profile.home_city,
               statsText: undefined as string | undefined,
+              hasTip: region.hasTip,
             })),
           ]
             .sort((a, b) => b.itemCount - a.itemCount)
@@ -625,6 +628,7 @@ export default async function ProfilePage({
                 tierProgressLabel={row.tierProgress}
                 isCurrentLocation={row.isCurrentLocation}
                 statsText={row.statsText}
+                hasTip={row.hasTip}
               />
             ))}
           {isGuest && <GuestProfileCta variant="row" />}

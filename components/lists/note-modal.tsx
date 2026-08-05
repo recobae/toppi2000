@@ -10,6 +10,8 @@ export function NoteModal({
   posterUrl,
   initialNote,
   placeholder = "Warum empfiehlst du das?",
+  maxLength = NOTE_MAX_LENGTH,
+  label = "Deine Notiz dazu (optional)",
   onSave,
   onClose,
 }: {
@@ -17,6 +19,9 @@ export function NoteModal({
   posterUrl: string | null;
   initialNote: string | null;
   placeholder?: string;
+  /** Defaults to the per-item note limit -- region-level tips pass a longer one. */
+  maxLength?: number;
+  label?: string;
   onSave: (note: string | null) => void | Promise<void>;
   onClose: () => void;
 }) {
@@ -77,22 +82,20 @@ export function NoteModal({
         </div>
 
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">
-            Deine Notiz dazu (optional)
-          </span>
+          <span className="text-xs text-muted-foreground">{label}</span>
           <textarea
             value={note}
             onChange={(event) =>
-              setNote(event.target.value.slice(0, NOTE_MAX_LENGTH))
+              setNote(event.target.value.slice(0, maxLength))
             }
-            maxLength={NOTE_MAX_LENGTH}
+            maxLength={maxLength}
             rows={3}
             autoFocus
             placeholder={placeholder}
             className="w-full resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm"
           />
           <span className="self-end text-[10px] text-muted-foreground">
-            {note.length}/{NOTE_MAX_LENGTH}
+            {note.length}/{maxLength}
           </span>
         </label>
 

@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { MapPin, type LucideIcon } from "lucide-react";
+import { Lightbulb, MapPin, type LucideIcon } from "lucide-react";
 import { ShareListButton } from "@/components/lists/share-list-button";
 import { ExpertiseTierBadge } from "@/components/profile/expertise-tier-badge";
 import type { ExpertiseTier } from "@/lib/expertise-tiers";
@@ -82,6 +82,7 @@ export function ListOverviewRow({
   tierProgressLabel,
   isCurrentLocation,
   statsText,
+  hasTip,
 }: {
   title: string;
   icon: LucideIcon;
@@ -100,6 +101,8 @@ export function ListOverviewRow({
   isCurrentLocation?: boolean;
   /** Overrides the default "N Einträge · ..." line, e.g. for the movies row's split empfohlen/gemerkt stats. */
   statsText?: string;
+  /** Orte-only: this region has a general tips/hacks note -- shown as a lightbulb before the title. */
+  hasTip?: boolean;
 }) {
   return (
     <div className="relative flex items-center gap-3 rounded-lg border p-2.5 hover:bg-accent transition-colors">
@@ -112,6 +115,12 @@ export function ListOverviewRow({
       </div>
       <div className="flex-1 min-w-0 flex flex-col gap-0.5">
         <div className="flex items-center gap-1">
+          {hasTip && (
+            <Lightbulb
+              aria-label="Enthält allgemeine Tipps"
+              className="size-3.5 shrink-0 fill-current text-amber-500"
+            />
+          )}
           <p className="text-sm font-medium leading-tight truncate">{title}</p>
           {isCurrentLocation && (
             <MapPin

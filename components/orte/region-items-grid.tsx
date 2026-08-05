@@ -2,17 +2,27 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { List as ListIcon, Lightbulb, Map as MapIcon, Pencil, Plus } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { NoteModal } from "@/components/lists/note-modal";
 import { PlaceDetailModal } from "@/components/orte/place-detail-modal";
+import { PlaceMapView } from "@/components/orte/place-map-view";
 import { PlaceItemRow } from "@/components/items/list-item-row";
-import { removePlace, savePlaceToRegion, updatePlaceNote, type PlaceStatus } from "@/lib/place-items";
+import {
+  removePlace,
+  savePlaceToRegion,
+  updatePlaceNote,
+  updateRegionNote,
+  type PlaceStatus,
+} from "@/lib/place-items";
 import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
 import { recordSkip } from "@/lib/item-skips";
 import { useOwnInteractions, type OwnInteractionEntry } from "@/lib/hooks/use-own-interactions";
+import { REGION_NOTE_MAX_LENGTH } from "@/lib/notes";
 import {
   PLACE_CATEGORIES,
   PLACE_CATEGORY_ICONS,
@@ -23,6 +33,8 @@ import {
 import type { OpeningStatus } from "@/lib/opening-hours";
 import type { CityPlaceRecommendations } from "@/lib/recommendations";
 import type { PlaceSearchResult } from "@/lib/google-places";
+
+type ViewMode = "list" | "map";
 
 export type RegionPlaceItem = {
   id: string;
@@ -74,7 +86,7 @@ function CategoryFilter({
             : "border-input hover:bg-accent"
         }`}
       >
-        Alle
+        Alle Empfehlungen
       </button>
       {PLACE_CATEGORIES.filter((category) => availableCategories.includes(category)).map(
         (category) => {
@@ -111,6 +123,84 @@ function CategoryFilter({
         </button>
       )}
     </div>
+  );
+}
+
+/** Listenansicht/Karten-Umschalter -- direkt neben den Kategorie-Chips, keine eigene Zeile. */
+function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (mode: ViewMode) => void }) {
+  return (
+    <div className="shrink-0 flex items-center rounded-full border border-input p-0.5">
+      <button
+        type="button"
+        aria-label="Listenansicht"
+        aria-pressed={mode === "list"}
+        onClick={() => onChange("list")}
+        className={`flex h-6 w-6 items-center justify-center rounded-full transition-colors ${
+          mode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
+        }`}
+      >
+        <ListIcon className="size-3.5" />
+      </button>
+      <button
+        type="button"
+        aria-label="Kartenansicht"
+        aria-pressed={mode === "map"}
+        onClick={() => onChange("map")}
+        className={`flex h-6 w-6 items-center justify-center rounded-full transition-colors ${
+          mode === "map" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
+        }`}
+      >
+        <MapIcon className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The one general tips/hacks note for the whole region list (Roller-Verleih,
+ * beste Kreditkarte fürs Ausland, ...) -- distinct from a per-place note.
+ * Rendered as the topmost row, same card shape as the place rows below it,
+ * so it reads as "part of this list" rather than a separate callout box.
+ * Visitors never see an empty state; owners always get an edit affordance.
+ */
+function RegionNoteRow({
+  note,
+  isOwner,
+  onEdit,
+}: {
+  note: string | null;
+  isOwner: boolean;
+  onEdit?: () => void;
+}) {
+  if (!note && !isOwner) return null;
+
+  return (
+    <Card className="overflow-hidden flex gap-3 p-3">
+      <div className="relative w-16 aspect-[4/3] shrink-0 rounded-md overflow-hidden bg-amber-500/10 flex items-center justify-center">
+        <Lightbulb className="size-5 fill-current text-amber-500" />
+      </div>
+      <div className="flex-1 min-w-0 flex flex-col gap-1 justify-center">
+        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          Allgemeine Tipps
+        </p>
+        {note ? (
+          <p className="text-sm leading-snug whitespace-pre-wrap">{note}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground italic">Noch keine Tipps hinterlegt.</p>
+        )}
+      </div>
+      {isOwner && onEdit && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="self-center shrink-0"
+          aria-label="Tipps bearbeiten"
+          onClick={onEdit}
+        >
+          <Pencil />
+        </Button>
+      )}
+    </Card>
   );
 }
 
@@ -305,11 +395,15 @@ function PlaceSuggestionsStrip({ userId, regionName }: { userId: string; regionN
 function OwnerRegionList({
   initialItems,
   userId,
+  regionId,
   regionName,
+  initialGeneralNote,
 }: {
   initialItems: RegionPlaceItem[];
   userId: string;
+  regionId: string;
   regionName: string;
+  initialGeneralNote: string | null;
 }) {
   const [items, setItems] = useState(initialItems);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -317,6 +411,9 @@ function OwnerRegionList({
   const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [showNoteModalFor, setShowNoteModalFor] = useState<RegionPlaceItem | null>(null);
   const [showDetailsFor, setShowDetailsFor] = useState<RegionPlaceItem | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [generalNote, setGeneralNote] = useState(initialGeneralNote);
+  const [showRegionNoteModal, setShowRegionNoteModal] = useState(false);
 
   const handleRemove = async (item: RegionPlaceItem) => {
     setRemovingId(item.id);
@@ -334,6 +431,12 @@ function OwnerRegionList({
     if (!error) {
       setItems((prev) => prev.map((existing) => (existing.id === item.id ? { ...existing, note } : existing)));
     }
+  };
+
+  const handleSaveRegionNote = async (note: string | null) => {
+    const supabase = createClient();
+    const { error } = await updateRegionNote(supabase, userId, regionId, note);
+    if (!error) setGeneralNote(note);
   };
 
   const availableCategories = [...new Set(items.map((item) => item.category))];
@@ -367,15 +470,28 @@ function OwnerRegionList({
     />
   );
 
+  const mapSourceItems = showSavedOnly ? savedItems : categoryFiltered;
+
   return (
     <div className="w-full flex flex-col gap-3">
-      <CategoryFilter
-        active={activeCategory}
-        onChange={setActiveCategory}
-        availableCategories={availableCategories}
-        showSavedFilter={items.some((item) => item.status === "want_to_visit")}
-        savedActive={showSavedOnly}
-        onToggleSaved={() => setShowSavedOnly((prev) => !prev)}
+      <div className="w-full flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <CategoryFilter
+            active={activeCategory}
+            onChange={setActiveCategory}
+            availableCategories={availableCategories}
+            showSavedFilter={items.some((item) => item.status === "want_to_visit")}
+            savedActive={showSavedOnly}
+            onToggleSaved={() => setShowSavedOnly((prev) => !prev)}
+          />
+        </div>
+        <ViewToggle mode={viewMode} onChange={setViewMode} />
+      </div>
+
+      <RegionNoteRow
+        note={generalNote}
+        isOwner
+        onEdit={() => setShowRegionNoteModal(true)}
       />
 
       {items.length === 0 && (
@@ -384,7 +500,15 @@ function OwnerRegionList({
         </p>
       )}
 
-      {showSavedOnly ? (
+      {viewMode === "map" ? (
+        <PlaceMapView
+          places={mapSourceItems.map((item) => ({ id: item.id, lat: item.lat, lng: item.lng, name: item.name }))}
+          onSelectPlace={(id) => {
+            const item = mapSourceItems.find((entry) => entry.id === id);
+            if (item) setShowDetailsFor(item);
+          }}
+        />
+      ) : showSavedOnly ? (
         savedItems.map(renderRow)
       ) : (
         <>
@@ -404,9 +528,22 @@ function OwnerRegionList({
         </>
       )}
 
-      {!showSavedOnly && !activeCategory && <AddPlaceRow />}
-      {!showSavedOnly && !activeCategory && (
+      {viewMode === "list" && !showSavedOnly && !activeCategory && <AddPlaceRow />}
+      {viewMode === "list" && !showSavedOnly && !activeCategory && (
         <PlaceSuggestionsStrip userId={userId} regionName={regionName} />
+      )}
+
+      {showRegionNoteModal && (
+        <NoteModal
+          title={`Tipps für ${regionName}`}
+          posterUrl={null}
+          initialNote={generalNote}
+          placeholder="z. B. wo man am besten einen Roller leiht, beste Kreditkarte fürs Ausland …"
+          label="Allgemeine Tipps zu dieser Liste (optional)"
+          maxLength={REGION_NOTE_MAX_LENGTH}
+          onSave={handleSaveRegionNote}
+          onClose={() => setShowRegionNoteModal(false)}
+        />
       )}
 
       {showDetailsFor && (
@@ -446,10 +583,12 @@ function OwnerRegionList({
 function VisitorRegionList({
   initialItems,
   ownerId,
+  generalNote,
   initialOwnInteractions,
 }: {
   initialItems: RegionPlaceItem[];
   ownerId: string;
+  generalNote: string | null;
   initialOwnInteractions?: OwnInteractionEntry[];
 }) {
   const items = initialItems;
@@ -461,6 +600,7 @@ function VisitorRegionList({
   const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [notePrompt, setNotePrompt] = useState<RegionPlaceItem | null>(null);
   const [showDetailsFor, setShowDetailsFor] = useState<RegionPlaceItem | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
 
   const showToast = useCallback((message: string) => {
     setToastMessage(message);
@@ -564,7 +704,9 @@ function VisitorRegionList({
   const recommendedItems = categoryFiltered.filter((item) => item.status !== "want_to_visit");
   const savedItems = categoryFiltered.filter((item) => item.status === "want_to_visit");
 
-  if (items.length === 0) {
+  const mapSourceItems = showSavedOnly ? savedItems : categoryFiltered;
+
+  if (items.length === 0 && !generalNote) {
     return (
       <p className="w-full text-sm text-muted-foreground">
         Diese Liste enthält noch keine Orte.
@@ -581,15 +723,37 @@ function VisitorRegionList({
           </div>
         </div>
       )}
-      <CategoryFilter
-        active={activeCategory}
-        onChange={setActiveCategory}
-        availableCategories={availableCategories}
-        showSavedFilter={items.some((item) => item.status === "want_to_visit")}
-        savedActive={showSavedOnly}
-        onToggleSaved={() => setShowSavedOnly((prev) => !prev)}
-      />
-      {showSavedOnly ? (
+      <div className="w-full flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <CategoryFilter
+            active={activeCategory}
+            onChange={setActiveCategory}
+            availableCategories={availableCategories}
+            showSavedFilter={items.some((item) => item.status === "want_to_visit")}
+            savedActive={showSavedOnly}
+            onToggleSaved={() => setShowSavedOnly((prev) => !prev)}
+          />
+        </div>
+        {items.length > 0 && <ViewToggle mode={viewMode} onChange={setViewMode} />}
+      </div>
+
+      <RegionNoteRow note={generalNote} isOwner={false} />
+
+      {items.length === 0 && (
+        <p className="w-full text-sm text-muted-foreground">
+          Diese Liste enthält noch keine Orte.
+        </p>
+      )}
+
+      {viewMode === "map" ? (
+        <PlaceMapView
+          places={mapSourceItems.map((item) => ({ id: item.id, lat: item.lat, lng: item.lng, name: item.name }))}
+          onSelectPlace={(id) => {
+            const item = mapSourceItems.find((entry) => entry.id === id);
+            if (item) setShowDetailsFor(item);
+          }}
+        />
+      ) : showSavedOnly ? (
         savedItems.map((item) => <PlaceItemRowForOwner key={item.id} item={item} />)
       ) : (
         <>
@@ -704,6 +868,8 @@ export function RegionItemsGrid({
   initialOwnInteractions?: OwnInteractionEntry[];
 }) {
   const [items, setItems] = useState<RegionPlaceItem[] | null>(null);
+  const [regionId, setRegionId] = useState<string | null>(null);
+  const [generalNote, setGeneralNote] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -713,26 +879,38 @@ export function RegionItemsGrid({
         `/api/place-items?username=${encodeURIComponent(username)}&region=${encodeURIComponent(regionKey)}`,
       );
       if (!response.ok || cancelled) return;
-      const data: { items: RegionPlaceItem[] } = await response.json();
-      if (!cancelled) setItems(data.items);
+      const data: { items: RegionPlaceItem[]; regionId: string; generalNote: string | null } =
+        await response.json();
+      if (!cancelled) {
+        setItems(data.items);
+        setRegionId(data.regionId);
+        setGeneralNote(data.generalNote);
+      }
     })();
     return () => {
       cancelled = true;
     };
   }, [username, regionKey]);
 
-  if (items === null) {
+  if (items === null || regionId === null) {
     return <p className="text-sm text-muted-foreground">Lädt…</p>;
   }
 
   const isOwner = currentUserId === ownerId;
 
   return isOwner ? (
-    <OwnerRegionList initialItems={items} userId={ownerId} regionName={regionName} />
+    <OwnerRegionList
+      initialItems={items}
+      userId={ownerId}
+      regionId={regionId}
+      regionName={regionName}
+      initialGeneralNote={generalNote}
+    />
   ) : (
     <VisitorRegionList
       initialItems={items}
       ownerId={ownerId}
+      generalNote={generalNote}
       initialOwnInteractions={initialOwnInteractions}
     />
   );
