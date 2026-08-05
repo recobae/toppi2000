@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { getProfileAvatarImageUrl } from "@/lib/saved-items";
@@ -55,9 +56,13 @@ export function SiteHeader() {
       <Link
         href={`/u/${username}`}
         aria-label="Zu meinem Profil"
-        className="rounded-full shadow-sm hover:opacity-90 transition-opacity"
+        className="relative block rounded-full shadow-sm hover:opacity-90 transition-opacity"
       >
         <ProfileAvatar username={username} imageUrl={avatarUrl} size="sm" />
+        {/* Punkt 2: kleiner, dezenter Rückpfeil -- macht sichtbar, dass dieses Icon immer zum eigenen Profil zurückführt. */}
+        <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary border border-background">
+          <ArrowLeft className="size-2.5 text-primary-foreground" />
+        </span>
       </Link>
     </div>
   );

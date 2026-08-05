@@ -10,7 +10,6 @@ import { ForMeHero } from "@/components/profile/for-me-hero";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { ListOverviewRow } from "@/components/profile/list-overview-row";
 import { GuestProfileCta } from "@/components/profile/guest-profile-cta";
-import { TrackLastVisitedProfile } from "@/components/profile/track-last-visited";
 import { FollowButton } from "@/components/profile/follow-button";
 import { NewListPicker } from "@/components/profile/new-list-picker";
 import { ShareListButton } from "@/components/lists/share-list-button";
@@ -429,7 +428,6 @@ export default async function ProfilePage({
 
   return (
     <main className="min-h-screen flex flex-col items-center">
-      <TrackLastVisitedProfile username={profile.username} />
       <div className="flex-1 w-full flex flex-col items-center gap-4 max-w-2xl p-5 pt-6">
         {/*
           Scrollt normal mit dem restlichen Content -- nicht mehr sticky/
@@ -444,9 +442,9 @@ export default async function ProfilePage({
             <Image
               src="/logo.png"
               alt="Toppi"
-              width={160}
-              height={86}
-              className="h-8 w-auto justify-self-center"
+              width={240}
+              height={130}
+              className="h-12 w-auto justify-self-center"
               priority
             />
             <span className="flex items-center gap-2 shrink-0 justify-self-end">
