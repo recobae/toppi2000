@@ -1,0 +1,465 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { getExcludedMovieKeys, getExcludedPlaceIds } from "@/lib/exclusions";
+import { getRecommendationCategory } from "@/lib/recommendation-categories";
+import { getCityPlaceRecommendations, getGenreProfileMovieRecommendations } from "@/lib/recommendations";
+import { PLACE_CATEGORY_LABELS, isPlaceCategory } from "@/lib/places";
+
+export type DiscoverySourceType = "movie" | "tv" | "place" | "topf";
+
+export type DiscoveryCandidate = {
+  id: string;
+  title: string;
+  category: string;
+  location: string | null;
+  imageUrl: string | null;
+  sourceType: DiscoverySourceType;
+  /** Who this card is most directly attributed to -- null only for the anonymous exploration fallback. */
+  sourceUserId: string | null;
+  sourceUsernames: string[];
+  note: string | null;
+  rating: number | null;
+  /** Distinct followed friends who independently have this exact item. */
+  socialSupportCount: number;
+  /** How well this matches the viewer's own taste profile, 0-100 for display. */
+  personalSupportCount: number;
+  lastActivityAt: string;
+  /** Reserved for a future prompt/search input -- neutral until then. */
+  promptMatchScore: number;
+  finalScore: number;
+  /** One short, human line explaining why this card showed up. */
+  reason: string;
+  ref: {
+    mediaType?: "movie" | "tv";
+    tmdbId?: number;
+    placeId?: string;
+    recommendationId?: string;
+  };
+};
+
+// Scoring weights (w1..w7 in the product spec) -- sum to 1. No prompt input
+// exists yet on this surface, so intentMatch/categoryFit stay neutral
+// constants rather than real signals; the other five are all computed from
+// real network data below.
+const WEIGHT_FRESHNESS = 0.2;
+const WEIGHT_PERSONAL_AFFINITY = 0.25;
+const WEIGHT_SOCIAL_PROOF = 0.25;
+const WEIGHT_REPEAT_VALIDATION = 0.15;
+const WEIGHT_EXPLORATION = 0.15;
+
+const FRESHNESS_HALF_LIFE_DAYS = 21;
+const SOCIAL_PROOF_CAP = 4;
+
+function freshnessScore(createdAt: string): number {
+  const ageDays = (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24);
+  return Math.exp((-Math.LN2 * Math.max(0, ageDays)) / FRESHNESS_HALF_LIFE_DAYS);
+}
+
+// Deterministic per-day "novelty" jitter -- same item ranks slightly
+// differently from one day to the next without any randomness that would
+// make the feed feel unstable within a single visit.
+function explorationScore(id: string): number {
+  const seed = `${id}-${new Date().toISOString().slice(0, 10)}`;
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+  return (hash % 1000) / 1000;
+}
+
+function buildReason(params: {
+  socialSupportCount: number;
+  sourceUsernames: string[];
+  personalAffinity: number;
+  freshness: number;
+  isExploration: boolean;
+}): string {
+  const { socialSupportCount, sourceUsernames, personalAffinity, freshness, isExploration } = params;
+  if (isExploration) return "Neu für dich zu entdecken";
+  if (socialSupportCount >= 2) {
+    return `${socialSupportCount} aus deinem Netzwerk empfehlen das`;
+  }
+  if (sourceUsernames.length === 1) {
+    return freshness > 0.6 ? `Gerade neu von ${sourceUsernames[0]}` : `Empfohlen von ${sourceUsernames[0]}`;
+  }
+  if (personalAffinity > 0.6) return "Passt zu deinem Geschmack";
+  return "Neu für dich zu entdecken";
+}
+
+type OwnProfile = {
+  categoryFreq: Map<string, number>;
+  maxFreq: number;
+};
+
+async function buildOwnProfile(supabase: SupabaseClient, userId: string): Promise<OwnProfile> {
+  const [{ data: topList }, { data: watchlist }, { data: places }, { data: recs }] = await Promise.all([
+    supabase.from("top_list").select("media_type").eq("user_id", userId),
+    supabase.from("watchlist").select("media_type").eq("user_id", userId),
+    supabase.from("places").select("places_category").eq("user_id", userId),
+    supabase.from("recommendations").select("category_key").eq("user_id", userId).eq("status", "active"),
+  ]);
+
+  const categoryFreq = new Map<string, number>();
+  const bump = (key: string) => categoryFreq.set(key, (categoryFreq.get(key) ?? 0) + 1);
+  for (const row of topList ?? []) bump(`media:${row.media_type}`);
+  for (const row of watchlist ?? []) bump(`media:${row.media_type}`);
+  for (const row of places ?? []) bump(`place:${row.places_category}`);
+  for (const row of recs ?? []) bump(`topf:${row.category_key}`);
+
+  const maxFreq = Math.max(1, ...categoryFreq.values());
+  return { categoryFreq, maxFreq };
+}
+
+function personalAffinity(profile: OwnProfile, categoryKey: string): number {
+  const freq = profile.categoryFreq.get(categoryKey) ?? 0;
+  if (freq === 0) return profile.categoryFreq.size === 0 ? 0.4 : 0.15;
+  return freq / profile.maxFreq;
+}
+
+function score(params: {
+  id: string;
+  freshness: number;
+  affinity: number;
+  socialSupportCount: number;
+}): number {
+  const social = Math.min(1, params.socialSupportCount / SOCIAL_PROOF_CAP);
+  const repeatValidation = params.socialSupportCount >= 2 ? 1 : params.socialSupportCount === 1 ? 0.4 : 0;
+  const exploration = explorationScore(params.id);
+  return (
+    WEIGHT_FRESHNESS * params.freshness +
+    WEIGHT_PERSONAL_AFFINITY * params.affinity +
+    WEIGHT_SOCIAL_PROOF * social +
+    WEIGHT_REPEAT_VALIDATION * repeatValidation +
+    WEIGHT_EXPLORATION * exploration
+  );
+}
+
+type MovieRow = {
+  user_id: string;
+  item_id: number;
+  media_type: "movie" | "tv";
+  title: string;
+  image_url: string | null;
+  note: string | null;
+  created_at: string;
+};
+
+type PlaceRow = {
+  user_id: string;
+  google_place_id: string;
+  name: string;
+  address: string;
+  photo_url: string | null;
+  note: string | null;
+  created_at: string;
+  rating: number | null;
+  places_category: string;
+};
+
+type RecommendationRow = {
+  id: string;
+  user_id: string;
+  category_key: string;
+  title: string;
+  note: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+};
+
+/**
+ * Builds the ranked "Für Dich" card stream from the same 6 activity tables
+ * used elsewhere in the app (item_interactions only for exclusion --
+ * top_list/watchlist/places/recommendations for candidates, since those are
+ * the tables that actually carry a title/image/note to show on a card;
+ * dont_watch and item_interactions dislikes only ever exclude, never
+ * surface). Candidates are always someone else's (followed) activity --
+ * your own items never need "discovering". If the viewer follows nobody
+ * yet, falls back entirely to the existing generic recommendation engine
+ * (lib/recommendations.ts) so the stream is never empty.
+ */
+export async function getDiscoveryFeed(
+  supabase: SupabaseClient,
+  userId: string,
+  params: { excludeIds: Set<string>; limit: number; homeCity: string | null; tmdbApiKey?: string; placesApiKey?: string },
+): Promise<{ candidates: DiscoveryCandidate[]; hasNetworkContent: boolean }> {
+  const { data: followRows } = await supabase
+    .from("user_follows")
+    .select("followed_id")
+    .eq("follower_id", userId);
+  const followedIds = (followRows ?? []).map((row) => row.followed_id);
+
+  const candidates: DiscoveryCandidate[] = [];
+
+  if (followedIds.length > 0) {
+    const [excludedMovieKeys, excludedPlaceIds, ownProfile, { data: ownRecRows }] = await Promise.all([
+      getExcludedMovieKeys(supabase, userId),
+      getExcludedPlaceIds(supabase, userId),
+      buildOwnProfile(supabase, userId),
+      supabase.from("recommendations").select("category_key, title").eq("user_id", userId).eq("status", "active"),
+    ]);
+    const ownRecommendationKeys = new Set(
+      (ownRecRows ?? []).map((row) => `${row.category_key}:${row.title.trim().toLowerCase()}`),
+    );
+
+    const [{ data: usernameRows }, { data: topListRows }, { data: watchlistRows }, { data: placeRows }, { data: recRows }] =
+      await Promise.all([
+        supabase.from("profiles").select("id, username").in("id", followedIds),
+        supabase
+          .from("top_list")
+          .select("user_id, item_id, media_type, title, image_url, note, created_at")
+          .in("user_id", followedIds),
+        supabase
+          .from("watchlist")
+          .select("user_id, item_id, media_type, title, image_url, note, created_at")
+          .in("user_id", followedIds),
+        supabase
+          .from("places")
+          .select("user_id, google_place_id, name, address, photo_url, note, created_at, rating, places_category")
+          .in("user_id", followedIds),
+        supabase
+          .from("recommendations")
+          .select("id, user_id, category_key, title, note, metadata, created_at")
+          .in("user_id", followedIds)
+          .eq("status", "active"),
+      ]);
+    const usernameById = new Map((usernameRows ?? []).map((row) => [row.id, row.username]));
+
+    // --- Movies/TV: group top_list + watchlist rows by item identity ---
+    type MovieGroup = { rows: MovieRow[]; userIds: Set<string> };
+    const movieGroups = new Map<string, MovieGroup>();
+    for (const row of [...(topListRows ?? []), ...((watchlistRows ?? []) as MovieRow[])] as MovieRow[]) {
+      const key = `${row.media_type}-${row.item_id}`;
+      if (excludedMovieKeys.has(key)) continue;
+      const group = movieGroups.get(key) ?? { rows: [], userIds: new Set() };
+      group.rows.push(row);
+      group.userIds.add(row.user_id);
+      movieGroups.set(key, group);
+    }
+    for (const [key, group] of movieGroups) {
+      const rows = group.rows.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+      const withNote = rows.find((row) => row.note) ?? rows[0];
+      const affinity = personalAffinity(ownProfile, `media:${withNote.media_type}`);
+      const freshness = freshnessScore(rows[0].created_at);
+      const socialSupportCount = group.userIds.size;
+      const usernames = [...group.userIds].map((id) => usernameById.get(id)).filter((v): v is string => !!v);
+      candidates.push({
+        id: `movie-${key}`,
+        title: withNote.title,
+        category: withNote.media_type === "tv" ? "Serie" : "Film",
+        location: null,
+        imageUrl: withNote.image_url,
+        sourceType: withNote.media_type,
+        sourceUserId: withNote.user_id,
+        sourceUsernames: usernames,
+        note: withNote.note,
+        rating: null,
+        socialSupportCount,
+        personalSupportCount: Math.round(affinity * 100),
+        lastActivityAt: rows[0].created_at,
+        promptMatchScore: 0.5,
+        finalScore: score({ id: `movie-${key}`, freshness, affinity, socialSupportCount }),
+        reason: buildReason({
+          socialSupportCount,
+          sourceUsernames: usernames,
+          personalAffinity: affinity,
+          freshness,
+          isExploration: false,
+        }),
+        ref: { mediaType: withNote.media_type, tmdbId: withNote.item_id },
+      });
+    }
+
+    // --- Places ---
+    type PlaceGroup = { rows: PlaceRow[]; userIds: Set<string> };
+    const placeGroups = new Map<string, PlaceGroup>();
+    for (const row of (placeRows ?? []) as PlaceRow[]) {
+      if (excludedPlaceIds.has(row.google_place_id)) continue;
+      const group = placeGroups.get(row.google_place_id) ?? { rows: [], userIds: new Set() };
+      group.rows.push(row);
+      group.userIds.add(row.user_id);
+      placeGroups.set(row.google_place_id, group);
+    }
+    for (const [placeId, group] of placeGroups) {
+      const rows = group.rows.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+      const withNote = rows.find((row) => row.note) ?? rows[0];
+      const affinity = personalAffinity(ownProfile, `place:${withNote.places_category}`);
+      const freshness = freshnessScore(rows[0].created_at);
+      const socialSupportCount = group.userIds.size;
+      const usernames = [...group.userIds].map((id) => usernameById.get(id)).filter((v): v is string => !!v);
+      candidates.push({
+        id: `place-${placeId}`,
+        title: withNote.name,
+        category: isPlaceCategory(withNote.places_category)
+          ? PLACE_CATEGORY_LABELS[withNote.places_category]
+          : "Ort",
+        location: withNote.address,
+        imageUrl: withNote.photo_url,
+        sourceType: "place",
+        sourceUserId: withNote.user_id,
+        sourceUsernames: usernames,
+        note: withNote.note,
+        rating: withNote.rating,
+        socialSupportCount,
+        personalSupportCount: Math.round(affinity * 100),
+        lastActivityAt: rows[0].created_at,
+        promptMatchScore: 0.5,
+        finalScore: score({ id: `place-${placeId}`, freshness, affinity, socialSupportCount }),
+        reason: buildReason({
+          socialSupportCount,
+          sourceUsernames: usernames,
+          personalAffinity: affinity,
+          freshness,
+          isExploration: false,
+        }),
+        ref: { placeId },
+      });
+    }
+
+    // --- Mein-Topf freeform recommendations ---
+    type RecGroup = { rows: RecommendationRow[]; userIds: Set<string> };
+    const recGroups = new Map<string, RecGroup>();
+    for (const row of (recRows ?? []) as RecommendationRow[]) {
+      const dedupeKey = `${row.category_key}:${row.title.trim().toLowerCase()}`;
+      if (ownRecommendationKeys.has(dedupeKey)) continue;
+      const group = recGroups.get(dedupeKey) ?? { rows: [], userIds: new Set() };
+      group.rows.push(row);
+      group.userIds.add(row.user_id);
+      recGroups.set(dedupeKey, group);
+    }
+    for (const group of recGroups.values()) {
+      const rows = group.rows.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+      const withNote = rows.find((row) => row.note) ?? rows[0];
+      const affinity = personalAffinity(ownProfile, `topf:${withNote.category_key}`);
+      const freshness = freshnessScore(rows[0].created_at);
+      const socialSupportCount = group.userIds.size;
+      const usernames = [...group.userIds].map((id) => usernameById.get(id)).filter((v): v is string => !!v);
+      const imageUrl =
+        withNote.metadata && typeof withNote.metadata.imageUrl === "string" ? withNote.metadata.imageUrl : null;
+      candidates.push({
+        id: `topf-${withNote.id}`,
+        title: withNote.title,
+        category: getRecommendationCategory(withNote.category_key)?.label ?? withNote.category_key,
+        location: null,
+        imageUrl,
+        sourceType: "topf",
+        sourceUserId: withNote.user_id,
+        sourceUsernames: usernames,
+        note: withNote.note,
+        rating: null,
+        socialSupportCount,
+        personalSupportCount: Math.round(affinity * 100),
+        lastActivityAt: rows[0].created_at,
+        promptMatchScore: 0.5,
+        finalScore: score({ id: `topf-${withNote.id}`, freshness, affinity, socialSupportCount }),
+        reason: buildReason({
+          socialSupportCount,
+          sourceUsernames: usernames,
+          personalAffinity: affinity,
+          freshness,
+          isExploration: false,
+        }),
+        ref: { recommendationId: withNote.id },
+      });
+    }
+  }
+
+  const hasNetworkContent = candidates.length > 0;
+  let ranked = candidates
+    .filter((candidate) => !params.excludeIds.has(candidate.id))
+    .sort((a, b) => b.finalScore - a.finalScore);
+
+  // Never-empty fallback: too little (or zero) network content -- top up
+  // with the same generic "popular near you" / "matches your genre profile"
+  // engine already used by Inspiration, tagged as low-confidence exploration
+  // rather than social proof.
+  if (ranked.length < params.limit) {
+    const need = params.limit - ranked.length;
+    const exploreCandidates = await buildExplorationFallback(supabase, userId, {
+      need,
+      excludeIds: params.excludeIds,
+      alreadyIncludedIds: new Set(ranked.map((c) => c.id)),
+      homeCity: params.homeCity,
+      tmdbApiKey: params.tmdbApiKey,
+      placesApiKey: params.placesApiKey,
+    });
+    ranked = [...ranked, ...exploreCandidates];
+  }
+
+  return { candidates: ranked.slice(0, params.limit), hasNetworkContent };
+}
+
+async function buildExplorationFallback(
+  supabase: SupabaseClient,
+  userId: string,
+  params: {
+    need: number;
+    excludeIds: Set<string>;
+    alreadyIncludedIds: Set<string>;
+    homeCity: string | null;
+    tmdbApiKey?: string;
+    placesApiKey?: string;
+  },
+): Promise<DiscoveryCandidate[]> {
+  const results: DiscoveryCandidate[] = [];
+
+  if (params.tmdbApiKey) {
+    const movies = await getGenreProfileMovieRecommendations(supabase, userId, params.tmdbApiKey, params.need);
+    for (const item of movies) {
+      const id = `movie-${item.mediaType}-${item.id}`;
+      if (params.excludeIds.has(id) || params.alreadyIncludedIds.has(id)) continue;
+      results.push({
+        id,
+        title: item.title,
+        category: item.mediaType === "tv" ? "Serie" : "Film",
+        location: null,
+        imageUrl: item.posterPath ? `https://image.tmdb.org/t/p/w500${item.posterPath}` : null,
+        sourceType: item.mediaType,
+        sourceUserId: null,
+        sourceUsernames: [],
+        note: null,
+        rating: item.movieDetails.voteAverage,
+        socialSupportCount: 0,
+        personalSupportCount: 0,
+        lastActivityAt: new Date().toISOString(),
+        promptMatchScore: 0.3,
+        finalScore: 0,
+        reason: "Neu für dich zu entdecken",
+        ref: { mediaType: item.mediaType, tmdbId: item.id },
+      });
+    }
+  }
+
+  if (results.length < params.need && params.homeCity && params.placesApiKey) {
+    const { generic } = await getCityPlaceRecommendations(
+      supabase,
+      userId,
+      params.homeCity,
+      params.placesApiKey,
+      params.need - results.length,
+    );
+    for (const place of generic) {
+      const id = `place-${place.placeId}`;
+      if (params.excludeIds.has(id) || params.alreadyIncludedIds.has(id)) continue;
+      results.push({
+        id,
+        title: place.name,
+        category: place.category && isPlaceCategory(place.category) ? PLACE_CATEGORY_LABELS[place.category] : "Ort",
+        location: place.address,
+        imageUrl: place.photoUrl,
+        sourceType: "place",
+        sourceUserId: null,
+        sourceUsernames: [],
+        note: null,
+        rating: place.rating,
+        socialSupportCount: 0,
+        personalSupportCount: 0,
+        lastActivityAt: new Date().toISOString(),
+        promptMatchScore: 0.3,
+        finalScore: 0,
+        reason: "Beliebt in deiner Nähe",
+        ref: { placeId: place.placeId },
+      });
+    }
+  }
+
+  return results.slice(0, params.need);
+}

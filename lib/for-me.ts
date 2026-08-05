@@ -1,36 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-/**
- * The ring's nominal "full" mark -- own ratings (movies+places) plus
- * distinct friend contributions to your own Topf, combined. The REAL
- * unlock point is a per-user random value between MIN/MAX_FRACTION of this,
- * never this number itself, so the exact threshold is never predictable
- * from the visible ring fill (Abschnitt 4).
- */
-const REFERENCE_MAX = 20;
-const MIN_THRESHOLD_FRACTION = 0.8;
-const MAX_THRESHOLD_FRACTION = 1.0;
-
 export type ForMeStatus = {
   ownCount: number;
   friendCount: number;
-  /** own + friend, uncapped -- used for the ring fraction (capped at 1) and the unlock comparison. */
-  combinedCount: number;
-  threshold: number;
-  fraction: number;
-  isUnlocked: boolean;
-  /** True only the moment this call is the first to observe isUnlocked while topf_unlocked_notified was still false. */
-  justUnlocked: boolean;
-  previewImageUrls: string[];
   /** Distinct followed friends who actually contributed a recommendation feeding this user's Topf -- not just anyone followed. */
   contributorUserIds: string[];
 };
-
-function rollThreshold(): number {
-  const min = Math.round(REFERENCE_MAX * MIN_THRESHOLD_FRACTION);
-  const max = Math.round(REFERENCE_MAX * MAX_THRESHOLD_FRACTION);
-  return min + Math.floor(Math.random() * (max - min + 1));
-}
 
 /**
  * Distinct followed friends explicitly tagged as "Wer empfiehlt das?" on
@@ -61,40 +36,21 @@ export async function getTopfContributorIds(
 }
 
 /**
- * Resolves everything the "For Me" tile needs: own total-activity count
- * (every active capture -- swiped, entered, imported, added via Inspiration
- * or search; see app/u/[username]/page.tsx's totalActivityCount), distinct
- * friend-contribution count to the viewer's own Topf, the (lazily rolled,
- * then persisted) unlock threshold, and a couple of real recent Topf
- * thumbnails to blur behind the tile while locked. `ownCount` is passed in
- * rather than recomputed here since the caller already has to gather all the
- * underlying per-table counts for its own profile-page rendering anyway.
+ * Resolves what the profile page's own-view stats need: own total-activity
+ * count (every active capture -- swiped, entered, imported, added via
+ * Inspiration or search; see app/u/[username]/page.tsx's totalActivityCount)
+ * and the same broadened sum across followed friends. `ownCount` is passed
+ * in rather than recomputed here since the caller already has to gather all
+ * the underlying per-table counts for its own profile-page rendering anyway.
+ * The old unlock-ring/threshold machinery is gone -- that whole discovery
+ * experience now lives on /fuer-dich instead of gating a profile widget.
  */
 export async function getForMeStatus(
   supabase: SupabaseClient,
   userId: string,
   ownCount: number,
 ): Promise<ForMeStatus> {
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("topf_unlock_threshold, topf_unlocked_notified")
-    .eq("id", userId)
-    .maybeSingle();
-
-  let threshold = profile?.topf_unlock_threshold ?? null;
-  if (threshold === null) {
-    threshold = rollThreshold();
-    await supabase.from("profiles").update({ topf_unlock_threshold: threshold }).eq("id", userId);
-  }
-
-  const [{ data: recentRows }, contributorUserIds, { data: followRows }] = await Promise.all([
-    supabase
-      .from("recommendations")
-      .select("metadata")
-      .eq("user_id", userId)
-      .eq("status", "active")
-      .order("created_at", { ascending: false })
-      .limit(6),
+  const [contributorUserIds, { data: followRows }] = await Promise.all([
     getTopfContributorIds(supabase, userId),
     supabase.from("user_follows").select("followed_id").eq("follower_id", userId),
   ]);
@@ -140,28 +96,5 @@ export async function getForMeStatus(
       (recommendationsCount ?? 0);
   }
 
-  const previewImageUrls = (recentRows ?? [])
-    .map((row) => (row.metadata as { imageUrl?: string } | null)?.imageUrl)
-    .filter((url): url is string => !!url)
-    .slice(0, 3);
-
-  const combinedCount = ownCount + friendCount;
-  const isUnlocked = combinedCount >= threshold;
-  const justUnlocked = isUnlocked && !profile?.topf_unlocked_notified;
-
-  return {
-    ownCount,
-    friendCount,
-    combinedCount,
-    threshold,
-    fraction: Math.min(1, combinedCount / REFERENCE_MAX),
-    isUnlocked,
-    justUnlocked,
-    previewImageUrls,
-    contributorUserIds,
-  };
-}
-
-export async function markForMeUnlockNotified(supabase: SupabaseClient, userId: string) {
-  return supabase.from("profiles").update({ topf_unlocked_notified: true }).eq("id", userId);
+  return { ownCount, friendCount, contributorUserIds };
 }

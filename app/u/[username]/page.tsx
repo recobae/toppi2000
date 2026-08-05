@@ -6,7 +6,7 @@ import type { Metadata } from "next";
 import { MapPin, Settings, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ForeignProfileHero } from "@/components/profile/foreign-profile-hero";
-import { ForMeHero } from "@/components/profile/for-me-hero";
+import { OwnProfileHero } from "@/components/profile/own-profile-hero";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { ListOverviewRow } from "@/components/profile/list-overview-row";
 import { GuestProfileCta } from "@/components/profile/guest-profile-cta";
@@ -474,9 +474,10 @@ export default async function ProfilePage({
         */}
         {isOwner ? (
           forMe && (
-            <ForMeHero
+            <OwnProfileHero
               userId={profile.id}
               username={profile.username}
+              avatarUrl={avatarUrl}
               forMe={forMe}
               followingProfiles={followingProfiles}
               contributorIds={forMe.contributorUserIds}

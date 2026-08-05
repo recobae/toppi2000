@@ -10,9 +10,10 @@ export default async function Home() {
   const userId = data?.user?.id;
 
   if (userId) {
-    // Zero-effort landing: straight into the swipe deck, no decision screen.
+    // Zero-effort landing: straight into the central discovery stream, no
+    // decision screen -- My Taste (/swipe) is still reachable from there.
     await ensureUsername(supabase, userId);
-    redirect("/swipe");
+    redirect("/fuer-dich");
   }
 
   return (
