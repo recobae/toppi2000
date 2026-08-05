@@ -4,9 +4,25 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Heart, Ban, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { BackToProfileLink } from "@/components/profile/back-to-profile-link";
 import type { InteractionMediaType } from "@/lib/interactions";
 import { setInteractionWithCredits, removeInteractionWithCredits } from "@/lib/interaction-credits";
+
+type FilterCategory = "movies" | "places" | "other";
+
+const FILTERS: { key: FilterCategory; label: string }[] = [
+  { key: "movies", label: "Filme & Serien" },
+  { key: "places", label: "Orte" },
+  { key: "other", label: "Sonstiges" },
+];
+
+// Only "movie"/"tv"/"place" exist on item_interactions today -- "other"
+// matches nothing yet, kept as a real filter option for whatever media
+// type lands here next instead of hardcoding just the two that exist now.
+function categoryOf(mediaType: InteractionMediaType): FilterCategory {
+  if (mediaType === "place") return "places";
+  if (mediaType === "movie" || mediaType === "tv") return "movies";
+  return "other";
+}
 
 type ActivityItem = {
   id: string;
@@ -18,13 +34,10 @@ type ActivityItem = {
   imageUrl: string | null;
 };
 
-function groupLabel(mediaType: InteractionMediaType): string {
-  return mediaType === "place" ? "Orte" : "Filme & Serien";
-}
-
 export default function MeineAktivitaetPage() {
   const [items, setItems] = useState<ActivityItem[] | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [selectedFilter, setSelectedFilter] = useState<FilterCategory>("movies");
 
   const load = async () => {
     const response = await fetch("/api/my-activity");
@@ -89,88 +102,95 @@ export default function MeineAktivitaetPage() {
     }
   };
 
-  const groups = new Map<InteractionMediaType, ActivityItem[]>();
-  for (const item of items ?? []) {
-    const key: InteractionMediaType = item.mediaType === "place" ? "place" : "movie";
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(item);
-  }
+  const filteredItems = (items ?? []).filter((item) => categoryOf(item.mediaType) === selectedFilter);
 
   return (
     <main className="min-h-screen flex flex-col items-center">
-      <div className="flex-1 w-full flex flex-col gap-6 max-w-2xl p-5 pt-8">
-        <div className="w-full flex flex-col gap-2">
-          <BackToProfileLink />
-          <h1 className="font-medium text-xl">Meine Aktivität</h1>
+      <div className="flex-1 w-full flex flex-col gap-4 max-w-2xl p-5 pt-8">
+        {/*
+          Kein eigener BackToProfileLink-Text mehr hier -- der floatende
+          SiteHeader-Avatar (oben links, auf jeder Nicht-Profilseite sichtbar)
+          deckt "zurück zum Profil" bereits ab. Beide zusammen überlappten
+          sich sichtbar an derselben Stelle.
+        */}
+        <h1 className="font-medium text-xl">Meine Aktivität</h1>
+
+        <div className="w-full flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {FILTERS.map((filter) => (
+            <button
+              key={filter.key}
+              type="button"
+              onClick={() => setSelectedFilter(filter.key)}
+              className={`shrink-0 whitespace-nowrap h-8 px-3 rounded-full border text-xs font-medium transition-colors ${
+                selectedFilter === filter.key
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "border-input text-muted-foreground hover:bg-accent"
+              }`}
+            >
+              {filter.label}
+            </button>
+          ))}
         </div>
 
         {items === null ? (
           <p className="text-sm text-muted-foreground">Lädt…</p>
-        ) : items.length === 0 ? (
+        ) : filteredItems.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Du hast noch keine Bewertungen abgegeben.
+            {items.length === 0
+              ? "Du hast noch keine Bewertungen abgegeben."
+              : "Keine Bewertungen in dieser Kategorie."}
           </p>
         ) : (
-          [...groups.entries()].map(([mediaType, groupItems]) => (
-            <div key={mediaType} className="w-full flex flex-col gap-3">
-              <h2 className="text-sm font-medium text-muted-foreground">
-                {groupLabel(mediaType)}
-              </h2>
-              <div className="w-full flex flex-col gap-2">
-                {groupItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center gap-3 rounded-lg border p-2"
-                  >
-                    <div className="relative w-10 aspect-[2/3] shrink-0 rounded overflow-hidden bg-muted">
-                      {item.imageUrl && (
-                        <Image
-                          src={item.imageUrl}
-                          alt={item.title}
-                          fill
-                          sizes="40px"
-                          className="object-cover"
-                        />
-                      )}
-                    </div>
-                    <p className="flex-1 min-w-0 text-sm font-medium leading-tight line-clamp-2">
-                      {item.title}
-                    </p>
-                    <button
-                      type="button"
-                      disabled={pendingId === item.id}
-                      onClick={() => handleToggle(item)}
-                      aria-label={
-                        item.interactionType === "like"
-                          ? "Zu Nicht gemocht ändern"
-                          : "Zu Gefällt mir ändern"
-                      }
-                      className={`flex h-9 w-9 items-center justify-center rounded-full border transition-colors disabled:opacity-50 ${
-                        item.interactionType === "like"
-                          ? "border-green-600 text-green-600"
-                          : "border-destructive text-destructive"
-                      }`}
-                    >
-                      {item.interactionType === "like" ? (
-                        <Heart className="size-4 fill-current" />
-                      ) : (
-                        <Ban className="size-4" />
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={pendingId === item.id}
-                      onClick={() => handleRemove(item)}
-                      aria-label="Bewertung entfernen"
-                      className="flex h-9 w-9 items-center justify-center rounded-full border border-input text-muted-foreground hover:bg-accent transition-colors disabled:opacity-50"
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
-                  </div>
-                ))}
+          <div className="w-full flex flex-col gap-2">
+            {filteredItems.map((item) => (
+              <div key={item.id} className="flex items-center gap-3 rounded-lg border p-2">
+                <div className="relative w-10 aspect-[2/3] shrink-0 rounded overflow-hidden bg-muted">
+                  {item.imageUrl && (
+                    <Image
+                      src={item.imageUrl}
+                      alt={item.title}
+                      fill
+                      sizes="40px"
+                      className="object-cover"
+                    />
+                  )}
+                </div>
+                <p className="flex-1 min-w-0 text-sm font-medium leading-tight line-clamp-2">
+                  {item.title}
+                </p>
+                <button
+                  type="button"
+                  disabled={pendingId === item.id}
+                  onClick={() => handleToggle(item)}
+                  aria-label={
+                    item.interactionType === "like"
+                      ? "Zu Nicht gemocht ändern"
+                      : "Zu Gefällt mir ändern"
+                  }
+                  className={`flex h-9 w-9 items-center justify-center rounded-full border transition-colors disabled:opacity-50 ${
+                    item.interactionType === "like"
+                      ? "border-green-600 text-green-600"
+                      : "border-destructive text-destructive"
+                  }`}
+                >
+                  {item.interactionType === "like" ? (
+                    <Heart className="size-4 fill-current" />
+                  ) : (
+                    <Ban className="size-4" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  disabled={pendingId === item.id}
+                  onClick={() => handleRemove(item)}
+                  aria-label="Bewertung entfernen"
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-input text-muted-foreground hover:bg-accent transition-colors disabled:opacity-50"
+                >
+                  <Trash2 className="size-4" />
+                </button>
               </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
     </main>
