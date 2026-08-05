@@ -54,10 +54,20 @@ export default async function MovieListPage({
   }
   return (
     <main className="min-h-screen flex flex-col items-center">
-      <div className="flex-1 w-full flex flex-col gap-6 max-w-5xl p-5">
-        <div className="flex flex-col gap-2 pt-8">
-          <BackToProfileLink username={profile.username} />
-          <h1 className="w-full text-center font-medium text-xl">{MOVIE_LIST_LABEL}</h1>
+      <div className="flex-1 w-full flex flex-col gap-4 max-w-5xl p-5">
+        {/*
+          Kompakter Kopf, analog zur Orte-Liste: Back-Link und Titel in
+          einer Zeile, Titel bleibt zentriert (3-Spalten-Technik, rechts ein
+          unsichtbarer Platzhalter in gleicher Breite wie der Back-Link).
+        */}
+        <div className="w-full grid grid-cols-[1fr_auto_1fr] items-center gap-2 pt-4">
+          <span className="justify-self-start">
+            <BackToProfileLink username={profile.username} />
+          </span>
+          <h1 className="justify-self-center text-center font-medium text-lg truncate max-w-[60vw]">
+            {MOVIE_LIST_LABEL}
+          </h1>
+          <span aria-hidden="true" />
         </div>
         <MovieListGrid
           username={profile.username}
