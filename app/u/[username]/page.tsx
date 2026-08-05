@@ -560,11 +560,21 @@ export default async function ProfilePage({
 
         <ThanksStat count={thanksGivenCount ?? 0} />
 
-        {/* Prominent, direkt über dem Folgen/Inspirierend-Bereich (Punkt 6). */}
-        {!isOwner && recommendationsForViewer > 0 && (
+        {/*
+          Fremdansicht-Pendant zu "N Empfehlungen von dir" auf der eigenen
+          Ansicht (Bugfixes+Fremdansicht-Runde, Punkt 3): gleiche Quelle wie
+          forMe.ownCount -- movieInteractionCount+placeInteractionCount kommt
+          bereits oben aus getOwnInteractionRows(profile.id), unabhängig von
+          isOwner berechnet, hier nur erstmals für die Fremdansicht gerendert.
+          Der bereits bestehende personenbezogene "X für dich"-Wert (Punkt 6
+          der letzten Runde) bleibt als Zusatz dahinter erhalten, nicht
+          entfernt.
+        */}
+        {!isOwner && (
           <p className="text-sm font-medium text-center">
-            {profile.username} hat {recommendationsForViewer}{" "}
-            {recommendationsForViewer === 1 ? "Empfehlung" : "Empfehlungen"} für dich
+            {profile.username} hat {movieInteractionCount + placeInteractionCount}{" "}
+            {movieInteractionCount + placeInteractionCount === 1 ? "Empfehlung" : "Empfehlungen"} gegeben
+            {recommendationsForViewer > 0 && ` · ${recommendationsForViewer} für dich`}
           </p>
         )}
 
