@@ -53,7 +53,11 @@ export function SiteHeader() {
   if (onOwnProfile || pathname === "/swipe") return null;
 
   return (
-    <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
+    // Same top-4 left-4 as the own-profile page's own avatar block -- this
+    // used to sit top-right instead, a second, independently-positioned
+    // implementation of "get back to my profile" that only agreed on the
+    // page where SiteHeader hides itself entirely.
+    <div className="fixed top-4 left-4 z-50 flex items-center gap-2">
       <Link
         href={`/u/${username}`}
         aria-label="Zu meinem Profil"
