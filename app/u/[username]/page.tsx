@@ -418,35 +418,35 @@ export default async function ProfilePage({
   return (
     <main className="min-h-screen flex flex-col items-center">
       <TrackLastVisitedProfile username={profile.username} />
-      {/*
-        Sticky oben, bleibt beim Scrollen sichtbar -- nur Avatar links,
-        Settings + Teilen rechts. My Taste ist zurück im Funnel (ForMeHero),
-        kein Username-Text hier.
-      */}
-      {isOwner && (
-        <div className="fixed top-4 left-4 right-4 z-50 flex items-center justify-between gap-2">
-          <span className="flex items-center gap-2 shrink-0">
-            <ProfileAvatar username={profile.username} imageUrl={avatarUrl} size="sm" />
-          </span>
-          <span className="flex items-center gap-2 shrink-0">
-            <Link
-              href="/settings"
-              aria-label="Einstellungen"
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-background/80 backdrop-blur shadow-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Settings className="size-5" />
-            </Link>
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-background/80 backdrop-blur shadow-sm">
-              <ShareListButton
-                shareTitle={`Schau dir ${profile.username}s Filmgeschmack an`}
-                url={profileUrl}
-                iconOnly
-              />
-            </span>
-          </span>
-        </div>
-      )}
       <div className="flex-1 w-full flex flex-col items-center gap-4 max-w-2xl p-5 pt-6">
+        {/*
+          Scrollt normal mit dem restlichen Content -- nicht mehr sticky/
+          fixed. Nur Avatar links, Settings + Teilen rechts. My Taste ist im
+          Funnel (ForMeHero), kein Username-Text hier.
+        */}
+        {isOwner && (
+          <div className="w-full flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2 shrink-0">
+              <ProfileAvatar username={profile.username} imageUrl={avatarUrl} size="sm" />
+            </span>
+            <span className="flex items-center gap-2 shrink-0">
+              <Link
+                href="/settings"
+                aria-label="Einstellungen"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-background/80 shadow-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Settings className="size-5" />
+              </Link>
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-background/80 shadow-sm">
+                <ShareListButton
+                  shareTitle={`Schau dir ${profile.username}s Filmgeschmack an`}
+                  url={profileUrl}
+                  iconOnly
+                />
+              </span>
+            </span>
+          </div>
+        )}
         {/*
           Eigenansicht/Fremdansicht-Weiche: in der Eigenansicht ersetzt "For
           Me" den Avatar komplett (gleiche Position/Dominanz wie zuvor das
