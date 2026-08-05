@@ -126,7 +126,13 @@ export function ForMeHero({
       </Link>
       <div className="h-3 w-px bg-border" aria-hidden="true" />
 
-      {/* Metriken-Audit, Punkt A: ownCount ist item_interactions-basiert (Bewertungsaktivität), nie eine recommendations-Zeile -- "Empfehlung" ist dafür das falsche Wort. */}
+      {/*
+        ownCount ist jetzt die gesamte aktive Erfassungssumme (geswiped,
+        eingetragen, importiert, über Inspiration/Suche hinzugefügt --
+        siehe app/u/[username]/page.tsx's totalActivityCount), nicht mehr
+        nur item_interactions. Nie eine recommendations-Zeile im engeren
+        Sinne -- "Empfehlung" bleibt dafür das falsche Wort.
+      */}
       <span className="font-medium text-green-600 text-[11px] whitespace-nowrap">
         {forMe.ownCount} Bewertungen von dir
       </span>
@@ -177,9 +183,15 @@ export function ForMeHero({
       </Link>
 
       <span className="text-sm font-semibold">{username}</span>
-      <span className="font-medium text-blue-600 text-[11px] whitespace-nowrap">
-        {forMe.friendCount} Empfehlungen von Freunden
-      </span>
+
+      {/*
+        Keine zweite, sichtbare "Empfehlungen von Freunden"-Zahl mehr --
+        Freundes-Empfehlungen fließen weiterhin in forMe.combinedCount (Ring-
+        Füllung/Unlock-Schwelle) ein, werden aber nicht mehr als eigene Zeile
+        im Profil dargestellt. Das Profil zeigt nur noch eine Gesamtzahl
+        ("Bewertungen von dir"), Empfehlungen bleiben zentral über den For-Me-
+        Ring selbst sichtbar.
+      */}
 
       {/*
         Zweiter Zufluss, gleiche Technik wie der My-Taste-Connector oben --

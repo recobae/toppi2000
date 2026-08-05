@@ -61,13 +61,14 @@ export async function getTopfContributorIds(
 }
 
 /**
- * Resolves everything the "For Me" tile needs: own rating count, distinct
+ * Resolves everything the "For Me" tile needs: own total-activity count
+ * (every active capture -- swiped, entered, imported, added via Inspiration
+ * or search; see app/u/[username]/page.tsx's totalActivityCount), distinct
  * friend-contribution count to the viewer's own Topf, the (lazily rolled,
  * then persisted) unlock threshold, and a couple of real recent Topf
  * thumbnails to blur behind the tile while locked. `ownCount` is passed in
- * rather than recomputed here since app/u/[username]/page.tsx already
- * fetches movie+place interaction counts for ProgressBadges -- no reason to
- * query item_interactions a second time for the same numbers.
+ * rather than recomputed here since the caller already has to gather all the
+ * underlying per-table counts for its own profile-page rendering anyway.
  */
 export async function getForMeStatus(
   supabase: SupabaseClient,

@@ -16,7 +16,6 @@ import { ShareListButton } from "@/components/lists/share-list-button";
 import { TasteMatchExpandable } from "@/components/profile/taste-match-expandable";
 import { ThanksStat } from "@/components/profile/progress-badges";
 import { getForMeStatus, getTopfContributorIds, type ForMeStatus } from "@/lib/for-me";
-import { countRecommendationsGivenTo } from "@/lib/topf";
 import { FollowingBar } from "@/components/profile/following-bar";
 import { MOVIE_LIST_LABEL, VISIBLE_SAVED_CATEGORIES, movieListHref } from "@/lib/categories";
 import {
@@ -230,6 +229,8 @@ export default async function ProfilePage({
     { count: followerCount },
     { data: existingFollowRow },
     { count: thanksGivenCount },
+    { count: dontWatchCount },
+    { count: topfEntryCount },
   ] = await Promise.all([
     checkHasActiveStory(supabase, profile.id),
     (async () => {
@@ -260,23 +261,45 @@ export default async function ProfilePage({
       .from("recommendation_thanks")
       .select("id", { count: "exact", head: true })
       .eq("thanked_by_user_id", profile.id),
+    // The two active-capture sources not already fetched elsewhere on this
+    // page for totalActivityCount below -- top_list/watchlist counts come
+    // from previewByCategory above, item_interactions from
+    // ownInteractionRows, places from allRegions.
+    supabase
+      .from("dont_watch")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", profile.id),
+    supabase
+      .from("recommendations")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", profile.id)
+      .eq("status", "active"),
   ]);
 
-  const movieInteractionCount = ownInteractionRows.filter((row) => row.media_type !== "place").length;
-  const placeInteractionCount = ownInteractionRows.filter((row) => row.media_type === "place").length;
+  // Einheitlicher Aktivitäts-Counter (nur noch "Bewertungen", keine separate
+  // Empfehlungen-Zahl im Profil): Summe aller aktiven Erfassungsarten --
+  // geswiped/importiert/über Inspiration bzw. Suche hinzugefügt landen alle
+  // in top_list/watchlist/dont_watch, unabhängig bewertete Items in
+  // item_interactions, Orte in places, Mein-Topf-Einträge in recommendations.
+  // Bewusst eine addierte Summe über die Erfassungs-Quellen, kein
+  // distinktes Set über Item-Identitäten hinweg (die Tabellen nutzen
+  // unterschiedliche Identitätsschemata: TMDB-item_id+media_type für Filme,
+  // place_id für Orte, category_key+external_id für Mein-Topf) -- "Summe"
+  // war explizit die Anforderung, kein Dedupe.
+  const totalPlacesCount = allRegions.reduce((sum, region) => sum + region.itemCount, 0);
+  const totalActivityCount =
+    ownInteractionRows.length +
+    (topListPreview?.itemCount ?? 0) +
+    (watchlistPreview?.itemCount ?? 0) +
+    (dontWatchCount ?? 0) +
+    totalPlacesCount +
+    (topfEntryCount ?? 0);
 
   // Only ever needed for the owner's own FollowingBar tile -- a foreign
   // profile visit never renders it, so skip the extra queries entirely.
   const forMe: ForMeStatus | null = isOwner
-    ? await getForMeStatus(supabase, profile.id, movieInteractionCount + placeInteractionCount)
+    ? await getForMeStatus(supabase, profile.id, totalActivityCount)
     : null;
-
-  // "[Username] hat N Empfehlungen für dich" (Punkt 6) -- reuses the same
-  // recommendation_recommenders attribution the Sparkles contributor badge
-  // is built from, not the unrelated Taste-Match %/use-social-proof (those
-  // measure general rating similarity, not Mein-Topf attribution).
-  const recommendationsForViewer =
-    !isOwner && viewer ? await countRecommendationsGivenTo(supabase, profile.id, viewer.id) : 0;
 
   type FollowingProfile = {
     id: string;
@@ -523,24 +546,16 @@ export default async function ProfilePage({
         <ThanksStat count={thanksGivenCount ?? 0} />
 
         {/*
-          Metriken-Audit, Punkt B: zwei getrennte Zeilen statt einer
-          verketteten -- "Bewertung" (item_interactions, movieInteraction-
-          Count+placeInteractionCount, dieselbe Quelle wie forMe.ownCount auf
-          der eigenen Ansicht) und "Empfehlung" (recommendations-Tabelle via
-          countRecommendationsGivenTo) sind zwei unterschiedliche Datenmodelle
-          und dürfen nicht mehr im selben Satz unter demselben Wort stehen.
+          Nur noch eine Gesamtzahl im Profil, gleicher Stil für Eigen- und
+          Fremdansicht -- die frühere zweite "davon N für dich"-Zeile
+          (Mein-Topf-Attribution) ist entfernt, Empfehlungen bleiben
+          ausschließlich über For Me sichtbar (Ring/Unlock), nicht als
+          eigene Zahl hier im Profil.
         */}
         {!isOwner && (
           <p className="text-sm font-medium text-center">
-            {movieInteractionCount + placeInteractionCount}{" "}
-            {movieInteractionCount + placeInteractionCount === 1 ? "Bewertung" : "Bewertungen"} von{" "}
+            {totalActivityCount} {totalActivityCount === 1 ? "Bewertung" : "Bewertungen"} von{" "}
             {profile.username}
-          </p>
-        )}
-        {!isOwner && recommendationsForViewer > 0 && (
-          <p className="text-sm text-center text-muted-foreground">
-            davon {recommendationsForViewer}{" "}
-            {recommendationsForViewer === 1 ? "Empfehlung" : "Empfehlungen"} für dich
           </p>
         )}
 
