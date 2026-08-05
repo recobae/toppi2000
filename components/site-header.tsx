@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
+import { getProfileAvatarImageUrl } from "@/lib/saved-items";
 
 export function SiteHeader() {
   const pathname = usePathname();
@@ -28,14 +29,7 @@ export function SiteHeader() {
       if (!profile?.username) return;
       setUsername(profile.username);
 
-      const { data: firstItem } = await supabase
-        .from("top_list")
-        .select("image_url")
-        .eq("user_id", user.id)
-        .order("position", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      setAvatarUrl(firstItem?.image_url ?? null);
+      setAvatarUrl(await getProfileAvatarImageUrl(supabase, user.id));
     })();
   }, []);
 

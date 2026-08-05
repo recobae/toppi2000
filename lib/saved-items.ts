@@ -90,6 +90,34 @@ export async function setFavorite(
     .eq("media_type", mediaType);
 }
 
+/**
+ * The single source of truth for "this user's profile picture": their
+ * top_list favorite (star), newest-favorited first, falling back to their
+ * newest top_list entry if nothing is starred yet. Same ordering
+ * app/u/[username]/page.tsx already uses for its own-profile header/For-Me
+ * avatar and every foreign profile's hero avatar -- SiteHeader (the small
+ * "back to my profile" icon shown on every other page) used to run its own
+ * plain `order("position")` query here instead, which picked a different,
+ * un-starred item than the profile page itself as soon as position and
+ * favorite-order diverged. Both call sites now read through this one
+ * function so there is exactly one place that decides "which picture".
+ */
+export async function getProfileAvatarImageUrl(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("top_list")
+    .select("image_url")
+    .eq("user_id", userId)
+    .order("is_favorite", { ascending: false })
+    .order("favorited_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.image_url ?? null;
+}
+
 export async function removeFromCategory(
   supabase: SupabaseClient,
   category: SavedCategory,
