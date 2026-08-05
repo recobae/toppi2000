@@ -69,11 +69,11 @@ export default async function TopfCategoryPage({
   return (
     <main className="min-h-screen flex flex-col items-center">
       <div className="flex-1 w-full flex flex-col gap-5 max-w-2xl p-5 pt-8">
-        <div className="w-full flex flex-col gap-1">
+        <div className="w-full flex flex-col gap-2">
           <Link href="/topf" className="text-sm text-muted-foreground hover:underline w-fit">
             ← Mein Topf
           </Link>
-          <h1 className="text-lg font-semibold flex items-center gap-2">
+          <h1 className="w-full text-center text-lg font-semibold flex items-center justify-center gap-2">
             <category.icon className="size-5" />
             {category.label}
           </h1>

@@ -1,65 +1,28 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
-import { LAST_VISITED_PROFILE_KEY } from "@/components/profile/track-last-visited";
+import { ArrowLeft } from "lucide-react";
 
-export function BackToProfileLink({
-  className,
-}: {
-  className?: string;
-}) {
-  const [href, setHref] = useState<string | null>(null);
-
-  useEffect(() => {
-    const supabase = createClient();
-
-    (async () => {
-      // Always resolve the actual signed-in user first -- localStorage is
-      // not scoped per account, so a value written by a previous session
-      // (a different account, or a guest browsing before logging in) must
-      // never be trusted on its own.
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("username")
-        .eq("id", user.id)
-        .maybeSingle();
-      const ownUsername = profile?.username ?? null;
-      if (!ownUsername) return;
-
-      let lastVisitedUsername: string | null = null;
-      try {
-        lastVisitedUsername = localStorage.getItem(LAST_VISITED_PROFILE_KEY);
-      } catch {
-        // localStorage unavailable; fall back to the own-profile link below
-      }
-
-      // Only a genuinely different, foreign profile is worth a shortcut back
-      // to "the profile I was just looking at" -- otherwise this is just the
-      // own-profile link.
-      const target =
-        lastVisitedUsername && lastVisitedUsername !== ownUsername
-          ? lastVisitedUsername
-          : ownUsername;
-
-      setHref(`/u/${target}`);
-    })();
-  }, []);
-
-  if (!href) return null;
-
+/**
+ * Global back-navigation rule (no client state, no localStorage): every
+ * list/activity page that belongs to a specific profile already has that
+ * profile's username as a route param or a server-fetched value -- so the
+ * back link is always exactly that username, passed in directly. A foreign
+ * list's back link goes to the foreign profile it belongs to (Regel A),
+ * never straight to the viewer's own profile (Regel C) -- getting from a
+ * foreign list to your own profile takes two steps: this link to the
+ * visited profile, then that profile's own SiteHeader avatar (Regel B).
+ * This replaced a resolver that deliberately always pointed at the
+ * viewer's own profile, and a localStorage "last visited" tracker that
+ * could point at neither.
+ */
+export function BackToProfileLink({ username }: { username: string }) {
   return (
     <Link
-      href={href}
-      className={className ?? "text-sm text-muted-foreground hover:underline w-fit"}
+      href={`/u/${username}`}
+      aria-label={`Zurück zu ${username}`}
+      className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors w-fit"
     >
-      ← Zum Profil
+      <ArrowLeft className="size-4" />
+      Zum Profil
     </Link>
   );
 }

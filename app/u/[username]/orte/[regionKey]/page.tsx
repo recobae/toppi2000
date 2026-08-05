@@ -1,12 +1,11 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { RegionItemsGrid } from "@/components/orte/region-items-grid";
 import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
+import { BackToProfileLink } from "@/components/profile/back-to-profile-link";
 import { getOwnInteractionRows } from "@/lib/taste-match";
 import type { OwnInteractionEntry } from "@/lib/hooks/use-own-interactions";
-import { resolveBackToOwnProfileUsername } from "@/lib/profile-link";
 
 export async function generateMetadata({
   params,
@@ -79,24 +78,12 @@ export default async function RegionListPage({
       interactionType: row.interaction_type,
     }));
   }
-  const backToProfileUsername = await resolveBackToOwnProfileUsername(
-    supabase,
-    viewer,
-    isOwner,
-    profile.username,
-  );
-
   return (
     <main className="min-h-screen flex flex-col items-center">
       <div className="flex-1 w-full flex flex-col gap-6 max-w-5xl p-5">
-        <div className="flex flex-col gap-1 pt-8">
-          <Link
-            href={`/u/${backToProfileUsername}`}
-            className="text-sm text-muted-foreground hover:underline w-fit"
-          >
-            ← Zum Profil
-          </Link>
-          <h1 className="font-medium text-xl">{region.region_name}</h1>
+        <div className="flex flex-col gap-2 pt-8">
+          <BackToProfileLink username={profile.username} />
+          <h1 className="w-full text-center font-medium text-xl">{region.region_name}</h1>
         </div>
         <RegionItemsGrid
           username={profile.username}

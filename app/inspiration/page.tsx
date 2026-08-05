@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
-import { BackToProfileLink } from "@/components/profile/back-to-profile-link";
 import { SwipeInspirationSwitch } from "@/components/swipe/mode-switch";
 import { MoviesInspirationTab } from "@/components/inspiration/movies-inspiration-tab";
 import { OrteInspirationTab } from "@/components/inspiration/orte-inspiration-tab";
@@ -80,7 +79,6 @@ export default function InspirationPage() {
       {/* No page heading per spec -- straight into the tabs. */}
       <div className="flex-1 w-full flex flex-col items-center gap-4 max-w-5xl p-5 pt-8">
         <div className="w-full flex flex-col gap-2">
-          <BackToProfileLink />
           <SwipeInspirationSwitch active="inspiration" />
           <div className="w-full flex items-center gap-1.5 border-b">
             {TABS.map((tab) => {

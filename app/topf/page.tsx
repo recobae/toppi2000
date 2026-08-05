@@ -43,8 +43,8 @@ export default async function TopfPage() {
     <main className="min-h-screen flex flex-col items-center">
       <div className="flex-1 w-full flex flex-col gap-5 max-w-2xl p-5 pt-8">
         <div className="w-full flex flex-col gap-2">
-          <BackToProfileLink />
-          <h1 className="text-lg font-semibold">Mein Topf</h1>
+          <BackToProfileLink username={profile.username} />
+          <h1 className="w-full text-center text-lg font-semibold">Mein Topf</h1>
         </div>
 
         <TopfActions userId={user.id} />
