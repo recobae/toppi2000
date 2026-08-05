@@ -505,6 +505,23 @@ export default async function ProfilePage({
             <h1 className="text-xl font-semibold text-center truncate">
               {profile.username}
             </h1>
+            {/*
+              Kompaktes Entfolgen-Icon direkt neben dem Namen (Punkt 5) --
+              FollowButton rendert bei isFollowing bereits genau das (ein
+              "..."-Icon mit Bestätigungsdialog), hier nur an anderer
+              Stelle platziert statt neu gebaut. Serverseitig bekannter
+              Ausgangszustand entscheidet die Position, nicht Client-State
+              -- nach einem Unfollow lädt router.refresh() die Seite neu
+              und der Button wandert dann konsistent zur unteren "Inspirierend"-CTA.
+            */}
+            {!isGuest && existingFollowRow && (
+              <FollowButton
+                targetUserId={profile.id}
+                targetUsername={profile.username}
+                initialIsLoggedIn
+                initialIsFollowing
+              />
+            )}
           </div>
         )}
 
@@ -529,12 +546,12 @@ export default async function ProfilePage({
 
         <ThanksStat count={thanksGivenCount ?? 0} />
 
-        {!isOwner && !isGuest && (
+        {!isOwner && !isGuest && !existingFollowRow && (
           <FollowButton
             targetUserId={profile.id}
             targetUsername={profile.username}
             initialIsLoggedIn
-            initialIsFollowing={!!existingFollowRow}
+            initialIsFollowing={false}
           />
         )}
         {isGuest && <GuestProfileCta variant="button" />}
