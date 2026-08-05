@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { sendFollowerNotificationEmail } from "@/lib/email";
+import { createNotification } from "@/lib/notifications";
 
 const UNIQUE_VIOLATION_CODE = "23505";
 
@@ -48,6 +49,8 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
+
+  await createNotification(supabase, { userId: followedId, actorId: user.id, type: "follow" });
 
   // TODO: E-Mail-Versand pausiert, bis RESEND_API_KEY gesetzt ist.
   // Der Follow-Eintrag oben ist zu diesem Zeitpunkt bereits erfolgreich

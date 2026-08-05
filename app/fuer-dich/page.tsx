@@ -8,6 +8,7 @@ import { QuestionPrompts } from "@/components/discovery/question-prompts";
 import { getDiscoverySections, getNetworkRegionPrompts } from "@/lib/discovery";
 import { buildQuestionPrompts } from "@/lib/question-prompts";
 import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 export const metadata: Metadata = { title: "Für Dich" };
 
@@ -42,7 +43,10 @@ export default async function FuerDichPage() {
     <main className="min-h-screen flex flex-col items-center">
       <div className="flex-1 w-full flex flex-col gap-6 max-w-2xl p-5 pt-6">
         {/* Kein erklärender Untertext -- die Karten selbst (frisch, sozial, mit Begründung) machen sofort klar, worum es hier geht. */}
-        <h1 className="text-lg font-semibold">Für Dich</h1>
+        <div className="w-full flex items-center justify-between">
+          <h1 className="text-lg font-semibold">Für Dich</h1>
+          <NotificationBell userId={user.id} />
+        </div>
 
         <DiscoveryStream userId={user.id} />
 

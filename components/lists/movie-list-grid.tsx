@@ -166,7 +166,7 @@ function FilterBar({
 function AddItemRow() {
   return (
     <Link
-      href="/inspiration"
+      href="/my-taste/hinzufuegen"
       className="flex items-center justify-center gap-2 h-14 w-full rounded-lg border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
     >
       <Plus className="size-5" />

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Plus, ListChecks } from "lucide-react";
+import { Plus, ListChecks, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getListOverviewData } from "@/lib/list-overview";
 import { ListOverviewSection } from "@/components/profile/list-overview-section";
@@ -56,7 +56,16 @@ export default async function MyTastePage() {
   return (
     <main className="min-h-screen flex flex-col items-center">
       <div className="flex-1 w-full flex flex-col gap-5 max-w-2xl p-5 pt-6">
-        <h1 className="text-lg font-semibold">My Taste</h1>
+        <div className="w-full flex items-center justify-between">
+          <h1 className="text-lg font-semibold">My Taste</h1>
+          <Link
+            href="/my-taste/hinzufuegen"
+            aria-label="Hinzufügen"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          >
+            <Search className="size-5" />
+          </Link>
+        </div>
 
         <div className="w-full flex flex-col items-center gap-2 rounded-lg border p-4">
           <Link

@@ -3,7 +3,19 @@ import { recordInteraction } from "@/lib/interactions";
 import { saveToCategory } from "@/lib/saved-items";
 import { savePlaceToRegion } from "@/lib/place-items";
 import { saveRecommendation } from "@/lib/topf";
+import { createNotification } from "@/lib/notifications";
 import type { DiscoveryCandidate } from "@/lib/discovery";
+
+/** The reciprocity moment the core loop depends on: whoever originally shared this finds out it landed. */
+async function notifySource(supabase: SupabaseClient, userId: string, candidate: DiscoveryCandidate) {
+  if (!candidate.sourceUserId) return;
+  await createNotification(supabase, {
+    userId: candidate.sourceUserId,
+    actorId: userId,
+    type: "adopted",
+    title: candidate.title,
+  });
+}
 
 /**
  * "Like = direkt auf die eigene Liste" -- one tap both records the taste
@@ -44,6 +56,7 @@ export async function likeAndSaveCandidate(
           candidate.sourceUserId ?? undefined,
         ),
       ]);
+      await notifySource(supabase, userId, candidate);
       return;
     }
     case "place": {
@@ -73,6 +86,7 @@ export async function likeAndSaveCandidate(
           candidate.sourceUserId ?? undefined,
         ),
       ]);
+      await notifySource(supabase, userId, candidate);
       return;
     }
     case "topf": {
@@ -88,6 +102,7 @@ export async function likeAndSaveCandidate(
         metadata: candidate.ref.recommendationMetadata ?? null,
         recommenderUserId: candidate.sourceUserId ?? userId,
       });
+      await notifySource(supabase, userId, candidate);
       return;
     }
   }

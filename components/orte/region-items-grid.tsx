@@ -207,7 +207,7 @@ function RegionNoteRow({
 function AddPlaceRow() {
   return (
     <Link
-      href="/inspiration?tab=orte"
+      href="/my-taste/hinzufuegen?tab=orte"
       className="flex items-center justify-center gap-2 h-14 w-full rounded-lg border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
     >
       <Plus className="size-5" />
@@ -774,7 +774,7 @@ function VisitorRegionList({
       {showGuestPrompt && (
         <GuestSignupModal
           message="Melde dich an, um Orte zu deinen eigenen Listen hinzuzufügen."
-          next="/inspiration?tab=orte"
+          next="/my-taste/hinzufuegen?tab=orte"
           onClose={() => setShowGuestPrompt(false)}
         />
       )}

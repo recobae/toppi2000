@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 
-// /vorschlag was replaced by /inspiration (search + inspo merged). Keep
-// this as a redirect rather than deleting the route outright, so old
-// links/bookmarks still land somewhere useful.
+// /vorschlag was replaced by /inspiration, later removed in favor of the
+// "Für Dich" discovery stream (Master-Audit consolidation). Kept as a
+// redirect rather than deleted outright, so old links/bookmarks still land
+// somewhere useful.
 export default function VorschlagRedirect() {
-  redirect("/inspiration");
+  redirect("/fuer-dich");
 }

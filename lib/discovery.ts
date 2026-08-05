@@ -1,7 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getExcludedMovieKeys, getExcludedPlaceIds } from "@/lib/exclusions";
 import { getRecommendationCategory } from "@/lib/recommendation-categories";
-import { getCityPlaceRecommendations, getGenreProfileMovieRecommendations } from "@/lib/recommendations";
+import {
+  getCityPlaceRecommendations,
+  getGenreProfileMovieRecommendations,
+  getTrendingMovies,
+} from "@/lib/recommendations";
 import { PLACE_CATEGORY_LABELS, isPlaceCategory, type PlaceCategory } from "@/lib/places";
 import type { PlaceSearchResult } from "@/lib/google-places";
 import type { SourceType } from "@/lib/topf";
@@ -685,6 +689,36 @@ async function buildExplorationFallback(
           regionName: params.homeCity ?? undefined,
           placeCategory: place.category,
         },
+      });
+    }
+  }
+
+  // True cold start (no rating history to infer a genre profile from, no
+  // home_city set): global trending is the last resort so a brand-new
+  // signup's first "Für Dich" visit is never a dead, empty page.
+  if (results.length < params.need && params.tmdbApiKey) {
+    const trending = await getTrendingMovies(supabase, userId, params.tmdbApiKey, params.need - results.length);
+    for (const item of trending) {
+      const id = `movie-${item.mediaType}-${item.id}`;
+      if (params.excludeIds.has(id) || params.alreadyIncludedIds.has(id) || results.some((r) => r.id === id)) continue;
+      results.push({
+        id,
+        title: item.title,
+        category: item.mediaType === "tv" ? "Serie" : "Film",
+        location: null,
+        imageUrl: item.posterPath ? `https://image.tmdb.org/t/p/w500${item.posterPath}` : null,
+        sourceType: item.mediaType,
+        sourceUserId: null,
+        sourceUsernames: [],
+        note: null,
+        rating: item.movieDetails.voteAverage,
+        socialSupportCount: 0,
+        personalSupportCount: 0,
+        lastActivityAt: new Date().toISOString(),
+        promptMatchScore: 0.2,
+        finalScore: 0,
+        reason: "Gerade im Trend",
+        ref: { mediaType: item.mediaType, tmdbId: item.id },
       });
     }
   }

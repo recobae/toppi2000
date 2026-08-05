@@ -133,6 +133,35 @@ export async function getGenreProfileMovieRecommendations(
   }
 }
 
+/**
+ * Absolute last-resort fallback for a genuinely cold account: no rating
+ * history to infer a genre profile from, no followed friends, nothing.
+ * Global TMDB trending, filtered against whatever the viewer has already
+ * decided on -- same source /api/trending already exposes standalone, just
+ * reusable directly from the discovery engine's exploration tier so a
+ * brand-new signup's "Für Dich" is never a dead, empty page.
+ */
+export async function getTrendingMovies(
+  supabase: SupabaseClient,
+  userId: string,
+  apiKey: string,
+  limit = 10,
+): Promise<SearchResult[]> {
+  const [excludedKeys, response] = await Promise.all([
+    getExcludedMovieKeys(supabase, userId),
+    fetch(`${TMDB_BASE_URL}/trending/all/week?api_key=${apiKey}`, {
+      headers: { Accept: "application/json" },
+    }),
+  ]);
+  if (!response.ok) return [];
+
+  const data: { results: TmdbTitleLike[] } = await response.json();
+  const filtered = data.results
+    .filter((item) => !excludedKeys.has(`${item.media_type}-${item.id}`))
+    .slice(0, limit);
+  return buildSearchResults(filtered, apiKey);
+}
+
 export type CityPlaceRecommendations = {
   fromFriends: { place: PlaceSearchResult; recommendedBy: string[] }[];
   generic: PlaceSearchResult[];
