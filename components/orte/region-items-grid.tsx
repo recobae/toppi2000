@@ -34,7 +34,7 @@ import type { OpeningStatus } from "@/lib/opening-hours";
 import type { CityPlaceRecommendations } from "@/lib/recommendations";
 import type { PlaceSearchResult } from "@/lib/google-places";
 
-type ViewMode = "list" | "map";
+export type ViewMode = "list" | "map";
 
 export type RegionPlaceItem = {
   id: string;
@@ -126,8 +126,8 @@ function CategoryFilter({
   );
 }
 
-/** Listenansicht/Karten-Umschalter -- direkt neben den Kategorie-Chips, keine eigene Zeile. */
-function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (mode: ViewMode) => void }) {
+/** Listenansicht/Karten-Umschalter -- lebt jetzt im kompakten Seiten-Header (RegionPageShell), nicht mehr neben den Kategorie-Chips. */
+export function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (mode: ViewMode) => void }) {
   return (
     <div className="shrink-0 flex items-center rounded-full border border-input p-0.5">
       <button
@@ -398,12 +398,15 @@ function OwnerRegionList({
   regionId,
   regionName,
   initialGeneralNote,
+  viewMode,
 }: {
   initialItems: RegionPlaceItem[];
   userId: string;
   regionId: string;
   regionName: string;
   initialGeneralNote: string | null;
+  /** Owned by RegionPageShell (the page header), not this component -- the toggle itself now lives in the compact header row. */
+  viewMode: ViewMode;
 }) {
   const [items, setItems] = useState(initialItems);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -411,7 +414,6 @@ function OwnerRegionList({
   const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [showNoteModalFor, setShowNoteModalFor] = useState<RegionPlaceItem | null>(null);
   const [showDetailsFor, setShowDetailsFor] = useState<RegionPlaceItem | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [generalNote, setGeneralNote] = useState(initialGeneralNote);
   const [showRegionNoteModal, setShowRegionNoteModal] = useState(false);
 
@@ -474,19 +476,14 @@ function OwnerRegionList({
 
   return (
     <div className="w-full flex flex-col gap-3">
-      <div className="w-full flex items-center gap-2">
-        <div className="flex-1 min-w-0">
-          <CategoryFilter
-            active={activeCategory}
-            onChange={setActiveCategory}
-            availableCategories={availableCategories}
-            showSavedFilter={items.some((item) => item.status === "want_to_visit")}
-            savedActive={showSavedOnly}
-            onToggleSaved={() => setShowSavedOnly((prev) => !prev)}
-          />
-        </div>
-        <ViewToggle mode={viewMode} onChange={setViewMode} />
-      </div>
+      <CategoryFilter
+        active={activeCategory}
+        onChange={setActiveCategory}
+        availableCategories={availableCategories}
+        showSavedFilter={items.some((item) => item.status === "want_to_visit")}
+        savedActive={showSavedOnly}
+        onToggleSaved={() => setShowSavedOnly((prev) => !prev)}
+      />
 
       <RegionNoteRow
         note={generalNote}
@@ -584,11 +581,14 @@ function VisitorRegionList({
   initialItems,
   ownerId,
   generalNote,
+  viewMode,
   initialOwnInteractions,
 }: {
   initialItems: RegionPlaceItem[];
   ownerId: string;
   generalNote: string | null;
+  /** Owned by RegionPageShell (the page header), not this component. */
+  viewMode: ViewMode;
   initialOwnInteractions?: OwnInteractionEntry[];
 }) {
   const items = initialItems;
@@ -600,7 +600,6 @@ function VisitorRegionList({
   const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [notePrompt, setNotePrompt] = useState<RegionPlaceItem | null>(null);
   const [showDetailsFor, setShowDetailsFor] = useState<RegionPlaceItem | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
 
   const showToast = useCallback((message: string) => {
     setToastMessage(message);
@@ -723,19 +722,14 @@ function VisitorRegionList({
           </div>
         </div>
       )}
-      <div className="w-full flex items-center gap-2">
-        <div className="flex-1 min-w-0">
-          <CategoryFilter
-            active={activeCategory}
-            onChange={setActiveCategory}
-            availableCategories={availableCategories}
-            showSavedFilter={items.some((item) => item.status === "want_to_visit")}
-            savedActive={showSavedOnly}
-            onToggleSaved={() => setShowSavedOnly((prev) => !prev)}
-          />
-        </div>
-        {items.length > 0 && <ViewToggle mode={viewMode} onChange={setViewMode} />}
-      </div>
+      <CategoryFilter
+        active={activeCategory}
+        onChange={setActiveCategory}
+        availableCategories={availableCategories}
+        showSavedFilter={items.some((item) => item.status === "want_to_visit")}
+        savedActive={showSavedOnly}
+        onToggleSaved={() => setShowSavedOnly((prev) => !prev)}
+      />
 
       <RegionNoteRow note={generalNote} isOwner={false} />
 
@@ -859,6 +853,7 @@ export function RegionItemsGrid({
   ownerId,
   currentUserId,
   initialOwnInteractions,
+  viewMode,
 }: {
   username: string;
   regionKey: string;
@@ -866,6 +861,8 @@ export function RegionItemsGrid({
   ownerId: string;
   currentUserId?: string | null;
   initialOwnInteractions?: OwnInteractionEntry[];
+  /** Owned by RegionPageShell (the page header), forwarded down to whichever list renders. */
+  viewMode: ViewMode;
 }) {
   const [items, setItems] = useState<RegionPlaceItem[] | null>(null);
   const [regionId, setRegionId] = useState<string | null>(null);
@@ -905,12 +902,14 @@ export function RegionItemsGrid({
       regionId={regionId}
       regionName={regionName}
       initialGeneralNote={generalNote}
+      viewMode={viewMode}
     />
   ) : (
     <VisitorRegionList
       initialItems={items}
       ownerId={ownerId}
       generalNote={generalNote}
+      viewMode={viewMode}
       initialOwnInteractions={initialOwnInteractions}
     />
   );

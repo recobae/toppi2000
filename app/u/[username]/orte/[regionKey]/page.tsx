@@ -1,9 +1,8 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
-import { RegionItemsGrid } from "@/components/orte/region-items-grid";
+import { RegionPageShell } from "@/components/orte/region-page-shell";
 import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
-import { BackToProfileLink } from "@/components/profile/back-to-profile-link";
 import { getOwnInteractionRows } from "@/lib/taste-match";
 import type { OwnInteractionEntry } from "@/lib/hooks/use-own-interactions";
 
@@ -81,25 +80,10 @@ export default async function RegionListPage({
   return (
     <main className="min-h-screen flex flex-col items-center">
       <div className="flex-1 w-full flex flex-col gap-4 max-w-5xl p-5">
-        {/*
-          Kompakter Kopf (Punkt 4): Back-Link und Titel in einer Zeile.
-          Titel bleibt trotzdem mathematisch zentriert -- rechts ein
-          unsichtbarer Platzhalter in gleicher Breite wie der Back-Link,
-          gleiche Technik wie der Profil-Header (Avatar/Logo/Icons).
-        */}
-        <div className="w-full grid grid-cols-[1fr_auto_1fr] items-center gap-2 pt-4">
-          <span className="justify-self-start">
-            <BackToProfileLink username={profile.username} />
-          </span>
-          <h1 className="justify-self-center text-center font-medium text-lg truncate max-w-[60vw]">
-            {region.region_name}
-          </h1>
-          <span aria-hidden="true" />
-        </div>
-        <RegionItemsGrid
-          username={profile.username}
-          regionKey={regionKey}
+        <RegionPageShell
+          profileUsername={profile.username}
           regionName={region.region_name}
+          regionKey={regionKey}
           ownerId={profile.id}
           currentUserId={viewer?.id ?? null}
           initialOwnInteractions={initialOwnInteractions}
