@@ -48,3 +48,37 @@ export async function followSystemAccount(supabase: SupabaseClient, userId: stri
   if (followError) console.error("auto-follow of system account failed", followError);
   if (followBackError) console.error("system account auto-follow-back failed", followBackError);
 }
+
+/**
+ * TESTPHASE ONLY (see lib/feature-flags.ts's TEST_PHASE_AUTO_FOLLOW_ALL_ENABLED
+ * for the production-launch TODO): bidirectionally follows -- and is
+ * followed back by -- every other existing profile, run once at signup
+ * alongside followSystemAccount. Same fire-and-forget error handling: a
+ * partial failure here must never block the user from reaching their new
+ * profile.
+ */
+export async function autoFollowAllExistingProfiles(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<void> {
+  const { data: otherProfiles, error } = await supabase
+    .from("profiles")
+    .select("id")
+    .neq("id", userId);
+
+  if (error) {
+    console.error("test-phase auto-follow-all lookup failed", error);
+    return;
+  }
+  if (!otherProfiles || otherProfiles.length === 0) return;
+
+  const results = await Promise.all(
+    otherProfiles.flatMap((other) => [
+      insertFollow(supabase, userId, other.id),
+      insertFollow(supabase, other.id, userId),
+    ]),
+  );
+
+  const firstError = results.find((result) => result !== null);
+  if (firstError) console.error("test-phase auto-follow-all failed for one or more pairs", firstError);
+}

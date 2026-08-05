@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { suggestUsernameFromEmail, withRandomSuffix } from "@/lib/username";
-import { followSystemAccount } from "@/lib/system-profile";
+import { followSystemAccount, autoFollowAllExistingProfiles } from "@/lib/system-profile";
+import { TEST_PHASE_AUTO_FOLLOW_ALL_ENABLED } from "@/lib/feature-flags";
 
 export const DEFAULT_POST_AUTH_PATH = "/search";
 export const ONBOARDING_PATH = "/onboarding";
@@ -77,9 +78,11 @@ export async function resolvePostAuthPath(
  * more specific (e.g. a shared list they signed up from).
  *
  * On a genuinely brand-new (non-system) profile, this is also the one-time
- * hook for the two signup side effects: auto-following the curated content
- * system account, and routing through /onboarding instead of straight into
- * the deck. `onboarding_completed` itself is only flipped by the onboarding
+ * hook for the signup side effects: auto-following the curated content
+ * system account, the testphase auto-follow-all-existing-profiles bypass
+ * (feature-flagged, see TEST_PHASE_AUTO_FOLLOW_ALL_ENABLED), and routing
+ * through /onboarding instead of straight into the deck. `onboarding_completed`
+ * itself is only flipped by the onboarding
  * page once the user actually reaches it (see app/onboarding/page.tsx) --
  * this function only decides where to send them.
  */
@@ -100,6 +103,11 @@ export async function resolveSignupRedirectPath(
 
     if (profile && !profile.is_system_account) {
       await followSystemAccount(supabase, userId);
+      // TESTPHASE ONLY -- see TEST_PHASE_AUTO_FOLLOW_ALL_ENABLED's doc
+      // comment. Must be gated off before production launch.
+      if (TEST_PHASE_AUTO_FOLLOW_ALL_ENABLED) {
+        await autoFollowAllExistingProfiles(supabase, userId);
+      }
       if (!profile.onboarding_completed) {
         return ONBOARDING_PATH;
       }
