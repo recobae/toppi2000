@@ -97,7 +97,12 @@ export function PlaceMapView({
   return (
     <div
       ref={containerRef}
-      className="w-full h-[60vh] min-h-[320px] rounded-lg overflow-hidden border"
+      // isolate: Leaflet's internal panes/popups use z-index values up to
+      // ~700, which -- without a stacking context boundary here -- could
+      // render above unrelated fixed-position siblings like
+      // PlaceDetailModal (z-50). isolate contains them regardless of their
+      // absolute z-index number, so the modal always wins.
+      className="isolate w-full h-[60vh] min-h-[320px] rounded-lg overflow-hidden border"
       role="application"
       aria-label="Kartenansicht der Orte"
     />
