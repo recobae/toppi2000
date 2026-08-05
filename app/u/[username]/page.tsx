@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Heart, ListChecks, MapPin, Repeat2, Settings, Star } from "lucide-react";
+import { ListChecks, MapPin, Settings, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ForeignProfileHero } from "@/components/profile/foreign-profile-hero";
 import { ForMeHero } from "@/components/profile/for-me-hero";
@@ -34,10 +34,6 @@ import {
   bestTasteMatchPercentage,
   getOwnInteractionRows,
 } from "@/lib/taste-match";
-
-// "X Likes"/"X mal inspiriert" are replaced by Taste Match below -- kept
-// computed (not deleted) in case they come back, just not rendered.
-const SHOW_LEGACY_LIKE_STATS = false;
 
 async function getProfileUrl(username: string): Promise<string> {
   const headersList = await headers();
@@ -229,25 +225,12 @@ export default async function ProfilePage({
   // profile.id that a separate count-only query and computeTasteMatch's own
   // internal fetch would otherwise both run.
   const [
-    [{ count: likesCount }, { count: inspiredCount }],
     hasActiveStory,
     { ownInteractionRows, tasteMatch },
     { count: followerCount },
     { data: existingFollowRow },
     { count: thanksGivenCount },
   ] = await Promise.all([
-    Promise.all([
-      supabase
-        .from("interaction_credits")
-        .select("id", { count: "exact", head: true })
-        .eq("owner_user_id", profile.id)
-        .eq("credit_type", "like"),
-      supabase
-        .from("interaction_credits")
-        .select("id", { count: "exact", head: true })
-        .eq("owner_user_id", profile.id)
-        .eq("credit_type", "inspired"),
-    ]),
     checkHasActiveStory(supabase, profile.id),
     (async () => {
       const ownInteractionRows = await getOwnInteractionRows(supabase, profile.id);
@@ -532,21 +515,6 @@ export default async function ProfilePage({
             />
           </div>
         )}
-
-        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-          {SHOW_LEGACY_LIKE_STATS && (
-            <>
-              <div className="flex items-center gap-1.5">
-                <Heart className="size-4 fill-current text-red-500" />
-                <span>{likesCount ?? 0} Likes</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Repeat2 className="size-4 text-primary" />
-                <span>{inspiredCount ?? 0} mal inspiriert</span>
-              </div>
-            </>
-          )}
-        </div>
 
         {tasteMatch && (
           <TasteMatchExpandable username={profile.username} tasteMatch={tasteMatch} />
