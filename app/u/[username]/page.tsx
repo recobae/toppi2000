@@ -16,6 +16,7 @@ import { ShareListButton } from "@/components/lists/share-list-button";
 import { TasteMatchExpandable } from "@/components/profile/taste-match-expandable";
 import { ThanksStat } from "@/components/profile/progress-badges";
 import { getForMeStatus, getTopfContributorIds, type ForMeStatus } from "@/lib/for-me";
+import { countRecommendationsGivenTo } from "@/lib/topf";
 import { FollowingBar } from "@/components/profile/following-bar";
 import {
   MOVIE_LIST_LABEL,
@@ -292,6 +293,13 @@ export default async function ProfilePage({
     ? await getForMeStatus(supabase, profile.id, movieInteractionCount + placeInteractionCount)
     : null;
 
+  // "[Username] hat N Empfehlungen für dich" (Punkt 6) -- reuses the same
+  // recommendation_recommenders attribution the Sparkles contributor badge
+  // is built from, not the unrelated Taste-Match %/use-social-proof (those
+  // measure general rating similarity, not Mein-Topf attribution).
+  const recommendationsForViewer =
+    !isOwner && viewer ? await countRecommendationsGivenTo(supabase, profile.id, viewer.id) : 0;
+
   type FollowingProfile = {
     id: string;
     username: string;
@@ -551,6 +559,14 @@ export default async function ProfilePage({
         )}
 
         <ThanksStat count={thanksGivenCount ?? 0} />
+
+        {/* Prominent, direkt über dem Folgen/Inspirierend-Bereich (Punkt 6). */}
+        {!isOwner && recommendationsForViewer > 0 && (
+          <p className="text-sm font-medium text-center">
+            {profile.username} hat {recommendationsForViewer}{" "}
+            {recommendationsForViewer === 1 ? "Empfehlung" : "Empfehlungen"} für dich
+          </p>
+        )}
 
         {!isOwner && !isGuest && !existingFollowRow && (
           <FollowButton

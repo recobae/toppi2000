@@ -258,6 +258,34 @@ export async function getTopfOverview(supabase: SupabaseClient, userId: string):
   };
 }
 
+/**
+ * How many of the viewer's own active Topf entries were explicitly
+ * attributed to a specific other user via "Wer empfiehlt das?" -- backs
+ * the foreign-profile "[Username] hat N Empfehlungen für dich"-line.
+ * Attribution-based like contributorUserIds/getTopfContributorIds, just
+ * scoped to one recommender and answered from the recipient's side.
+ */
+export async function countRecommendationsGivenTo(
+  supabase: SupabaseClient,
+  recommenderId: string,
+  recipientId: string,
+): Promise<number> {
+  const { data: recipientRows } = await supabase
+    .from("recommendations")
+    .select("id")
+    .eq("user_id", recipientId)
+    .eq("status", "active");
+  const recipientIds = (recipientRows ?? []).map((row) => row.id);
+  if (recipientIds.length === 0) return 0;
+
+  const { count } = await supabase
+    .from("recommendation_recommenders")
+    .select("id", { count: "exact", head: true })
+    .in("recommendation_id", recipientIds)
+    .eq("recommender_user_id", recommenderId);
+  return count ?? 0;
+}
+
 /** Most recently added items across all categories, for the home screen's "Zuletzt hinzugefügt" feed. */
 export async function getRecentRecommendations(
   supabase: SupabaseClient,
