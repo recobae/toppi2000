@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { MapPin, MessageCircle, Sparkles, Star, Users } from "lucide-react";
+import { Ban, Heart, MapPin, MessageCircle, SkipForward, Sparkles, Star, Users } from "lucide-react";
 import type { DiscoveryCandidate } from "@/lib/discovery";
 
 /**
@@ -45,7 +45,7 @@ export function DiscoveryListRow({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: -60, transition: { duration: 0.2 } }}
-      className="flex gap-3 rounded-lg border p-3"
+      className="flex gap-3 rounded-xl border p-3 shadow-sm hover:shadow-md transition-shadow"
     >
         <div className="relative size-16 shrink-0 rounded-md overflow-hidden bg-muted flex items-center justify-center text-muted-foreground">
           {candidate.imageUrl ? (
@@ -91,34 +91,34 @@ export function DiscoveryListRow({
             </p>
           )}
 
-          {/* 5. Like / Dislike / Skip */}
-          <div className="flex items-center gap-2 pt-1">
+          {/* 5. Like / Dislike / Skip -- gleiche Icons/Farben wie ActionBar (components/items/list-item-row.tsx) im Rest der App. */}
+          <div className="flex items-center gap-1.5 pt-1">
+            <button
+              type="button"
+              onClick={onLike}
+              disabled={pending}
+              aria-label="Gefällt mir -- auf meine Liste"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-green-600 hover:bg-green-600/10 transition-colors disabled:opacity-50"
+            >
+              <Heart className="size-4" />
+            </button>
             <button
               type="button"
               onClick={onDislike}
               disabled={pending}
               aria-label="Nicht mein Fall"
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-red-500 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
             >
-              ✕
+              <Ban className="size-4" />
             </button>
             <button
               type="button"
               onClick={onSkip}
               disabled={pending}
               aria-label="Überspringen"
-              className="flex h-7 w-7 items-center justify-center rounded-full border border-input text-muted-foreground hover:bg-accent transition-colors disabled:opacity-50"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-muted-foreground hover:bg-accent transition-colors disabled:opacity-50"
             >
-              →
-            </button>
-            <button
-              type="button"
-              onClick={onLike}
-              disabled={pending}
-              aria-label="Gefällt mir"
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-green-500 text-green-500 hover:bg-green-50 transition-colors disabled:opacity-50"
-            >
-              ♥
+              <SkipForward className="size-4" />
             </button>
           </div>
         </div>

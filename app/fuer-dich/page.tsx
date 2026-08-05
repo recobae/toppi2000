@@ -46,8 +46,21 @@ export default async function FuerDichPage() {
 
         <DiscoveryStream userId={user.id} />
 
-        <RegionPrompts prompts={regionPrompts} />
+        <RegionPrompts prompts={regionPrompts} userId={user.id} />
         <QuestionPrompts userId={user.id} prompts={questionPrompts} />
+
+        {/*
+          Sichtbare Zäsur vor dem fortlaufenden Stream -- macht klar, dass
+          hier ein neuer, dynamischer Teil beginnt statt dass die Seite nach
+          den ersten drei Blöcken "aufhört".
+        */}
+        <div className="w-full flex items-center gap-3 pt-1" aria-hidden="true">
+          <span className="h-px flex-1 bg-border" />
+          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+            Mehr aus deinem Netzwerk
+          </span>
+          <span className="h-px flex-1 bg-border" />
+        </div>
 
         <DiscoverySection title="Gerade neu von Freunden" candidates={sections.freshFromFriends} userId={user.id} />
         <DiscoverySection title="Beliebt im Netzwerk" candidates={sections.popularInNetwork} userId={user.id} />

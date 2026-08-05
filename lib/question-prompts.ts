@@ -20,28 +20,21 @@ const TOPF_TEMPLATES: { categoryKey: string; phrase: (city: string) => string }[
 const ORTE_TEMPLATE = (city: string) => `Welcher Ort in ${city} ist wirklich empfehlenswert?`;
 
 /**
- * A handful of question cards to actively prompt the viewer into asking (or
- * answering) something, rather than just passively consuming the stream --
- * cheap social-discovery trigger, no LLM involved. Mixes the viewer's own
- * home city (if set) with a couple of curated destinations so it's never
- * empty, and mixes Mein-Topf-style questions with an Orte-style one.
+ * "Gib deinen Freunden besondere Empfehlungen" -- all question cards are
+ * deliberately anchored to the SAME city, the viewer's own home_city from
+ * Settings, so the section reads as one coherent prompt ("frag dein
+ * Netzwerk über DEINE Stadt") instead of a random assortment of cities.
+ * Falls back to a curated city only when no home_city is set at all.
  */
 export function buildQuestionPrompts(homeCity: string | null, limit = 4): QuestionPrompt[] {
-  const cities = [
-    ...(homeCity ? [homeCity] : []),
-    ...CURATED_CITY_LABELS.filter((city) => city !== homeCity).slice(0, 6),
-  ];
+  const city = homeCity ?? CURATED_CITY_LABELS[0];
 
-  const prompts: QuestionPrompt[] = [];
-  for (let i = 0; i < TOPF_TEMPLATES.length && prompts.length < limit - 1; i++) {
-    const template = TOPF_TEMPLATES[i];
-    const city = cities[i % cities.length];
-    if (!city) continue;
-    prompts.push({ kind: "topf", categoryKey: template.categoryKey, question: template.phrase(city) });
-  }
-
-  const orteCity = cities[cities.length - 1] ?? "Bali";
-  prompts.push({ kind: "orte", city: orteCity, question: ORTE_TEMPLATE(orteCity) });
+  const prompts: QuestionPrompt[] = TOPF_TEMPLATES.slice(0, limit - 1).map((template) => ({
+    kind: "topf",
+    categoryKey: template.categoryKey,
+    question: template.phrase(city),
+  }));
+  prompts.push({ kind: "orte", city, question: ORTE_TEMPLATE(city) });
 
   return prompts.slice(0, limit);
 }

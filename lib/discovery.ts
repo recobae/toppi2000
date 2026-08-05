@@ -3,6 +3,7 @@ import { getExcludedMovieKeys, getExcludedPlaceIds } from "@/lib/exclusions";
 import { getRecommendationCategory } from "@/lib/recommendation-categories";
 import { getCityPlaceRecommendations, getGenreProfileMovieRecommendations } from "@/lib/recommendations";
 import { PLACE_CATEGORY_LABELS, isPlaceCategory, type PlaceCategory } from "@/lib/places";
+import type { PlaceSearchResult } from "@/lib/google-places";
 import type { SourceType } from "@/lib/topf";
 
 export type DiscoverySourceType = "movie" | "tv" | "place" | "topf";
@@ -548,6 +549,64 @@ export async function getDiscoverySections(
   });
 
   return { freshFromFriends, popularInNetwork, related, moreFromRegion, newForYou };
+}
+
+function placeSearchResultToCandidate(place: PlaceSearchResult, city: string, recommendedBy: string[]): DiscoveryCandidate {
+  return {
+    id: `place-${place.placeId}`,
+    title: place.name,
+    category: isPlaceCategory(place.category) ? PLACE_CATEGORY_LABELS[place.category] : "Ort",
+    location: place.address,
+    imageUrl: place.photoUrl,
+    sourceType: "place",
+    sourceUserId: null,
+    sourceUsernames: recommendedBy,
+    note: null,
+    rating: place.rating,
+    socialSupportCount: recommendedBy.length,
+    personalSupportCount: 0,
+    lastActivityAt: new Date().toISOString(),
+    promptMatchScore: recommendedBy.length > 0 ? 0.8 : 0.4,
+    finalScore: 0,
+    reason:
+      recommendedBy.length === 0
+        ? `Beliebt in ${city}`
+        : recommendedBy.length === 1
+          ? `Empfohlen von ${recommendedBy[0]}`
+          : `${recommendedBy.length} Freunde empfehlen das`,
+    ref: {
+      placeId: place.placeId,
+      lat: place.lat,
+      lng: place.lng,
+      regionName: city,
+      placeCategory: place.category,
+    },
+  };
+}
+
+/**
+ * Backs the "Warst du schon mal hier?" city drill-down: clicking a city
+ * tile loads this instead of navigating away. Reuses the exact same shared
+ * engine (lib/recommendations.ts's getCityPlaceRecommendations) that
+ * already powers the Inspiration Orte tab and the suggestion strips under a
+ * user's own region lists -- one ranking algorithm for "what's good in this
+ * city", not a second one reinvented here.
+ */
+export async function getCityDiscoveryFeed(
+  supabase: SupabaseClient,
+  userId: string,
+  city: string,
+  placesApiKey: string | undefined,
+  limit = 12,
+): Promise<{ friendItems: DiscoveryCandidate[]; moreSuggestions: DiscoveryCandidate[] }> {
+  if (!placesApiKey) return { friendItems: [], moreSuggestions: [] };
+
+  const { fromFriends, generic } = await getCityPlaceRecommendations(supabase, userId, city, placesApiKey, limit);
+
+  return {
+    friendItems: fromFriends.map(({ place, recommendedBy }) => placeSearchResultToCandidate(place, city, recommendedBy)),
+    moreSuggestions: generic.map((place) => placeSearchResultToCandidate(place, city, [])),
+  };
 }
 
 async function buildExplorationFallback(
