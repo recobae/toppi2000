@@ -522,6 +522,12 @@ export default async function ProfilePage({
                 initialIsFollowing
               />
             )}
+            {/* Teilen für Besucher (Punkt 8) -- gleiche iconOnly-Variante wie in der Eigenansicht, nur auf das fremde Profil bezogen. */}
+            <ShareListButton
+              shareTitle={`Schau dir ${profile.username}s Filmgeschmack an`}
+              url={profileUrl}
+              iconOnly
+            />
           </div>
         )}
 
