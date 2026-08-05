@@ -99,18 +99,45 @@ export async function getForMeStatus(
     supabase.from("user_follows").select("followed_id").eq("follower_id", userId),
   ]);
 
-  // friendCount: sum of ALL active recommendations followed friends have of
-  // their own, regardless of explicit attribution -- deliberately a
-  // different (broader) definition than contributorUserIds above.
+  // friendCount: total ACTIVITY of followed friends, same broadened
+  // definition as the profile page's own totalActivityCount (item_
+  // interactions + top_list + watchlist + dont_watch + places +
+  // recommendations) -- summed across every followed friend, not just their
+  // Mein-Topf entries. The previous recommendations-only definition read 0
+  // for most test accounts: swiping/rating never touches the recommendations
+  // table at all (that's a separate, manually-filled "Wer empfiehlt das?"
+  // pot), so a followed friend who's been swiping heavily but never used
+  // Mein Topf still counted as 0 -- deliberately a different (broader)
+  // population than contributorUserIds above, which stays attribution-only.
   const followedIds = (followRows ?? []).map((row) => row.followed_id);
   let friendCount = 0;
   if (followedIds.length > 0) {
-    const { count } = await supabase
-      .from("recommendations")
-      .select("id", { count: "exact", head: true })
-      .in("user_id", followedIds)
-      .eq("status", "active");
-    friendCount = count ?? 0;
+    const [
+      { count: interactionsCount },
+      { count: topListCount },
+      { count: watchlistCount },
+      { count: dontWatchCount },
+      { count: placesCount },
+      { count: recommendationsCount },
+    ] = await Promise.all([
+      supabase.from("item_interactions").select("id", { count: "exact", head: true }).in("user_id", followedIds),
+      supabase.from("top_list").select("id", { count: "exact", head: true }).in("user_id", followedIds),
+      supabase.from("watchlist").select("id", { count: "exact", head: true }).in("user_id", followedIds),
+      supabase.from("dont_watch").select("id", { count: "exact", head: true }).in("user_id", followedIds),
+      supabase.from("places").select("id", { count: "exact", head: true }).in("user_id", followedIds),
+      supabase
+        .from("recommendations")
+        .select("id", { count: "exact", head: true })
+        .in("user_id", followedIds)
+        .eq("status", "active"),
+    ]);
+    friendCount =
+      (interactionsCount ?? 0) +
+      (topListCount ?? 0) +
+      (watchlistCount ?? 0) +
+      (dontWatchCount ?? 0) +
+      (placesCount ?? 0) +
+      (recommendationsCount ?? 0);
   }
 
   const previewImageUrls = (recentRows ?? [])
