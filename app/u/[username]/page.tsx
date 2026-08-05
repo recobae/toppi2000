@@ -18,18 +18,13 @@ import { ThanksStat } from "@/components/profile/progress-badges";
 import { getForMeStatus, getTopfContributorIds, type ForMeStatus } from "@/lib/for-me";
 import { countRecommendationsGivenTo } from "@/lib/topf";
 import { FollowingBar } from "@/components/profile/following-bar";
-import {
-  MOVIE_LIST_LABEL,
-  VISIBLE_SAVED_CATEGORIES,
-  movieListHref,
-  type SavedCategory,
-} from "@/lib/categories";
-import { resolveEarnedExpertiseLabels } from "@/lib/expertise";
+import { MOVIE_LIST_LABEL, VISIBLE_SAVED_CATEGORIES, movieListHref } from "@/lib/categories";
 import {
   resolveExpertiseTier,
   tierProgressLabel,
   CONTENT_TIER_THRESHOLDS,
   PLACE_TIER_THRESHOLDS,
+  type ExpertiseTier,
 } from "@/lib/expertise-tiers";
 import { hasActiveStory as checkHasActiveStory, storyWindowSince } from "@/lib/story-activity";
 import { hasUnseenSong } from "@/lib/song-activity";
@@ -304,7 +299,7 @@ export default async function ProfilePage({
     id: string;
     username: string;
     avatarUrl: string | null;
-    expertiseKeys: string[];
+    tier: ExpertiseTier;
     hasUnseenStory: boolean;
     tasteMatchBadge: number | null;
   };
@@ -402,9 +397,6 @@ export default async function ProfilePage({
       );
 
       followingProfiles = (friendProfiles ?? []).map((friend) => {
-        const itemCounts: Partial<Record<SavedCategory, number>> = {
-          top_list: topListCountByUserId.get(friend.id) ?? 0,
-        };
         const latestActivity = latestActivityByUserId.get(friend.id) ?? null;
         const viewedAt = viewedAtByUserId.get(friend.id) ?? null;
 
@@ -412,10 +404,12 @@ export default async function ProfilePage({
           id: friend.id,
           username: friend.username,
           avatarUrl: avatarByUserId.get(friend.id) ?? null,
-          expertiseKeys: resolveEarnedExpertiseLabels(
-            itemCounts,
-            friend.username,
-          ).map((entry) => entry.key),
+          // Consolidated onto the one tiered Kenner/Experte system (Metriken-
+          // Audit, Punkt E) -- the old separate minItems:1 "expertise label"
+          // badge fired for nearly every friend with a single list item and
+          // conveyed no real signal. Same threshold/table the profile page's
+          // own list rows already use.
+          tier: resolveExpertiseTier(topListCountByUserId.get(friend.id) ?? 0, CONTENT_TIER_THRESHOLDS),
           hasUnseenStory: !!latestActivity && (!viewedAt || viewedAt < latestActivity),
           tasteMatchBadge: tasteMatchByUserId.get(friend.id) ?? null,
         };
@@ -561,20 +555,24 @@ export default async function ProfilePage({
         <ThanksStat count={thanksGivenCount ?? 0} />
 
         {/*
-          Fremdansicht-Pendant zu "N Empfehlungen von dir" auf der eigenen
-          Ansicht (Bugfixes+Fremdansicht-Runde, Punkt 3): gleiche Quelle wie
-          forMe.ownCount -- movieInteractionCount+placeInteractionCount kommt
-          bereits oben aus getOwnInteractionRows(profile.id), unabhängig von
-          isOwner berechnet, hier nur erstmals für die Fremdansicht gerendert.
-          Der bereits bestehende personenbezogene "X für dich"-Wert (Punkt 6
-          der letzten Runde) bleibt als Zusatz dahinter erhalten, nicht
-          entfernt.
+          Metriken-Audit, Punkt B: zwei getrennte Zeilen statt einer
+          verketteten -- "Bewertung" (item_interactions, movieInteraction-
+          Count+placeInteractionCount, dieselbe Quelle wie forMe.ownCount auf
+          der eigenen Ansicht) und "Empfehlung" (recommendations-Tabelle via
+          countRecommendationsGivenTo) sind zwei unterschiedliche Datenmodelle
+          und dürfen nicht mehr im selben Satz unter demselben Wort stehen.
         */}
         {!isOwner && (
           <p className="text-sm font-medium text-center">
-            {profile.username} hat {movieInteractionCount + placeInteractionCount}{" "}
-            {movieInteractionCount + placeInteractionCount === 1 ? "Empfehlung" : "Empfehlungen"} gegeben
-            {recommendationsForViewer > 0 && ` · ${recommendationsForViewer} für dich`}
+            {movieInteractionCount + placeInteractionCount}{" "}
+            {movieInteractionCount + placeInteractionCount === 1 ? "Bewertung" : "Bewertungen"} von{" "}
+            {profile.username}
+          </p>
+        )}
+        {!isOwner && recommendationsForViewer > 0 && (
+          <p className="text-sm text-center text-muted-foreground">
+            davon {recommendationsForViewer}{" "}
+            {recommendationsForViewer === 1 ? "Empfehlung" : "Empfehlungen"} für dich
           </p>
         )}
 
