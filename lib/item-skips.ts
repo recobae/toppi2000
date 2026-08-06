@@ -5,12 +5,13 @@ export type SkipMediaType = "movie" | "tv" | "place";
 const SKIP_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
- * Records "I don't know this / not right now" -- deliberately writes to its
- * own item_skips table, never item_interactions, so it can never leak into
- * taste-match, progress badges, or any other taste-based reading of
- * item_interactions. Purely hides the item from this user's own feeds for
- * 30 days (see lib/exclusions.ts), then it resurfaces on its own -- no
- * manual reset, no soft-delete bookkeeping.
+ * Purely a technical resurfacing helper now, not a user-facing state --
+ * "Skip" as its own concept/button/UI no longer exists (Master-Audit
+ * round). lib/rating.ts's recordDislike calls this alongside every "Nix für
+ * mich", so a disliked item quietly stops appearing in this user's feeds
+ * for 30 days (see lib/exclusions.ts) and then resurfaces on its own -- no
+ * manual reset, no soft-delete bookkeeping. Never called on its own from UI
+ * anymore.
  */
 export async function recordSkip(
   supabase: SupabaseClient,

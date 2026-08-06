@@ -3,9 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
-import { recordInteraction } from "@/lib/interactions";
-import { recordSkip } from "@/lib/item-skips";
 import { likeAndSaveCandidate } from "@/lib/discovery-like";
+import { dislikeCandidate } from "@/lib/discovery-dislike";
 import { DiscoveryListRow } from "@/components/discovery/discovery-list-row";
 import type { DiscoveryCandidate } from "@/lib/discovery";
 
@@ -17,7 +16,9 @@ type FeedResponse = { results: DiscoveryCandidate[]; exhausted: boolean };
  * Main "Für Dich" stream -- one card at a time, in place, not a growing
  * downward list: acting on the current candidate removes it and the next
  * one in the queue takes its exact spot. Refills from the API once the
- * buffer runs low so it never bottoms out mid-session.
+ * buffer runs low so it never bottoms out mid-session. Only two ratings
+ * exist (Gefällt mir / Nix für mich) -- "Skip" was removed as its own
+ * concept (Master-Audit round).
  */
 export function DiscoveryStream({ userId }: { userId: string }) {
   const [items, setItems] = useState<DiscoveryCandidate[]>([]);
@@ -67,61 +68,20 @@ export function DiscoveryStream({ userId }: { userId: string }) {
     if (items.length < REFILL_THRESHOLD) loadMore();
   }, [items.length, isLoading, isLoadingMore, exhausted, loadMore]);
 
-  const persistDecision = async (candidate: DiscoveryCandidate, action: "like" | "dislike" | "skip") => {
+  const handleAction = async (candidate: DiscoveryCandidate, action: "like" | "dislike") => {
+    if (pending) return;
+    setPending(true);
     const supabase = createClient();
     if (action === "like") {
       await likeAndSaveCandidate(supabase, userId, candidate);
-      return;
+    } else {
+      await dislikeCandidate(supabase, userId, candidate);
     }
-    switch (candidate.sourceType) {
-      case "movie":
-      case "tv": {
-        if (candidate.ref.tmdbId === undefined) return;
-        if (action === "skip") {
-          await recordSkip(supabase, userId, String(candidate.ref.tmdbId), candidate.sourceType);
-        } else {
-          await recordInteraction(supabase, userId, {
-            itemId: String(candidate.ref.tmdbId),
-            mediaType: candidate.sourceType,
-            interactionType: action,
-            targetUserId: candidate.sourceUserId,
-          });
-        }
-        return;
-      }
-      case "place": {
-        if (!candidate.ref.placeId) return;
-        if (action === "skip") {
-          await recordSkip(supabase, userId, candidate.ref.placeId, "place");
-        } else {
-          await recordInteraction(supabase, userId, {
-            itemId: candidate.ref.placeId,
-            mediaType: "place",
-            interactionType: action,
-            targetUserId: candidate.sourceUserId,
-          });
-        }
-        return;
-      }
-      case "topf":
-        // Mein-Topf-Einträge haben keine eigene Dislike-Tabelle wie Filme/
-        // Orte -- eine Ablehnung hier ist deshalb bewusst nur eine Sitzungs-
-        // Auswahl (blendet die Karte aus dem aktuellen Stream aus), ohne
-        // Datenbank-Schreibzugriff.
-        return;
-    }
-  };
-
-  const handleAction = async (candidate: DiscoveryCandidate, action: "like" | "dislike" | "skip") => {
-    if (pending) return;
-    setPending(true);
-    await persistDecision(candidate, action);
     setItems((prev) => prev.filter((item) => item.id !== candidate.id));
     setPending(false);
-    // Einzige "Erklärung" fürs neue Like-Verhalten: eine kurze Bestätigung
-    // NACH der Aktion statt Vorab-Text -- die Karte selbst muss nicht
-    // erklärt werden, aber dass Like jetzt direkt speichert, darf sichtbar
-    // sein.
+    // Einzige "Erklärung" fürs Like-Verhalten: eine kurze Bestätigung NACH
+    // der Aktion statt Vorab-Text -- die Karte selbst muss nicht erklärt
+    // werden, aber dass Like direkt speichert, darf sichtbar sein.
     if (action === "like") {
       setToast("✓ Auf deine Liste gespeichert");
       setTimeout(() => setToast(null), 2200);
@@ -150,7 +110,6 @@ export function DiscoveryStream({ userId }: { userId: string }) {
             candidate={current}
             onLike={() => handleAction(current, "like")}
             onDislike={() => handleAction(current, "dislike")}
-            onSkip={() => handleAction(current, "skip")}
             pending={pending}
           />
         </AnimatePresence>

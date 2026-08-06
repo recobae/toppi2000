@@ -82,10 +82,10 @@ export default async function ProfilePage({
       ? await hasUnseenSong(supabase, viewer.id, profile.id, profile.favorite_song_updated_at)
       : false;
 
-  // Own view no longer renders this grid at all (moved to /my-taste), but
-  // still needs movieListItemCount/totalPlacesCount for totalActivityCount
-  // below -- cheaper to compute it once here for both views than to branch
-  // the whole query set on isOwner.
+  // Rendered for both views (own lists live in the Profil again, not
+  // My Taste, which is now pure Quick-Swipe) -- one query set for both
+  // covers movieListItemCount/totalPlacesCount for totalActivityCount below
+  // too, cheaper than branching on isOwner.
   const listOverview = await getListOverviewData(supabase, {
     userId: profile.id,
     username: profile.username,
@@ -452,13 +452,12 @@ export default async function ProfilePage({
         {isGuest && <GuestProfileCta variant="button" />}
 
         {/*
-          Nur die Fremdansicht zeigt die kuratierten Listen noch hier -- die
-          eigene Sicht bleibt bewusst listenfrei (sozial/ruhig lesbar), die
-          eigenen Listen leben jetzt vollständig unter /my-taste.
+          Eigene gesammelte Listen leben wieder im Profil (Master-Audit
+          round) -- My Taste ist reiner Quick-Swipe, keine Listenverwaltung
+          mehr. Gleiche Komponente wie in der Fremdansicht, nur mit
+          isOwner=true fürs "Neue Liste erstellen"-Picker.
         */}
-        {!isOwner && (
-          <ListOverviewSection rows={listOverview.rows} isGuest={isGuest} isOwner={false} />
-        )}
+        <ListOverviewSection rows={listOverview.rows} isGuest={isGuest} isOwner={isOwner} />
       </div>
     </main>
   );

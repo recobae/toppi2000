@@ -555,7 +555,7 @@ export async function getDiscoverySections(
   return { freshFromFriends, popularInNetwork, related, moreFromRegion, newForYou };
 }
 
-function placeSearchResultToCandidate(place: PlaceSearchResult, city: string, recommendedBy: string[]): DiscoveryCandidate {
+export function placeSearchResultToCandidate(place: PlaceSearchResult, city: string, recommendedBy: string[]): DiscoveryCandidate {
   return {
     id: `place-${place.placeId}`,
     title: place.name,

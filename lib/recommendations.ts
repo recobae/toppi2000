@@ -162,6 +162,60 @@ export async function getTrendingMovies(
   return buildSearchResults(filtered, apiKey);
 }
 
+const CLASSIC_MIN_VOTE_AVERAGE = 7.5;
+const CLASSIC_MIN_VOTE_COUNT = 1000;
+const CLASSIC_MAX_RELEASE_YEAR_OFFSET = 15;
+
+/** "Klassiker" tile in My Taste's Quick Swipe -- highly-rated movies released more than 15 years ago. */
+export async function getClassicMovies(
+  supabase: SupabaseClient,
+  userId: string,
+  apiKey: string,
+  limit = 10,
+): Promise<SearchResult[]> {
+  const cutoffYear = new Date().getFullYear() - CLASSIC_MAX_RELEASE_YEAR_OFFSET;
+  const [excludedKeys, response] = await Promise.all([
+    getExcludedMovieKeys(supabase, userId),
+    fetch(
+      `${TMDB_BASE_URL}/discover/movie?api_key=${apiKey}&sort_by=vote_average.desc` +
+        `&vote_average.gte=${CLASSIC_MIN_VOTE_AVERAGE}&vote_count.gte=${CLASSIC_MIN_VOTE_COUNT}` +
+        `&primary_release_date.lte=${cutoffYear}-12-31&include_adult=false`,
+      { headers: { Accept: "application/json" } },
+    ),
+  ]);
+  if (!response.ok) return [];
+
+  const data: { results: TmdbTitleLike[] } = await response.json();
+  const filtered = data.results
+    .map((item) => ({ ...item, media_type: "movie" as const }))
+    .filter((item) => !excludedKeys.has(`movie-${item.id}`))
+    .slice(0, limit);
+  return buildSearchResults(filtered, apiKey);
+}
+
+/** "Bald erscheinend" tile in My Taste's Quick Swipe -- upcoming theatrical releases. */
+export async function getUpcomingMovies(
+  supabase: SupabaseClient,
+  userId: string,
+  apiKey: string,
+  limit = 10,
+): Promise<SearchResult[]> {
+  const [excludedKeys, response] = await Promise.all([
+    getExcludedMovieKeys(supabase, userId),
+    fetch(`${TMDB_BASE_URL}/movie/upcoming?api_key=${apiKey}&region=DE`, {
+      headers: { Accept: "application/json" },
+    }),
+  ]);
+  if (!response.ok) return [];
+
+  const data: { results: TmdbTitleLike[] } = await response.json();
+  const filtered = data.results
+    .map((item) => ({ ...item, media_type: "movie" as const }))
+    .filter((item) => !excludedKeys.has(`movie-${item.id}`))
+    .slice(0, limit);
+  return buildSearchResults(filtered, apiKey);
+}
+
 export type CityPlaceRecommendations = {
   fromFriends: { place: PlaceSearchResult; recommendedBy: string[] }[];
   generic: PlaceSearchResult[];

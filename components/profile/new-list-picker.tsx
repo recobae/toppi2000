@@ -49,21 +49,21 @@ export function NewListPicker() {
             </button>
             <p className="text-sm font-medium pr-8 mb-2">Was möchtest du hinzufügen?</p>
             <Link
-              href="/my-taste/hinzufuegen"
+              href="/hinzufuegen"
               className="flex items-center gap-3 rounded-md border p-3 hover:bg-accent transition-colors"
             >
               <Film className="size-5 text-primary" />
               <span className="text-sm font-medium">Film oder Serie</span>
             </Link>
             <Link
-              href="/my-taste/hinzufuegen?tab=orte"
+              href="/hinzufuegen?tab=orte"
               className="flex items-center gap-3 rounded-md border p-3 hover:bg-accent transition-colors"
             >
               <MapPin className="size-5 text-primary" />
               <span className="text-sm font-medium">Ort</span>
             </Link>
             <Link
-              href="/my-taste/hinzufuegen?tab=sonstiges"
+              href="/hinzufuegen?tab=sonstiges"
               className="flex items-center gap-3 rounded-md border p-3 hover:bg-accent transition-colors"
             >
               <Sparkles className="size-5 text-primary" />

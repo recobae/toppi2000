@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Ban, Bookmark, Check, Eye, HelpCircle, Play, Star, User, X } from "lucide-react";
+import { Ban, Check, Eye, Play, Star, User, X } from "lucide-react";
 import type { MovieDetails, WatchProviderGroups } from "@/lib/tmdb";
 import { WatchProviderBadges } from "@/components/watch-provider-badges";
 import type {
@@ -131,8 +131,6 @@ export function MovieDetailModal({
   note,
   watchProviders,
   onClose,
-  onSkip,
-  onWatchlist,
 }: {
   title: string;
   posterUrl: string | null;
@@ -145,13 +143,6 @@ export function MovieDetailModal({
   /** Full availability (flatrate + rent + buy) -- the card itself only ever shows the flatrate subset. */
   watchProviders?: WatchProviderGroups;
   onClose: () => void;
-  /**
-   * Swipe-deck-only actions -- only rendered when passed, since every other
-   * caller of this modal (Inspiration, Mein Topf, Empfohlen/Watchlist
-   * lists) doesn't have a "skip"/"watchlist" decision to make here.
-   */
-  onSkip?: () => void;
-  onWatchlist?: () => void;
 }) {
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
   const [trailerChecked, setTrailerChecked] = useState(false);
@@ -266,31 +257,6 @@ export function MovieDetailModal({
               Verfügbarkeit
             </p>
             <WatchProviderBadges providers={watchProviders} title={title} />
-          </div>
-        )}
-
-        {(onSkip || onWatchlist) && (
-          <div className="flex items-center gap-2">
-            {onSkip && (
-              <button
-                type="button"
-                onClick={onSkip}
-                className="flex flex-1 items-center justify-center gap-1.5 h-10 px-4 rounded-full border border-input text-sm font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors"
-              >
-                <HelpCircle className="size-4" />
-                Nicht jetzt
-              </button>
-            )}
-            {onWatchlist && (
-              <button
-                type="button"
-                onClick={onWatchlist}
-                className="flex flex-1 items-center justify-center gap-1.5 h-10 px-4 rounded-full border border-input text-sm font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors"
-              >
-                <Bookmark className="size-4" />
-                Watchlist
-              </button>
-            )}
           </div>
         )}
 

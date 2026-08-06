@@ -37,7 +37,7 @@ export function QuestionPrompts({ userId, prompts }: { userId: string; prompts: 
           ) : (
             <Link
               key={index}
-              href="/my-taste/hinzufuegen?tab=orte"
+              href="/hinzufuegen?tab=orte"
               className="shrink-0 flex items-start gap-2 max-w-[220px] rounded-xl border p-3 text-left shadow-sm hover:shadow-md hover:border-primary/40 transition-all"
             >
               <HelpCircle className="size-4 shrink-0 text-primary mt-0.5" />

@@ -7,10 +7,6 @@ import { Sparkles, Star, User } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 const HIDDEN_PREFIXES = ["/auth", "/onboarding"];
-// Full-bleed immersive screens manage their own safe-area padding and would
-// visually collide with a persistent bar -- same reasoning SiteHeader
-// already uses for hiding on /swipe.
-const HIDDEN_EXACT = ["/swipe"];
 
 /**
  * The app's one primary navigation surface (Instagram/TikTok-style): three
@@ -39,9 +35,7 @@ export function BottomNav() {
   }, []);
 
   const isVisible =
-    !!username &&
-    !HIDDEN_PREFIXES.some((prefix) => pathname.startsWith(prefix)) &&
-    !HIDDEN_EXACT.includes(pathname);
+    !!username && !HIDDEN_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 
   // Reserves space at the bottom of the document so page content never sits
   // underneath the fixed bar -- set here (not per-page) since this is the

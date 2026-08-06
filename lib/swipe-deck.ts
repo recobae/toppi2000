@@ -38,10 +38,10 @@ export async function getSwipeQuota(supabase: SupabaseClient, userId: string): P
 
 /**
  * Records one swiped/dismissed card for daily-limit tracking only --
- * independent of which of the four actions (like/dislike/watchlist/skip)
- * it was, and separate from the actual save, which always goes through
- * saveToCategory/recordSkip. Best-effort: a failure here should never
- * block or roll back an already-successful save.
+ * independent of which of the two ratings (like/dislike) it was, and
+ * separate from the actual save, which always goes through
+ * likeAndSaveCandidate/recordDislike. Best-effort: a failure here should
+ * never block or roll back an already-successful save.
  */
 export async function recordSwipeCardAction(supabase: SupabaseClient, userId: string) {
   return supabase.from("swipe_card_actions").insert({ user_id: userId });

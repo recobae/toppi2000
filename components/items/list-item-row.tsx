@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import type { MouseEvent, ReactNode } from "react";
-import { Ban, Check, Heart, HeartHandshake, Pencil, Plus, SkipForward, Star, X } from "lucide-react";
+import { Ban, Check, Heart, HeartHandshake, Pencil, Plus, Star, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MovieMetaBadges, SocialProofIcons } from "@/components/movie-info";
@@ -32,11 +32,14 @@ export type ListItemRowAttribution = { label: string; names: string[]; className
 export type ListItemRowActions =
   | {
       /**
-       * Unrated item: Ja / Nein / Watchlist (movies) or Ja / Nein / Merken
-       * (places). Used both for feed items with no owner yet, and -- with
-       * the write target swapped to the viewer's own lists -- for items on
-       * someone else's list ("foreign" browsing), so the two behave
-       * identically instead of a reduced action set.
+       * Unrated item: Gefällt mir / Nix für mich, plus Watchlist (movies) or
+       * Merken (places). Used both for feed items with no owner yet, and --
+       * with the write target swapped to the viewer's own lists -- for
+       * items on someone else's list ("foreign" browsing), so the two
+       * behave identically instead of a reduced action set. Only two
+       * ratings exist anywhere in the app -- "Skip" was removed as its own
+       * third concept (Master-Audit round); "Nix für mich" carries the same
+       * 30-day resurfacing behavior Skip used to.
        */
       variant: "rate";
       onLike: () => void;
@@ -44,9 +47,7 @@ export type ListItemRowActions =
       onAdd: () => void;
       addLabel: string;
       pending?: boolean;
-      /** Inspiration-feed-only: "nicht jetzt" -- never offered on foreign lists or watchlist transitions. */
-      onSkip?: () => void;
-      /** Foreign-list rows only: the viewer's own existing stance on this item, so Ja/Nein reflect it instead of always looking unrated. */
+      /** Foreign-list rows only: the viewer's own existing stance on this item, so the buttons reflect it instead of always looking unrated. */
       ownInteraction?: "like" | "dislike" | null;
     }
   | {
@@ -121,7 +122,7 @@ export function ActionBar({
       <div className="mt-auto pt-2 flex items-center gap-1.5">
         <button
           type="button"
-          aria-label={likedByMe ? "Gefällt mir (bereits geliked)" : "Ja"}
+          aria-label={likedByMe ? "Gefällt mir (bereits gesetzt)" : "Gefällt mir"}
           disabled={actions.pending}
           onClick={stop(actions.onLike)}
           className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors disabled:opacity-50 ${
@@ -134,7 +135,7 @@ export function ActionBar({
         </button>
         <button
           type="button"
-          aria-label={dislikedByMe ? "Gefällt mir nicht (bereits vergeben)" : "Nein"}
+          aria-label={dislikedByMe ? "Nix für mich (bereits gesetzt)" : "Nix für mich"}
           disabled={actions.pending}
           onClick={stop(actions.onDislike)}
           className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors disabled:opacity-50 ${
@@ -145,17 +146,6 @@ export function ActionBar({
         >
           <Ban className={`size-4 ${dislikedByMe ? "fill-current" : ""}`} />
         </button>
-        {actions.onSkip && (
-          <button
-            type="button"
-            aria-label="Nicht jetzt"
-            disabled={actions.pending}
-            onClick={stop(actions.onSkip)}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-muted-foreground hover:bg-accent transition-colors disabled:opacity-50"
-          >
-            <SkipForward className="size-4" />
-          </button>
-        )}
         <button
           type="button"
           disabled={actions.pending}

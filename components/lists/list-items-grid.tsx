@@ -15,7 +15,7 @@ import {
   updateNote,
 } from "@/lib/saved-items";
 import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
-import { recordSkip } from "@/lib/item-skips";
+import { recordDislike } from "@/lib/rating";
 import { postWatchlistTransitionStoryEvent, type WatchlistTransition } from "@/lib/story-events";
 import { CATEGORY_LABELS, type SavedCategory } from "@/lib/categories";
 import { NOTE_PLACEHOLDERS } from "@/lib/notes";
@@ -55,8 +55,9 @@ function AddItemRow({ category }: { category: SavedCategory }) {
  * Compact suggestion strip under the owner's own Empfohlen-list, fed by the
  * same shared engine (lib/recommendations.ts) as the Inspiration page --
  * here specifically the genre-profile variant, derived from what the user
- * already rated/liked. Same ListItemRow "rate" bar (Ja/Nein/Skip/Watchlist)
- * and the same detail-modal-on-click behavior as the Inspiration feed --
+ * already rated/liked. Same ListItemRow "rate" bar (Gefällt mir/Nix für
+ * mich/Watchlist) and the same detail-modal-on-click behavior as the
+ * Inspiration feed --
  * just visually set apart with a dashed border.
  */
 export function MovieSuggestionsStrip({ userId }: { userId: string }) {
@@ -119,21 +120,7 @@ export function MovieSuggestionsStrip({ userId }: { userId: string }) {
     const key = `${result.mediaType}-${result.id}`;
     setPendingKey(key);
     const supabase = createClient();
-    await setInteractionWithCredits(
-      supabase,
-      userId,
-      { itemId: String(result.id), mediaType: result.mediaType },
-      "dislike",
-    );
-    removeSuggestion(result);
-    setPendingKey(null);
-  };
-
-  const handleSkip = async (result: SearchResult) => {
-    const key = `${result.mediaType}-${result.id}`;
-    setPendingKey(key);
-    const supabase = createClient();
-    await recordSkip(supabase, userId, String(result.id), result.mediaType);
+    await recordDislike(supabase, userId, { itemId: String(result.id), mediaType: result.mediaType });
     removeSuggestion(result);
     setPendingKey(null);
   };
@@ -163,7 +150,6 @@ export function MovieSuggestionsStrip({ userId }: { userId: string }) {
                 pending: pendingKey === key,
                 onLike: () => handleAdd(result, "top_list"),
                 onDislike: () => handleDislike(result),
-                onSkip: () => handleSkip(result),
                 onAdd: () => handleAdd(result, "watchlist"),
                 addLabel: "Watchlist",
               }}
@@ -230,12 +216,7 @@ function OwnerCategoryList({
           year: item.year,
         });
       } else {
-        await setInteractionWithCredits(
-          supabase,
-          userId,
-          { itemId: String(item.itemId), mediaType: item.mediaType },
-          "dislike",
-        );
+        await recordDislike(supabase, userId, { itemId: String(item.itemId), mediaType: item.mediaType });
       }
       await postWatchlistTransitionStoryEvent(supabase, userId, transition, {
         itemId: item.itemId,
@@ -422,13 +403,7 @@ function VisitorCategoryList({
     const key = `${item.mediaType}-${item.itemId}`;
     setPendingKey(key);
     const supabase = createClient();
-    const { error } = await setInteractionWithCredits(
-      supabase,
-      user.id,
-      { itemId: String(item.itemId), mediaType: item.mediaType },
-      "dislike",
-      [ownerId],
-    );
+    const { error } = await recordDislike(supabase, user.id, { itemId: String(item.itemId), mediaType: item.mediaType });
     if (error) {
       showToast("Konnte nicht gespeichert werden, versuch's nochmal");
     } else {

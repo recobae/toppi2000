@@ -20,7 +20,7 @@ import {
   type PlaceStatus,
 } from "@/lib/place-items";
 import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
-import { recordSkip } from "@/lib/item-skips";
+import { recordDislike } from "@/lib/rating";
 import { useOwnInteractions, type OwnInteractionEntry } from "@/lib/hooks/use-own-interactions";
 import { REGION_NOTE_MAX_LENGTH } from "@/lib/notes";
 import {
@@ -207,7 +207,7 @@ function RegionNoteRow({
 function AddPlaceRow() {
   return (
     <Link
-      href="/my-taste/hinzufuegen?tab=orte"
+      href="/hinzufuegen?tab=orte"
       className="flex items-center justify-center gap-2 h-14 w-full rounded-lg border-2 border-dashed border-input text-muted-foreground hover:border-primary hover:text-primary transition-colors"
     >
       <Plus className="size-5" />
@@ -220,7 +220,7 @@ function AddPlaceRow() {
  * Compact suggestion strip under the owner's own Orte-region list -- exact
  * same query (lib/recommendations.ts) as the Inspiration Orte tab's per-city
  * feed: friends who added something here first, then generic popular
- * places. Rating happens right here via Ja/Nein/Skip/Merken, and clicking
+ * places. Rating happens right here via Gefällt mir/Nix für mich/Merken, and clicking
  * an item opens the same detail modal, exactly like the Inspiration feed.
  */
 function PlaceSuggestionsStrip({ userId, regionName }: { userId: string; regionName: string }) {
@@ -299,28 +299,10 @@ function PlaceSuggestionsStrip({ userId, regionName }: { userId: string; regionN
   const handleDislike = async (placeId: string) => {
     setDismissedIds((prev) => new Set(prev).add(placeId));
     const supabase = createClient();
-    const { error } = await setInteractionWithCredits(
-      supabase,
-      userId,
-      { itemId: placeId, mediaType: "place" },
-      "dislike",
-    );
+    const { error } = await recordDislike(supabase, userId, { itemId: placeId, mediaType: "place" });
     if (error) {
       unDismiss(placeId);
       showToast("Konnte nicht gespeichert werden, versuch's nochmal");
-    }
-  };
-
-  const handleSkip = async (placeId: string) => {
-    setDismissedIds((prev) => new Set(prev).add(placeId));
-    const supabase = createClient();
-    const { error } = await recordSkip(supabase, userId, placeId, "place");
-    if (error) {
-      unDismiss(placeId);
-      showToast("Konnte nicht gespeichert werden, versuch's nochmal");
-    } else {
-      // Positive framing (Punkt 6): a skip is a personalization signal, not a rejection.
-      showToast("Hilft uns, dich besser zu verstehen");
     }
   };
 
@@ -360,7 +342,6 @@ function PlaceSuggestionsStrip({ userId, regionName }: { userId: string; regionN
                   pending: pendingId === place.placeId,
                   onLike: () => handleAdd(place.placeId, "recommended"),
                   onDislike: () => handleDislike(place.placeId),
-                  onSkip: () => handleSkip(place.placeId),
                   onAdd: () => handleAdd(place.placeId, "want_to_visit"),
                   addLabel: "Merken",
                 }}
@@ -682,13 +663,7 @@ function VisitorRegionList({
   const handleDislike = async (item: RegionPlaceItem) => {
     if (!user) return;
     const supabase = createClient();
-    const { error } = await setInteractionWithCredits(
-      supabase,
-      user.id,
-      { itemId: item.placeId, mediaType: "place" },
-      "dislike",
-      [ownerId],
-    );
+    const { error } = await recordDislike(supabase, user.id, { itemId: item.placeId, mediaType: "place" });
     if (error) {
       showToast("Konnte nicht gespeichert werden, versuch's nochmal");
     } else {
@@ -774,7 +749,7 @@ function VisitorRegionList({
       {showGuestPrompt && (
         <GuestSignupModal
           message="Melde dich an, um Orte zu deinen eigenen Listen hinzuzufügen."
-          next="/my-taste/hinzufuegen?tab=orte"
+          next="/hinzufuegen?tab=orte"
           onClose={() => setShowGuestPrompt(false)}
         />
       )}

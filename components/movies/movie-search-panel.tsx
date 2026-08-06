@@ -12,7 +12,7 @@ import { PersonSelector } from "@/components/search/person-selector";
 import { NoteModal } from "@/components/lists/note-modal";
 import { saveToCategory, updateNote } from "@/lib/saved-items";
 import { recordInteraction } from "@/lib/interactions";
-import { recordSkip } from "@/lib/item-skips";
+import { recordDislike } from "@/lib/rating";
 import { CATEGORY_LABELS } from "@/lib/categories";
 import { NOTE_PLACEHOLDERS } from "@/lib/notes";
 import type { PersonSummary, SearchResult } from "@/lib/tmdb";
@@ -149,10 +149,9 @@ export function MovieSearchPanel() {
     const key = `${result.mediaType}-${result.id}`;
     setPendingKey(key);
     const supabase = createClient();
-    const { error } = await recordInteraction(supabase, user.id, {
+    const { error } = await recordDislike(supabase, user.id, {
       itemId: String(result.id),
       mediaType: result.mediaType,
-      interactionType: "dislike",
     });
     showToast(error ? "Konnte nicht gespeichert werden, versuch's nochmal" : "Notiert.");
     setPendingKey(null);
@@ -178,13 +177,6 @@ export function MovieSearchPanel() {
     setPendingKey(null);
   };
 
-  const handleSkip = async (result: SearchResult) => {
-    if (!user) return;
-    const supabase = createClient();
-    await recordSkip(supabase, user.id, String(result.id), result.mediaType);
-    showToast("Hilft uns, dich besser zu verstehen");
-  };
-
   const renderResultRow = (result: SearchResult) => {
     const key = `${result.mediaType}-${result.id}`;
     const posterUrl = result.posterPath ? `${POSTER_BASE_URL}${result.posterPath}` : null;
@@ -204,7 +196,6 @@ export function MovieSearchPanel() {
           pending: pendingKey === key,
           onLike: () => handleLike(result),
           onDislike: () => handleDislike(result),
-          onSkip: () => handleSkip(result),
           onAdd: () => handleWatchlist(result),
           addLabel: "Watchlist",
         }}
@@ -282,7 +273,7 @@ export function MovieSearchPanel() {
       {showGuestModal && (
         <GuestSignupModal
           message="Melde dich an, um Filme & Serien zu deinen eigenen Listen hinzuzufügen."
-          next="/my-taste/hinzufuegen"
+          next="/hinzufuegen"
           onClose={() => setShowGuestModal(false)}
         />
       )}

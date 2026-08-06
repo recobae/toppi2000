@@ -21,11 +21,10 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 /**
- * The one "add something manually" tool, reached from My Taste -- not a
- * discovery destination competing with "Für Dich" (that job belongs to the
- * core loop alone), just a search/import utility. Replaces the old
- * /inspiration page's search functionality after its trending/friends-likes
- * browsing (redundant with "Für Dich") was removed.
+ * The one "add something manually" tool -- reached from the Profil (own
+ * lists live there now, not in My Taste, which is a pure Quick-Swipe area).
+ * Not a discovery destination competing with "Für Dich", just a
+ * search/import utility.
  */
 export default function HinzufuegenPage() {
   return (
@@ -72,11 +71,11 @@ function HinzufuegenContent() {
 
       <div className="flex-1 w-full flex flex-col gap-4 max-w-5xl p-5 pt-6">
         <Link
-          href="/my-taste"
+          href="/"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors w-fit"
         >
           <ArrowLeft className="size-4" />
-          My Taste
+          Zurück
         </Link>
         <h1 className="text-lg font-semibold">Hinzufügen</h1>
 
@@ -137,7 +136,7 @@ function HinzufuegenContent() {
       {showGuestModal && (
         <GuestSignupModal
           message="Melde dich an, um eigene Listen aufzubauen."
-          next="/my-taste/hinzufuegen"
+          next="/hinzufuegen"
           onClose={() => setShowGuestModal(false)}
         />
       )}

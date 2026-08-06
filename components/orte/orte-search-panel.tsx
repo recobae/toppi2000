@@ -249,7 +249,7 @@ export function OrteSearchPanel() {
       {showGuestModal && (
         <GuestSignupModal
           message="Melde dich an, um Orte zu deinen eigenen Listen hinzuzufügen."
-          next="/my-taste/hinzufuegen?tab=orte"
+          next="/hinzufuegen?tab=orte"
           onClose={() => setShowGuestModal(false)}
         />
       )}

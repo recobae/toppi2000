@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { Ban, Heart, MapPin, MessageCircle, SkipForward, Sparkles, Star, Users } from "lucide-react";
+import { Ban, Heart, MapPin, MessageCircle, Sparkles, Star, Users } from "lucide-react";
 import type { DiscoveryCandidate } from "@/lib/discovery";
 
 /**
@@ -14,22 +14,20 @@ import type { DiscoveryCandidate } from "@/lib/discovery";
 
 /**
  * One row of the "Für Dich" list stream -- Titel, Kategorie+Quelle,
- * Begründung, Notiz, Like/Dislike/Skip, in exactly that order. Replaces the
- * old full-bleed swipe card: same underlying candidate/scoring data, just a
- * compact list presentation per the restructure brief ("kein Swipe-Deck mit
- * großer Kachel").
+ * Begründung, Notiz, Gefällt mir/Nix für mich, in exactly that order.
+ * Only two rating buttons exist anywhere in the app now -- "Skip" as its
+ * own third state was removed (Master-Audit round); "Nix für mich" carries
+ * the same 30-day resurfacing behavior Skip used to.
  */
 export function DiscoveryListRow({
   candidate,
   onLike,
   onDislike,
-  onSkip,
   pending,
 }: {
   candidate: DiscoveryCandidate;
   onLike: () => void;
   onDislike: () => void;
-  onSkip: () => void;
   pending?: boolean;
 }) {
   const sourceLine =
@@ -91,7 +89,7 @@ export function DiscoveryListRow({
             </p>
           )}
 
-          {/* 5. Like / Dislike / Skip -- gleiche Icons/Farben wie ActionBar (components/items/list-item-row.tsx) im Rest der App. */}
+          {/* 5. Gefällt mir / Nix für mich -- gleiche Icons/Farben wie ActionBar (components/items/list-item-row.tsx) im Rest der App. */}
           <div className="flex items-center gap-1.5 pt-1">
             <button
               type="button"
@@ -106,19 +104,10 @@ export function DiscoveryListRow({
               type="button"
               onClick={onDislike}
               disabled={pending}
-              aria-label="Nicht mein Fall"
+              aria-label="Nix für mich"
               className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
             >
               <Ban className="size-4" />
-            </button>
-            <button
-              type="button"
-              onClick={onSkip}
-              disabled={pending}
-              aria-label="Überspringen"
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-muted-foreground hover:bg-accent transition-colors disabled:opacity-50"
-            >
-              <SkipForward className="size-4" />
             </button>
           </div>
         </div>
