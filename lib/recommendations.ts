@@ -55,7 +55,7 @@ export async function getFriendsLikedMovies(
   return buildSearchResults(items, apiKey);
 }
 
-async function inferTopGenreIds(
+export async function inferTopGenreIds(
   supabase: SupabaseClient,
   userId: string,
   apiKey: string,

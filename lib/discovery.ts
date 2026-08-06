@@ -6,9 +6,11 @@ import {
   getGenreProfileMovieRecommendations,
   getTrendingMovies,
 } from "@/lib/recommendations";
-import { PLACE_CATEGORY_LABELS, isPlaceCategory, type PlaceCategory } from "@/lib/places";
+import { PLACE_CATEGORY_LABELS, isPlaceCategory, type PlaceCategory, type PlacePriceLevel } from "@/lib/places";
 import type { PlaceSearchResult } from "@/lib/google-places";
 import type { SourceType } from "@/lib/topf";
+import type { MovieDetails, WatchProviderGroups } from "@/lib/tmdb";
+import type { OpeningStatus } from "@/lib/opening-hours";
 
 export type DiscoverySourceType = "movie" | "tv" | "place" | "topf";
 
@@ -34,14 +36,27 @@ export type DiscoveryCandidate = {
   finalScore: number;
   /** One short, human line explaining why this card showed up. */
   reason: string;
+  /** Quick-Swipe-only diagnostic tag (which of the 6 mix groups produced this candidate) -- undefined outside that surface. */
+  mixGroup?: string;
   ref: {
     mediaType?: "movie" | "tv";
     tmdbId?: number;
+    /** Pre-fetched detail-view data for movie/tv candidates -- already available at candidate-build time (TMDB SearchResult), avoids a second fetch when the global detail modal opens. */
+    movieYear?: string | null;
+    movieDetails?: MovieDetails;
+    watchProviders?: WatchProviderGroups;
     placeId?: string;
     lat?: number;
     lng?: number;
     regionName?: string;
     placeCategory?: PlaceCategory;
+    /** Pre-fetched detail-view data for place candidates -- already available at candidate-build time (Google Places result). */
+    placeGoogleMapsUri?: string | null;
+    placeUserRatingCount?: number | null;
+    placePriceLevel?: PlacePriceLevel | null;
+    placePhoneNumber?: string | null;
+    placeWebsiteUri?: string | null;
+    placeOpeningStatus?: OpeningStatus | null;
     recommendationId?: string;
     recommendationCategoryKey?: string;
     recommendationSourceType?: SourceType;
@@ -584,6 +599,12 @@ export function placeSearchResultToCandidate(place: PlaceSearchResult, city: str
       lng: place.lng,
       regionName: city,
       placeCategory: place.category,
+      placeGoogleMapsUri: place.googleMapsUri,
+      placeUserRatingCount: place.userRatingCount,
+      placePriceLevel: place.priceLevel,
+      placePhoneNumber: place.phoneNumber,
+      placeWebsiteUri: place.websiteUri,
+      placeOpeningStatus: place.openingStatus,
     },
   };
 }

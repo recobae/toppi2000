@@ -13,20 +13,23 @@ const EXIT_DISTANCE = 700;
 /**
  * The one focused card for My Taste's Quick-Swipe -- generic over
  * movie/tv/place (whatever lib/quick-swipe.ts hands it), drag-to-decide
- * like the old movie-only SwipeCard, but with no friend badges, no watch
- * providers, no detail view: Quick Swipe is deliberately just image, title,
- * category, and the two ratings.
+ * like the old movie-only SwipeCard, no friend badges, no watch providers
+ * on the card face itself. Tapping (not dragging) the card opens the
+ * shared global detail view (components/discovery/candidate-detail-modal.tsx).
  */
 export function QuickSwipeCard({
   candidate,
   onLike,
   onDislike,
+  onOpenDetail,
   disabled,
   exitDirection,
 }: {
   candidate: DiscoveryCandidate;
   onLike: () => void;
   onDislike: () => void;
+  /** The whole card is tappable -- opens the shared global detail view. Framer's onTap only fires for an actual tap, never after a real drag, so this can't fight the swipe gesture. */
+  onOpenDetail?: () => void;
   disabled?: boolean;
   exitDirection?: "left" | "right" | null;
 }) {
@@ -72,6 +75,7 @@ export function QuickSwipeCard({
       drag={disabled ? false : "x"}
       dragMomentum={false}
       onDragEnd={handleDragEnd}
+      onTap={disabled || decidedRef.current ? undefined : onOpenDetail}
       className="relative h-full w-full rounded-2xl overflow-hidden bg-muted shadow-xl select-none cursor-grab active:cursor-grabbing"
     >
       {candidate.imageUrl ? (
