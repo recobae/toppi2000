@@ -22,6 +22,7 @@ import {
 import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
 import { recordDislike } from "@/lib/rating";
 import { useOwnInteractions, type OwnInteractionEntry } from "@/lib/hooks/use-own-interactions";
+import { useOtherRaters } from "@/lib/hooks/use-other-raters";
 import { REGION_NOTE_MAX_LENGTH } from "@/lib/notes";
 import {
   PLACE_CATEGORIES,
@@ -342,8 +343,6 @@ function PlaceSuggestionsStrip({ userId, regionName }: { userId: string; regionN
                   pending: pendingId === place.placeId,
                   onLike: () => handleAdd(place.placeId, "recommended"),
                   onDislike: () => handleDislike(place.placeId),
-                  onAdd: () => handleAdd(place.placeId, "want_to_visit"),
-                  addLabel: "Merken",
                 }}
               />
             ))}
@@ -579,7 +578,6 @@ function VisitorRegionList({
   const [pendingPlaceId, setPendingPlaceId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<PlaceCategory | null>(null);
   const [showSavedOnly, setShowSavedOnly] = useState(false);
-  const [notePrompt, setNotePrompt] = useState<RegionPlaceItem | null>(null);
   const [showDetailsFor, setShowDetailsFor] = useState<RegionPlaceItem | null>(null);
 
   const showToast = useCallback((message: string) => {
@@ -595,6 +593,9 @@ function VisitorRegionList({
   const { getOwn, markOwn } = useOwnInteractions(
     items.map((item) => ({ id: item.placeId, mediaType: "place" as const })),
     initialOwnInteractions,
+  );
+  const { get: getOtherRaters } = useOtherRaters(
+    items.map((item) => ({ id: item.placeId, mediaType: "place" as const })),
   );
 
   // Rating a place on someone else's list behaves exactly like rating an
@@ -653,7 +654,6 @@ function VisitorRegionList({
           mediaType: "place",
         });
         showToast(`Zu „${region}“ hinzugefügt`);
-        setNotePrompt(item);
       }
     } finally {
       setPendingPlaceId(null);
@@ -774,19 +774,6 @@ function VisitorRegionList({
         />
       )}
 
-      {notePrompt && user && (
-        <NoteModal
-          title={notePrompt.name}
-          posterUrl={notePrompt.photoUrl}
-          initialNote={null}
-          placeholder="Was macht diesen Ort besonders?"
-          onSave={async (note) => {
-            const supabase = createClient();
-            await updatePlaceNote(supabase, user.id, notePrompt.placeId, note);
-          }}
-          onClose={() => setNotePrompt(null)}
-        />
-      )}
     </div>
   );
 
@@ -811,10 +798,9 @@ function VisitorRegionList({
           variant: "rate",
           pending: pendingPlaceId === item.placeId,
           ownInteraction: getOwn(item.placeId, "place"),
+          otherRaters: getOtherRaters(item.placeId, "place"),
           onLike: () => handleSave(item, "recommended"),
           onDislike: () => handleDislike(item),
-          onAdd: () => handleSave(item, "want_to_visit"),
-          addLabel: "Merken",
         }}
       />
     );

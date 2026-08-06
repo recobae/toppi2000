@@ -20,18 +20,45 @@ export function BottomNav() {
 
   useEffect(() => {
     const supabase = createClient();
-    (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+    let cancelled = false;
+
+    const loadUsername = async (userId: string) => {
       const { data: profile } = await supabase
         .from("profiles")
         .select("username")
-        .eq("id", user.id)
+        .eq("id", userId)
         .maybeSingle();
-      setUsername(profile?.username ?? null);
-    })();
+      if (!cancelled) setUsername(profile?.username ?? null);
+    };
+
+    // Initial check for a session that already existed when this component
+    // mounted (e.g. a page reload while logged in).
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) loadUsername(user.id);
+    });
+
+    // BottomNav lives in the root layout, so it's mounted ONCE for the whole
+    // session and never remounts across client-side navigations -- if it
+    // first mounted on the login page (no session yet), the one-shot check
+    // above ran with no user and never re-ran. A fresh login/logout doesn't
+    // reload the page (router.push, not a full navigation), so without this
+    // subscription the bar would just silently never appear post-login until
+    // a manual reload. onAuthStateChange fires SIGNED_IN/SIGNED_OUT on this
+    // same long-lived instance regardless of which route triggered it.
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        loadUsername(session.user.id);
+      } else {
+        setUsername(null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const isVisible =

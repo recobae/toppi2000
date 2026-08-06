@@ -108,3 +108,43 @@ export async function recordInspiredCredits(
   if (ownerUserIds.length === 0) return;
   await upsertCredits(supabase, actorUserId, ownerUserIds, item, "inspired");
 }
+
+/**
+ * How many "inspired" credits actorUserId has recorded against each of
+ * ownerUserIds -- one query, batched across many owners for one fixed
+ * actor. Backs the FollowingBar's per-avatar inspiration count (Folgeänderungen
+ * round, replacing the removed Taste-Match percentage badge) and the
+ * foreign-profile "X-mal von Dir inspiriert" stat (single-owner case, see
+ * getInspiredCount below) -- both read the exact same "übernommen" ledger,
+ * never a separate/new counting scheme.
+ */
+export async function getInspiredCountBatch(
+  supabase: SupabaseClient,
+  actorUserId: string,
+  ownerUserIds: string[],
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+  if (ownerUserIds.length === 0) return result;
+
+  const { data } = await supabase
+    .from("interaction_credits")
+    .select("owner_user_id")
+    .eq("actor_user_id", actorUserId)
+    .eq("credit_type", "inspired")
+    .in("owner_user_id", ownerUserIds);
+
+  for (const row of data ?? []) {
+    result.set(row.owner_user_id, (result.get(row.owner_user_id) ?? 0) + 1);
+  }
+  return result;
+}
+
+/** Single-pair convenience wrapper around getInspiredCountBatch above. */
+export async function getInspiredCount(
+  supabase: SupabaseClient,
+  actorUserId: string,
+  ownerUserId: string,
+): Promise<number> {
+  const map = await getInspiredCountBatch(supabase, actorUserId, [ownerUserId]);
+  return map.get(ownerUserId) ?? 0;
+}

@@ -11,20 +11,15 @@ import { ListOverviewSection } from "@/components/profile/list-overview-section"
 import { GuestProfileCta } from "@/components/profile/guest-profile-cta";
 import { FollowButton } from "@/components/profile/follow-button";
 import { ShareListButton } from "@/components/lists/share-list-button";
-import { TasteMatchExpandable } from "@/components/profile/taste-match-expandable";
 import { ThanksStat } from "@/components/profile/progress-badges";
 import { getTopfContributorIds } from "@/lib/for-me";
+import { getInspiredCount, getInspiredCountBatch } from "@/lib/interaction-credits";
 import { FollowingBar } from "@/components/profile/following-bar";
 import { getListOverviewData } from "@/lib/list-overview";
 import { resolveExpertiseTier, CONTENT_TIER_THRESHOLDS, type ExpertiseTier } from "@/lib/expertise-tiers";
 import { hasActiveStory as checkHasActiveStory, storyWindowSince } from "@/lib/story-activity";
 import { hasUnseenSong } from "@/lib/song-activity";
-import {
-  computeTasteMatch,
-  computeTasteMatchBatch,
-  bestTasteMatchPercentage,
-  getOwnInteractionRows,
-} from "@/lib/taste-match";
+import { getOwnInteractionRows } from "@/lib/taste-match";
 
 async function getProfileUrl(username: string): Promise<string> {
   const headersList = await headers();
@@ -90,38 +85,22 @@ export default async function ProfilePage({
     username: profile.username,
     homeCity: profile.home_city,
     showTierProgress: isOwner,
+    viewerId: viewer?.id ?? null,
   });
 
-  // Two distinct stats, both sourced from interaction_credits -- a ledger of
-  // (actor, owner, item, credit_type) rows written at the moment someone
-  // likes or adds an item that's on one or more followed people's lists,
-  // crediting EVERY one of those owners, not just the first. This replaced
-  // the old single-column item_interactions.target_user_id / adopted_from
-  // approach, which could only ever credit one owner per event.
   // Progress badges (Block 3): total like+dislike item_interactions rows,
   // never watchlist/Merken adds or skips -- those aren't a taste opinion.
-  // Fetched once as raw rows (ownInteractionRows) and reused for both the
-  // counts below and, when applicable, as computeTasteMatch's owner-side
-  // input -- avoids a second identical item_interactions query for
-  // profile.id that a separate count-only query and computeTasteMatch's own
-  // internal fetch would otherwise both run.
   const [
     hasActiveStory,
-    { ownInteractionRows, tasteMatch },
+    ownInteractionRows,
     { data: existingFollowRow },
     { count: thanksGivenCount },
     { count: dontWatchCount },
     { count: topfEntryCount },
+    viewerInspiredCount,
   ] = await Promise.all([
     checkHasActiveStory(supabase, profile.id),
-    (async () => {
-      const ownInteractionRows = await getOwnInteractionRows(supabase, profile.id);
-      const tasteMatch =
-        !isOwner && viewer
-          ? await computeTasteMatch(supabase, profile.id, viewer.id, ownInteractionRows)
-          : null;
-      return { ownInteractionRows, tasteMatch };
-    })(),
+    getOwnInteractionRows(supabase, profile.id),
     // Resolved here (instead of inside FollowButton on mount) so the button
     // never needs its own client-side getUser()+user_follows roundtrip --
     // both ids are already known on this page.
@@ -151,6 +130,9 @@ export default async function ProfilePage({
       .select("id", { count: "exact", head: true })
       .eq("user_id", profile.id)
       .eq("status", "active"),
+    // "X-mal von Dir inspiriert" (foreign profile only) -- same übernommen-
+    // Ledger as everywhere else, single-pair lookup (viewer -> this profile).
+    !isOwner && viewer ? getInspiredCount(supabase, viewer.id, profile.id) : Promise.resolve(0),
   ]);
 
   // Einheitlicher Aktivitäts-Counter (nur noch "Bewertungen", keine separate
@@ -184,7 +166,7 @@ export default async function ProfilePage({
     avatarUrl: string | null;
     tier: ExpertiseTier;
     hasUnseenStory: boolean;
-    tasteMatchBadge: number | null;
+    inspiredCount: number;
   };
 
   let followingProfiles: FollowingProfile[] = [];
@@ -271,13 +253,10 @@ export default async function ProfilePage({
         (viewRows ?? []).map((row) => [row.target_user_id, row.viewed_at]),
       );
 
-      // Block 2.1: the small Taste-Match badge on each avatar -- a single
-      // batched pair of item_interactions queries for every followed friend
-      // at once, instead of one computeTasteMatch call (2 queries) per friend.
-      const tasteMatchBatch = await computeTasteMatchBatch(supabase, followedIds, profile.id);
-      const tasteMatchByUserId = new Map(
-        [...tasteMatchBatch].map(([friendId, match]) => [friendId, bestTasteMatchPercentage(match)] as const),
-      );
+      // Block 2.1: the per-avatar inspiration-count badge -- a single
+      // batched interaction_credits query for every followed friend at once
+      // (Folgeänderungen round, replaced the Taste-Match percentage badge).
+      const inspiredCountByUserId = await getInspiredCountBatch(supabase, profile.id, followedIds);
 
       followingProfiles = (friendProfiles ?? []).map((friend) => {
         const latestActivity = latestActivityByUserId.get(friend.id) ?? null;
@@ -294,7 +273,7 @@ export default async function ProfilePage({
           // own list rows already use.
           tier: resolveExpertiseTier(topListCountByUserId.get(friend.id) ?? 0, CONTENT_TIER_THRESHOLDS),
           hasUnseenStory: !!latestActivity && (!viewedAt || viewedAt < latestActivity),
-          tasteMatchBadge: tasteMatchByUserId.get(friend.id) ?? null,
+          inspiredCount: inspiredCountByUserId.get(friend.id) ?? 0,
         };
       });
     }
@@ -363,81 +342,62 @@ export default async function ProfilePage({
           />
         )}
 
-        {/* Fremdansicht: dieses Profils eigene Follower/Beitragende, nicht die des Betrachters (Punkt 7). */}
-        {!isOwner && (
-          <FollowingBar
-            currentUserId={profile.id}
-            followingProfiles={followingProfiles}
-            contributorIds={foreignContributorIds}
-            showAddButton={false}
-          />
-        )}
-
         {/*
-          Eigenansicht: Name/Avatar sitzen jetzt oben sticky (Punkt 3), hier
-          also keine eigene Username-Zeile mehr. Fremdansicht behält den
-          Namen an dieser Stelle unverändert.
+          Fremdansicht, logisch sortiert (Folgeänderungen round, Punkt 8):
+          2. Name -- 3. Follow/Entfolgen -- 4. Teilen -- 5. Bewertungsstatistik
+          -- 6. Follower-Leiste -- 7. "von Dir inspiriert". Ein einziger
+          FollowButton statt zwei getrennter Code-Pfade an zwei Stellen --
+          die Komponente rendert intern schon beides (Icon vs. voller Button)
+          je nach initialIsFollowing.
         */}
         {!isOwner && (
-          <div className="flex items-center justify-center gap-1.5">
-            <h1 className="text-xl font-semibold text-center truncate">
-              {profile.username}
-            </h1>
-            {/*
-              Kompaktes Entfolgen-Icon direkt neben dem Namen (Punkt 5) --
-              FollowButton rendert bei isFollowing bereits genau das (ein
-              "..."-Icon mit Bestätigungsdialog), hier nur an anderer
-              Stelle platziert statt neu gebaut. Serverseitig bekannter
-              Ausgangszustand entscheidet die Position, nicht Client-State
-              -- nach einem Unfollow lädt router.refresh() die Seite neu
-              und der Button wandert dann konsistent zur unteren "Inspirierend"-CTA.
-            */}
-            {!isGuest && existingFollowRow && (
-              <FollowButton
-                targetUserId={profile.id}
-                targetUsername={profile.username}
-                initialIsLoggedIn
-                initialIsFollowing
+          <>
+            <h1 className="text-xl font-semibold text-center truncate w-full">{profile.username}</h1>
+
+            <div className="flex items-center gap-2">
+              {!isGuest && (
+                <FollowButton
+                  targetUserId={profile.id}
+                  targetUsername={profile.username}
+                  initialIsLoggedIn
+                  initialIsFollowing={!!existingFollowRow}
+                />
+              )}
+              {isGuest && <GuestProfileCta variant="button" />}
+              <ShareListButton
+                shareTitle={`Schau dir ${profile.username}s Filmgeschmack an`}
+                url={profileUrl}
+                iconOnly
               />
-            )}
-            {/* Teilen für Besucher (Punkt 8) -- gleiche iconOnly-Variante wie in der Eigenansicht, nur auf das fremde Profil bezogen. */}
-            <ShareListButton
-              shareTitle={`Schau dir ${profile.username}s Filmgeschmack an`}
-              url={profileUrl}
-              iconOnly
+            </div>
+
+            {/*
+              Bewertungsstatistik des Profilinhabers -- die einzige der
+              beiden auf Fremdprofilen erlaubten Statistiken zusammen mit
+              "von Dir inspiriert" unten (Punkt 6); Taste Match/Match-% und
+              sonstige Zusatzstatistiken (z.B. ThanksStat) sind hier bewusst
+              nicht mehr sichtbar.
+            */}
+            <p className="text-sm font-medium text-center">
+              {profile.username} hat {totalActivityCount} {totalActivityCount === 1 ? "Bewertung" : "Bewertungen"} abgegeben
+            </p>
+
+            <FollowingBar
+              currentUserId={profile.id}
+              followingProfiles={followingProfiles}
+              contributorIds={foreignContributorIds}
+              showAddButton={false}
             />
-          </div>
+
+            {viewer && (
+              <p className="text-sm font-medium text-center text-primary">
+                {viewerInspiredCount}-mal von Dir inspiriert
+              </p>
+            )}
+          </>
         )}
 
-        {tasteMatch && (
-          <TasteMatchExpandable username={profile.username} tasteMatch={tasteMatch} />
-        )}
-
-        <ThanksStat count={thanksGivenCount ?? 0} />
-
-        {/*
-          Nur noch eine Gesamtzahl im Profil, gleicher Stil für Eigen- und
-          Fremdansicht -- die frühere zweite "davon N für dich"-Zeile
-          (Mein-Topf-Attribution) ist entfernt, Empfehlungen bleiben
-          ausschließlich über For Me sichtbar (Ring/Unlock), nicht als
-          eigene Zahl hier im Profil.
-        */}
-        {!isOwner && (
-          <p className="text-sm font-medium text-center">
-            {totalActivityCount} {totalActivityCount === 1 ? "Bewertung" : "Bewertungen"} von{" "}
-            {profile.username}
-          </p>
-        )}
-
-        {!isOwner && !isGuest && !existingFollowRow && (
-          <FollowButton
-            targetUserId={profile.id}
-            targetUsername={profile.username}
-            initialIsLoggedIn
-            initialIsFollowing={false}
-          />
-        )}
-        {isGuest && <GuestProfileCta variant="button" />}
+        {isOwner && <ThanksStat count={thanksGivenCount ?? 0} />}
 
         {/*
           Eigene gesammelte Listen leben wieder im Profil (Master-Audit

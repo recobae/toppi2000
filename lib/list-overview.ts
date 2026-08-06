@@ -33,11 +33,25 @@ export type ListOverviewRowData = {
  * `showTierProgress` mirrors the old `isOwner` ternary: only the owner ever
  * sees "42/60 bis Experte" progress text, a visitor just sees the tier badge.
  */
+/** "12 Einträge" / "1 Eintrag" (– X von Dir inspiriert, only when > 0) -- the foreign-profile-only stats line (Folgeänderungen round). */
+function formatEntriesStats(itemCount: number, inspiredCount: number): string {
+  const entryLabel = itemCount === 1 ? "Eintrag" : "Einträge";
+  return inspiredCount > 0 ? `${itemCount} ${entryLabel} – ${inspiredCount} von Dir inspiriert` : `${itemCount} ${entryLabel}`;
+}
+
 export async function getListOverviewData(
   supabase: SupabaseClient,
-  params: { userId: string; username: string; homeCity: string | null; showTierProgress: boolean },
+  params: {
+    userId: string;
+    username: string;
+    homeCity: string | null;
+    showTierProgress: boolean;
+    /** The page's viewer -- when set and different from userId, every row's stats line becomes "X Einträge – X von Dir inspiriert" instead of the owner-facing detail text. */
+    viewerId?: string | null;
+  },
 ): Promise<{ rows: ListOverviewRowData[]; movieListItemCount: number; totalPlacesCount: number }> {
   const { userId, username, homeCity, showTierProgress } = params;
+  const isForeignView = !!params.viewerId && params.viewerId !== userId;
 
   const previewByCategory = await Promise.all(
     VISIBLE_SAVED_CATEGORIES.map(async (category) => {
@@ -97,6 +111,33 @@ export async function getListOverviewData(
     ...((watchlistPreview?.itemCount ?? 0) > 0 ? [`${watchlistPreview?.itemCount} gemerkt`] : []),
   ].join(" · ");
 
+  // Foreign view only: which movie/tv and place ids the viewer has
+  // "inspired" credits for against THIS profile owner (lib/interaction-
+  // credits.ts) -- reused as-is, never a new/different counting scheme.
+  let moviesInspiredCount = 0;
+  let inspiredPlaceIdSet: Set<string> | null = null;
+  if (isForeignView) {
+    const viewerId = params.viewerId as string;
+    const [{ count: moviesInspired }, { data: placeCreditRows }] = await Promise.all([
+      supabase
+        .from("interaction_credits")
+        .select("*", { count: "exact", head: true })
+        .eq("owner_user_id", userId)
+        .eq("actor_user_id", viewerId)
+        .eq("credit_type", "inspired")
+        .in("media_type", ["movie", "tv"]),
+      supabase
+        .from("interaction_credits")
+        .select("item_id")
+        .eq("owner_user_id", userId)
+        .eq("actor_user_id", viewerId)
+        .eq("credit_type", "inspired")
+        .eq("media_type", "place"),
+    ]);
+    moviesInspiredCount = moviesInspired ?? 0;
+    inspiredPlaceIdSet = new Set((placeCreditRows ?? []).map((row) => row.item_id));
+  }
+
   const { data: regionRows } = await supabase
     .from("place_regions")
     .select("id, region_name, region_key, general_note")
@@ -105,14 +146,14 @@ export async function getListOverviewData(
 
   const allRegions = await Promise.all(
     (regionRows ?? []).map(async (region) => {
-      const [{ data: previewRows }, { count }, { count: noteCount }, { count: savedCount }] = await Promise.all([
+      const [{ data: previewRows }, { data: placeIdRows }, { count: noteCount }, { count: savedCount }] = await Promise.all([
         supabase
           .from("places")
           .select("photo_url")
           .eq("region_id", region.id)
           .order("position", { ascending: true })
           .limit(4),
-        supabase.from("places").select("id", { count: "exact", head: true }).eq("region_id", region.id),
+        supabase.from("places").select("google_place_id").eq("region_id", region.id),
         supabase
           .from("places")
           .select("id", { count: "exact", head: true })
@@ -125,13 +166,18 @@ export async function getListOverviewData(
           .eq("status", "want_to_visit"),
       ]);
 
+      const inspiredCount = inspiredPlaceIdSet
+        ? (placeIdRows ?? []).filter((row) => inspiredPlaceIdSet!.has(row.google_place_id)).length
+        : 0;
+
       return {
         key: region.region_key,
         name: region.region_name,
         photoUrls: (previewRows ?? []).map((row) => row.photo_url).filter((url): url is string => !!url),
-        itemCount: count ?? 0,
+        itemCount: placeIdRows?.length ?? 0,
         noteCount: noteCount ?? 0,
         savedCount: savedCount ?? 0,
+        inspiredCount,
         hasTip: !!region.general_note,
       };
     }),
@@ -155,7 +201,7 @@ export async function getListOverviewData(
       tier: resolveExpertiseTier(movieListItemCount, CONTENT_TIER_THRESHOLDS),
       tierProgress: showTierProgress ? tierProgressLabel(movieListItemCount, CONTENT_TIER_THRESHOLDS) : null,
       isCurrentLocation: false,
-      statsText: movieListStatsText,
+      statsText: isForeignView ? formatEntriesStats(movieListItemCount, moviesInspiredCount) : movieListStatsText,
       hasTip: false,
     },
     ...regions.map((region) => ({
@@ -170,7 +216,7 @@ export async function getListOverviewData(
       tier: resolveExpertiseTier(region.itemCount, PLACE_TIER_THRESHOLDS),
       tierProgress: showTierProgress ? tierProgressLabel(region.itemCount, PLACE_TIER_THRESHOLDS) : null,
       isCurrentLocation: region.name === homeCity,
-      statsText: undefined as string | undefined,
+      statsText: isForeignView ? formatEntriesStats(region.itemCount, region.inspiredCount) : undefined,
       hasTip: region.hasTip,
     })),
   ].sort((a, b) => b.itemCount - a.itemCount);

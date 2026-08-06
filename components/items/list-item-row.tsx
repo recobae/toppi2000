@@ -16,6 +16,7 @@ import {
 } from "@/lib/places";
 import { truncateNote } from "@/lib/notes";
 import type { SocialProofBreakdown } from "@/lib/hooks/use-social-proof";
+import { formatOtherRaters, type OtherRatersBreakdown } from "@/lib/hooks/use-other-raters";
 import type { MovieDetails, WatchProviderGroups } from "@/lib/tmdb";
 import type { OpeningStatus } from "@/lib/opening-hours";
 
@@ -44,11 +45,14 @@ export type ListItemRowActions =
       variant: "rate";
       onLike: () => void;
       onDislike: () => void;
-      onAdd: () => void;
-      addLabel: string;
+      /** Optional -- omit both to render just Gefällt mir/Nix für mich with no third button (Orte-Listen no longer offer a "+ Merken" quick-add). */
+      onAdd?: () => void;
+      addLabel?: string;
       pending?: boolean;
       /** Foreign-list rows only: the viewer's own existing stance on this item, so the buttons reflect it instead of always looking unrated. */
       ownInteraction?: "like" | "dislike" | null;
+      /** Foreign-list rows only: OTHER followed friends (never the viewer) who share the viewer's own stance -- backs "Auch von [Name] geliked/nicht gemocht", shown only once ownInteraction is set. */
+      otherRaters?: OtherRatersBreakdown;
     }
   | {
       /** Item already on one of the viewer's own lists. */
@@ -146,15 +150,17 @@ export function ActionBar({
         >
           <Ban className={`size-4 ${dislikedByMe ? "fill-current" : ""}`} />
         </button>
-        <button
-          type="button"
-          disabled={actions.pending}
-          onClick={stop(actions.onAdd)}
-          className="ml-auto flex items-center gap-1 h-8 px-2.5 rounded-full bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
-        >
-          <Plus className="size-3.5" />
-          {actions.addLabel}
-        </button>
+        {actions.onAdd && actions.addLabel && (
+          <button
+            type="button"
+            disabled={actions.pending}
+            onClick={stop(actions.onAdd)}
+            className="ml-auto flex items-center gap-1 h-8 px-2.5 rounded-full bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            <Plus className="size-3.5" />
+            {actions.addLabel}
+          </button>
+        )}
       </div>
     );
   }
@@ -333,15 +339,22 @@ export function ListItemRow({
         <p className="text-sm font-medium leading-tight line-clamp-2">{title}</p>
         {meta}
         <AttributionLines attribution={attribution} />
-        {actions.variant === "rate" && actions.ownInteraction && (
-          <p
-            className={`text-[11px] font-medium ${
-              actions.ownInteraction === "like" ? "text-green-600" : "text-destructive"
-            }`}
-          >
-            {actions.ownInteraction === "like" ? "Auch von dir geliked" : "Auch von dir nicht gemocht"}
-          </p>
-        )}
+        {actions.variant === "rate" &&
+          actions.ownInteraction &&
+          (() => {
+            const others = actions.ownInteraction === "like" ? actions.otherRaters?.like : actions.otherRaters?.dislike;
+            const formatted = others ? formatOtherRaters(others) : null;
+            if (!formatted) return null;
+            return (
+              <p
+                className={`text-[11px] font-medium ${
+                  actions.ownInteraction === "like" ? "text-green-600" : "text-destructive"
+                }`}
+              >
+                {actions.ownInteraction === "like" ? `Auch von ${formatted} geliked` : `Auch von ${formatted} nicht gemocht`}
+              </p>
+            );
+          })()}
         {note && (
           <p className="text-[11px] italic text-muted-foreground line-clamp-2">
             „{truncateNote(note)}“

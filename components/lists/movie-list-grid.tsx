@@ -22,6 +22,7 @@ import { NOTE_PLACEHOLDERS } from "@/lib/notes";
 import { NoteModal } from "@/components/lists/note-modal";
 import { useSocialProof, getSocialProofBreakdown } from "@/lib/hooks/use-social-proof";
 import { useOwnInteractions, type OwnInteractionEntry } from "@/lib/hooks/use-own-interactions";
+import { useOtherRaters } from "@/lib/hooks/use-other-raters";
 import type { WatchProviderGroups, MovieDetails } from "@/lib/tmdb";
 
 export type MovieListStatus = "top_list" | "watchlist";
@@ -370,7 +371,6 @@ function VisitorMovieList({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
-  const [notePrompt, setNotePrompt] = useState<{ item: MovieListItem; category: MovieListStatus } | null>(null);
   const [showDetailsFor, setShowDetailsFor] = useState<MovieListItem | null>(null);
 
   const showToast = useCallback((message: string) => {
@@ -387,6 +387,9 @@ function VisitorMovieList({
   const { getOwn, markOwn } = useOwnInteractions(
     items.map((item) => ({ id: String(item.itemId), mediaType: item.mediaType })),
     initialOwnInteractions,
+  );
+  const { get: getOtherRaters } = useOtherRaters(
+    items.map((item) => ({ id: String(item.itemId), mediaType: item.mediaType })),
   );
 
   // Rating a title on someone else's list behaves exactly like rating an
@@ -418,7 +421,6 @@ function VisitorMovieList({
         mediaType: item.mediaType,
       });
       showToast(`Zu ${CATEGORY_LABELS.top_list} hinzugefügt`);
-      setNotePrompt({ item, category: "top_list" });
     }
     setPendingKey(null);
   };
@@ -461,7 +463,6 @@ function VisitorMovieList({
         mediaType: item.mediaType,
       });
       showToast(`Zu ${CATEGORY_LABELS.watchlist} hinzugefügt`);
-      setNotePrompt({ item, category: "watchlist" });
     }
     setPendingKey(null);
   };
@@ -520,6 +521,7 @@ function VisitorMovieList({
             variant: "rate",
             pending: pendingKey === `${item.mediaType}-${item.itemId}`,
             ownInteraction: getOwn(String(item.itemId), item.mediaType),
+            otherRaters: getOtherRaters(String(item.itemId), item.mediaType),
             onLike: () => handleLike(item),
             onDislike: () => handleDislike(item),
             onAdd: () => handleWatchlist(item),
@@ -546,27 +548,6 @@ function VisitorMovieList({
           message={`Melde dich an, um Titel zu deinen eigenen Listen hinzuzufügen, ${ownerUsername}s Liste zu entdecken, direkt zu sehen wo Titel gerade laufen, und Inspirationen für heute Abend zu entdecken.`}
           next={`/u/${ownerUsername}`}
           onClose={() => setShowGuestPrompt(false)}
-        />
-      )}
-
-      {notePrompt && user && (
-        <NoteModal
-          title={notePrompt.item.title}
-          posterUrl={notePrompt.item.imageUrl}
-          initialNote={null}
-          placeholder={NOTE_PLACEHOLDERS[notePrompt.category]}
-          onSave={async (note) => {
-            const supabase = createClient();
-            await updateNote(
-              supabase,
-              notePrompt.category,
-              user.id,
-              notePrompt.item.itemId,
-              notePrompt.item.mediaType,
-              note,
-            );
-          }}
-          onClose={() => setNotePrompt(null)}
         />
       )}
     </div>

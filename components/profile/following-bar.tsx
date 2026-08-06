@@ -17,8 +17,8 @@ export type FollowingProfile = {
   avatarUrl: string | null;
   tier: ExpertiseTier;
   hasUnseenStory: boolean;
-  /** Higher of the two Taste-Match category percentages, or null if neither has enough shared ratings yet. */
-  tasteMatchBadge: number | null;
+  /** How many times this profile has "inspired" credits from the page's subject (lib/interaction-credits.ts) -- 0 renders no badge at all. */
+  inspiredCount: number;
 };
 
 /**
@@ -41,11 +41,13 @@ function TierCornerBadge({ tier }: { tier: ExpertiseTier }) {
   );
 }
 
-function TasteMatchCornerBadge({ percentage }: { percentage: number | null }) {
-  if (percentage === null) return null;
+/** Replaces the old Taste-Match percentage badge (Folgeänderungen round) -- reuses the same Sparkles "inspiration" icon the ContributorCornerBadge below already uses, never a percentage. */
+function InspiredCountBadge({ count }: { count: number }) {
+  if (count === 0) return null;
   return (
-    <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-semibold text-primary-foreground border border-background">
-      {percentage}%
+    <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center gap-px rounded-full bg-primary px-1 text-[9px] font-semibold text-primary-foreground border border-background">
+      <Sparkles className="size-2 fill-current" />
+      {count}x
     </span>
   );
 }
@@ -168,7 +170,7 @@ export function FollowingBar({
               </span>
             </span>
             <TierCornerBadge tier={friend.tier} />
-            <TasteMatchCornerBadge percentage={friend.tasteMatchBadge} />
+            <InspiredCountBadge count={friend.inspiredCount} />
             <ContributorCornerBadge isContributor={contributorIdSet.has(friend.id)} />
           </span>
         );
