@@ -9,13 +9,24 @@ import type { DiscoveryCandidate } from "@/lib/discovery";
 const SWIPE_THRESHOLD = 100;
 const VELOCITY_THRESHOLD = 600;
 const EXIT_DISTANCE = 700;
+// A pointer-down/up pair only counts as a deliberate tap (opens the detail
+// view) if it moved less than this and the card itself hasn't been dragged
+// past the same distance -- framer's own onTap gesture fired unreliably
+// after a real swipe release, so tap/drag are told apart manually here.
+const TAP_MAX_MOVEMENT = 8;
+const TAP_MAX_DURATION_MS = 500;
 
 /**
  * The one focused card for My Taste's Quick-Swipe -- generic over
  * movie/tv/place (whatever lib/quick-swipe.ts hands it), drag-to-decide
  * like the old movie-only SwipeCard, no friend badges, no watch providers
  * on the card face itself. Tapping (not dragging) the card opens the
- * shared global detail view (components/discovery/candidate-detail-modal.tsx).
+ * shared global detail view (components/discovery/candidate-detail-modal.tsx)
+ * -- tap/drag detection is manual (pointerdown/pointerup distance + a
+ * dragging flag set by framer's own onDragStart), not framer's built-in
+ * onTap, which still fired after a real swipe release in practice. Any
+ * future on-card buttons (e.g. explicit Like/Dislike) must stopPropagation
+ * on their own pointerup/click so they don't also trigger this tap handler.
  */
 export function QuickSwipeCard({
   candidate,
@@ -28,7 +39,7 @@ export function QuickSwipeCard({
   candidate: DiscoveryCandidate;
   onLike: () => void;
   onDislike: () => void;
-  /** The whole card is tappable -- opens the shared global detail view. Framer's onTap only fires for an actual tap, never after a real drag, so this can't fight the swipe gesture. */
+  /** The whole card is tappable -- opens the shared global detail view, but only for a genuine tap (see TAP_MAX_MOVEMENT above). */
   onOpenDetail?: () => void;
   disabled?: boolean;
   exitDirection?: "left" | "right" | null;
@@ -38,6 +49,8 @@ export function QuickSwipeCard({
   const likeOpacity = useTransform(x, [20, SWIPE_THRESHOLD], [0, 1]);
   const nopeOpacity = useTransform(x, [-SWIPE_THRESHOLD, -20], [1, 0]);
   const decidedRef = useRef(false);
+  const isDraggingRef = useRef(false);
+  const pointerDownRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
   useEffect(() => {
     if (!exitDirection) return;
@@ -47,7 +60,16 @@ export function QuickSwipeCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exitDirection]);
 
+  const handleDragStart = () => {
+    isDraggingRef.current = true;
+  };
+
   const handleDragEnd = (_event: unknown, info: PanInfo) => {
+    // Dragging is considered finished for tap-detection purposes right away
+    // (the pointerup that ends the drag must never also open the detail
+    // view), independent of whether this particular drag crossed the
+    // like/dislike decision threshold below.
+    isDraggingRef.current = false;
     if (disabled || decidedRef.current) return;
     const offset = info.offset.x;
     const velocity = info.velocity.x;
@@ -69,13 +91,34 @@ export function QuickSwipeCard({
     }
   };
 
+  const handlePointerDown = (event: React.PointerEvent) => {
+    pointerDownRef.current = { x: event.clientX, y: event.clientY, time: Date.now() };
+  };
+
+  const handlePointerUp = (event: React.PointerEvent) => {
+    const start = pointerDownRef.current;
+    pointerDownRef.current = null;
+    if (disabled || decidedRef.current || isDraggingRef.current || !start) return;
+    const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+    const duration = Date.now() - start.time;
+    // Belt-and-suspenders: also check the card's own drag offset, not just
+    // the raw pointer movement -- covers the case where framer's drag
+    // constraints/elastic damping keep the card itself nearly still while
+    // the pointer travelled further (e.g. resistance at the edges).
+    if (distance <= TAP_MAX_MOVEMENT && duration <= TAP_MAX_DURATION_MS && Math.abs(x.get()) <= TAP_MAX_MOVEMENT) {
+      onOpenDetail?.();
+    }
+  };
+
   return (
     <motion.div
       style={{ x, rotate, touchAction: "pan-y" }}
       drag={disabled ? false : "x"}
       dragMomentum={false}
+      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
-      onTap={disabled || decidedRef.current ? undefined : onOpenDetail}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
       className="relative h-full w-full rounded-2xl overflow-hidden bg-muted shadow-xl select-none cursor-grab active:cursor-grabbing"
     >
       {candidate.imageUrl ? (

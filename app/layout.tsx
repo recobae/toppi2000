@@ -3,6 +3,7 @@ import { Geist } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Suspense } from "react";
 import { BottomNav } from "@/components/nav/bottom-nav";
+import { DailyStatsToast } from "@/components/nav/daily-stats-toast";
 import "./globals.css";
 
 const defaultUrl = process.env.VERCEL_URL
@@ -47,6 +48,7 @@ export default function RootLayout({
           {children}
           <Suspense fallback={null}>
             <BottomNav />
+            <DailyStatsToast />
           </Suspense>
         </ThemeProvider>
       </body>

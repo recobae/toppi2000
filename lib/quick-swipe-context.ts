@@ -38,7 +38,7 @@ export async function getTasteContext(
     supabase.from("places").select("region_id, places_category").eq("user_id", userId),
     supabase
       .from("item_interactions")
-      .select("id", { count: "exact", head: true })
+      .select("*", { count: "exact", head: true })
       .eq("user_id", userId)
       .eq("interaction_type", "like")
       .in("media_type", ["movie", "tv"]),

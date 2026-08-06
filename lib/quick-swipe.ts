@@ -20,11 +20,30 @@ export type QuickSwipeUnit =
   | { kind: "single"; candidate: DiscoveryCandidate }
   | { kind: "battle"; a: DiscoveryCandidate; b: DiscoveryCandidate };
 
-/** The 5 candidate-source groups plus "battle" -- matches the required 25/20/20/15/10/10 startup weighting exactly. */
+/** The 5 candidate-source groups plus "battle" -- matches the required 25/20/20/15/10/10 startup weighting exactly (when Battle is enabled, see BATTLE_MODE_ENABLED below). */
 export type MixGroup = "high_quality" | "topical" | "home_city" | "battle" | "long_tail" | "exploration";
 type ItemMixGroup = Exclude<MixGroup, "battle">;
 
-const MIX_WEIGHTS: Record<ItemMixGroup, number> = {
+/**
+ * Battle temporarily disabled project-wide: a tap on a Battle side both
+ * committed the winner AND advanced the deck in one motion, so there was no
+ * way to open either item's detail view or reconsider before the decision
+ * landed. Rather than rebuild that interaction now, Battle is switched off
+ * here -- no Battle units are produced, no Battle UI is reachable, nothing
+ * about the Battle code itself (components/swipe/battle-card.tsx, the
+ * battleKey/buildBattles logic below) was deleted. The 15% weight is
+ * folded back into the other 5 groups (see BASE_MIX_WEIGHTS/MIX_WEIGHTS)
+ * so the mix still sums to 100% without Battle.
+ *
+ * A future Battle must, before this flag flips back on:
+ *  - show both items side by side without instantly deciding on tap,
+ *  - let either side's detail view be opened independently,
+ *  - have its own explicit, visible "chosen" state,
+ *  - only advance the deck after a deliberate confirm, not the first tap.
+ */
+const BATTLE_MODE_ENABLED = false;
+
+const BASE_MIX_WEIGHTS: Record<ItemMixGroup, number> = {
   high_quality: 0.25,
   topical: 0.2,
   home_city: 0.2,
@@ -32,6 +51,15 @@ const MIX_WEIGHTS: Record<ItemMixGroup, number> = {
   exploration: 0.1,
 };
 const BATTLE_WEIGHT = 0.15;
+
+// With Battle disabled, redistribute its 15% proportionally across the
+// other 5 groups instead of just dropping it (leaving the queue 15% short
+// of its target length) -- e.g. high_quality's 0.25 becomes 0.25/0.85.
+const MIX_WEIGHTS: Record<ItemMixGroup, number> = BATTLE_MODE_ENABLED
+  ? BASE_MIX_WEIGHTS
+  : (Object.fromEntries(
+      Object.entries(BASE_MIX_WEIGHTS).map(([group, weight]) => [group, weight / (1 - BATTLE_WEIGHT)]),
+    ) as Record<ItemMixGroup, number>);
 
 // How much extra each group fetches beyond its own target -- gives battle-
 // pairing and the shortfall-redistribution pass real material to draw from
@@ -197,7 +225,7 @@ function buildBattles(
   pools: Record<ItemMixGroup, DiscoveryCandidate[]>,
   targetCount: number,
 ): { kind: "battle"; a: DiscoveryCandidate; b: DiscoveryCandidate }[] {
-  if (targetCount <= 0) return [];
+  if (!BATTLE_MODE_ENABLED || targetCount <= 0) return [];
   const groups = Object.keys(pools) as ItemMixGroup[];
   const buckets = new Map<string, DiscoveryCandidate[]>();
   for (const group of groups) {
@@ -354,7 +382,7 @@ export async function getQuickSwipeQueue(
     long_tail: Math.round(params.limit * MIX_WEIGHTS.long_tail),
     exploration: Math.round(params.limit * MIX_WEIGHTS.exploration),
   };
-  const targetBattle = Math.round(params.limit * BATTLE_WEIGHT);
+  const targetBattle = BATTLE_MODE_ENABLED ? Math.round(params.limit * BATTLE_WEIGHT) : 0;
   const fetchN = (target: number) => target + OVERFETCH_SLACK;
 
   const pools: Record<ItemMixGroup, DiscoveryCandidate[]> = {
