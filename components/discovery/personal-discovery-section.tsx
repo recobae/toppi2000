@@ -9,23 +9,20 @@ import { DiscoveryListRow } from "@/components/discovery/discovery-list-row";
 import type { DiscoveryCandidate } from "@/lib/discovery";
 
 /**
- * One supplementary section under the main stream ("Gerade neu von
- * Freunden", "Beliebt im Netzwerk", ...). Same row component and same
- * Gefällt-mir/Nix-für-mich write-through as the main stream, but purely
- * local list state -- no live refill, since these are meant as a deeper,
- * finite dip into the network rather than an endless queue.
+ * Für Dich, Abschnitt 2 "Persönliche Entdeckung" -- genau EIN primärer,
+ * datenbasierter Kontext-Impuls (lib/fuer-dich-personalization.ts) als
+ * prominente Überschrift, direkt gefolgt von den passenden Vorschlägen
+ * selbst -- der Klick auf den Impuls braucht keine eigene Navigation, die
+ * "gefilterte Liste" steht schon direkt darunter.
  */
-export function DiscoverySection({
-  title,
+export function PersonalDiscoverySection({
+  message,
   candidates,
   userId,
-  emphasize,
 }: {
-  title: string;
+  message: string;
   candidates: DiscoveryCandidate[];
   userId: string;
-  /** Für Dich's top "Neue Bewertungen von Freunden" header is prominent, not a quiet muted-foreground label like every other section here. */
-  emphasize?: boolean;
 }) {
   const [items, setItems] = useState(candidates);
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -47,7 +44,7 @@ export function DiscoverySection({
 
   return (
     <div className="w-full flex flex-col gap-2.5">
-      <h2 className={emphasize ? "text-lg font-semibold" : "text-sm font-medium text-muted-foreground"}>{title}</h2>
+      <h2 className="text-lg font-semibold">{message}</h2>
       <AnimatePresence mode="popLayout">
         {items.map((candidate) => (
           <DiscoveryListRow

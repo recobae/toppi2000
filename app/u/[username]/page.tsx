@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
-import Image from "next/image";
 import type { Metadata } from "next";
 import { Settings } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -14,7 +13,7 @@ import { FollowButton } from "@/components/profile/follow-button";
 import { ShareListButton } from "@/components/lists/share-list-button";
 import { TasteMatchExpandable } from "@/components/profile/taste-match-expandable";
 import { ThanksStat } from "@/components/profile/progress-badges";
-import { getForMeStatus, getTopfContributorIds, type ForMeStatus } from "@/lib/for-me";
+import { getTopfContributorIds } from "@/lib/for-me";
 import { FollowingBar } from "@/components/profile/following-bar";
 import { getListOverviewData } from "@/lib/list-overview";
 import { resolveExpertiseTier, CONTENT_TIER_THRESHOLDS, type ExpertiseTier } from "@/lib/expertise-tiers";
@@ -172,10 +171,12 @@ export default async function ProfilePage({
     (topfEntryCount ?? 0);
 
   // Only ever needed for the owner's own FollowingBar tile -- a foreign
-  // profile visit never renders it, so skip the extra queries entirely.
-  const forMe: ForMeStatus | null = isOwner
-    ? await getForMeStatus(supabase, profile.id, totalActivityCount)
-    : null;
+  // profile visit gets its own separate call further below (Fremdansicht
+  // braucht das Follower-Set des BESUCHTEN Profils, nicht des Betrachters).
+  // getTopfContributorIds alone (not the heavier getForMeStatus, whose
+  // ownCount/friendCount stats moved to Für Dich -- Struktur-Runde) is all
+  // this page still needs.
+  const ownContributorIds = isOwner ? await getTopfContributorIds(supabase, profile.id) : [];
 
   type FollowingProfile = {
     id: string;
@@ -312,23 +313,13 @@ export default async function ProfilePage({
       <div className="flex-1 w-full flex flex-col items-center gap-4 max-w-2xl p-5 pt-6">
         {/*
           Scrollt normal mit dem restlichen Content -- nicht mehr sticky/
-          fixed. Avatar links, Logo mittig auf derselben Zeile (nicht mehr
-          im My-Taste-Bereich), Settings + Teilen rechts.
+          fixed. Kein Logo mehr hier (Struktur-Runde) -- Avatar links,
+          Settings + Teilen rechts, keine reservierte mittlere Spalte.
         */}
         {isOwner && (
-          <div className="w-full grid grid-cols-3 items-center gap-2">
-            <span className="flex items-center gap-2 shrink-0 justify-self-start">
-              <ProfileAvatar username={profile.username} imageUrl={avatarUrl} size="sm" />
-            </span>
-            <Image
-              src="/logo.png"
-              alt="Toppi"
-              width={240}
-              height={130}
-              className="h-12 w-auto justify-self-center"
-              priority
-            />
-            <span className="flex items-center gap-2 shrink-0 justify-self-end">
+          <div className="w-full flex items-center justify-between gap-2">
+            <ProfileAvatar username={profile.username} imageUrl={avatarUrl} size="sm" />
+            <span className="flex items-center gap-2 shrink-0">
               <Link
                 href="/settings"
                 aria-label="Einstellungen"
@@ -353,16 +344,13 @@ export default async function ProfilePage({
           samt Song-Trigger.
         */}
         {isOwner ? (
-          forMe && (
-            <OwnProfileHero
-              userId={profile.id}
-              username={profile.username}
-              avatarUrl={avatarUrl}
-              forMe={forMe}
-              followingProfiles={followingProfiles}
-              contributorIds={forMe.contributorUserIds}
-            />
-          )
+          <OwnProfileHero
+            userId={profile.id}
+            username={profile.username}
+            avatarUrl={avatarUrl}
+            followingProfiles={followingProfiles}
+            contributorIds={ownContributorIds}
+          />
         ) : (
           <ForeignProfileHero
             username={profile.username}

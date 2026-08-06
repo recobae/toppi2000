@@ -120,8 +120,8 @@ async function fetchTmdbDiscover(url: string): Promise<TmdbTitleLike[]> {
   }
 }
 
-/** "Ähnlich zu deinem Geschmack" -- movies matching the taste-context's already-inferred top genres, no second genre-inference pass. */
-async function getGenreMatchedMovies(
+/** "Ähnlich zu deinem Geschmack" -- movies matching the taste-context's already-inferred top genres, no second genre-inference pass. Exported for reuse by Für Dich's "Persönliche Entdeckung" (lib/fuer-dich-personalization.ts). */
+export async function getGenreMatchedMovies(
   excludedKeys: Set<string>,
   apiKey: string,
   genreIds: string[],

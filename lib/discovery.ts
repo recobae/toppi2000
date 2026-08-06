@@ -475,59 +475,30 @@ export async function getNetworkRegionPrompts(
     .slice(0, limit);
 }
 
-/**
- * Ranked "Für Dich" main-stream page -- the live, interactive queue.
- * Excludes anything the client already showed this session and, if the
- * network pool runs short, tops up with the same generic recommendation
- * engine used elsewhere (lib/recommendations.ts) so the stream never runs
- * dry.
- */
-export async function getDiscoveryFeed(
-  supabase: SupabaseClient,
-  userId: string,
-  params: { excludeIds: Set<string>; limit: number; homeCity: string | null; tmdbApiKey?: string; placesApiKey?: string },
-): Promise<{ candidates: DiscoveryCandidate[]; hasNetworkContent: boolean }> {
-  const candidates = await gatherNetworkCandidates(supabase, userId);
-  const hasNetworkContent = candidates.length > 0;
-  let ranked = candidates
-    .filter((candidate) => !params.excludeIds.has(candidate.id))
-    .sort((a, b) => b.finalScore - a.finalScore);
-
-  // Never-empty fallback: too little (or zero) network content -- top up
-  // with the same generic "popular near you" / "matches your genre profile"
-  // engine already used by Inspiration, tagged as low-confidence exploration
-  // rather than social proof.
-  if (ranked.length < params.limit) {
-    const need = params.limit - ranked.length;
-    const exploreCandidates = await buildExplorationFallback(supabase, userId, {
-      need,
-      excludeIds: params.excludeIds,
-      alreadyIncludedIds: new Set(ranked.map((c) => c.id)),
-      homeCity: params.homeCity,
-      tmdbApiKey: params.tmdbApiKey,
-      placesApiKey: params.placesApiKey,
-    });
-    ranked = [...ranked, ...exploreCandidates];
-  }
-
-  return { candidates: ranked.slice(0, params.limit), hasNetworkContent };
-}
-
 export type DiscoverySections = {
   freshFromFriends: DiscoveryCandidate[];
   popularInNetwork: DiscoveryCandidate[];
-  related: DiscoveryCandidate[];
   moreFromRegion: DiscoveryCandidate[];
   newForYou: DiscoveryCandidate[];
+  /** Every gathered network candidate, freshest first, uncapped (well, capped generously) -- lets callers do their own "since when" filtering (Für Dich's "Neue Bewertungen von Freunden") without a second gather of the same pool. */
+  recentActivity: DiscoveryCandidate[];
+  /** Whether the viewer follows anyone at all -- distinguishes "no followed friends yet" from "followed friends but nothing new" for the caller's empty-state wording. */
+  hasFollows: boolean;
 };
 
+const RECENT_ACTIVITY_CAP = 40;
+
 /**
- * The 5 supplementary sections under the main stream -- reads from the same
+ * The supplementary sections under the main stream -- reads from the same
  * gathered pool the main stream itself is built from (one DB round-trip),
  * just sorted/filtered differently per section. "Neu für dich" is the one
  * exception: genuinely novel content the network hasn't already surfaced,
  * so it goes through the exploration fallback engine instead of re-slicing
- * network data under a different label.
+ * network data under a different label. "Verwandte Empfehlungen" (personal-
+ * affinity-sorted) was removed as its own section here -- that role now
+ * belongs to Für Dich's dedicated "Persönliche Entdeckung" block
+ * (lib/fuer-dich-personalization.ts), so the two don't show the same kind
+ * of content twice on one page.
  */
 export async function getDiscoverySections(
   supabase: SupabaseClient,
@@ -537,27 +508,21 @@ export async function getDiscoverySections(
   const perSection = params.perSection ?? 6;
   const all = await gatherNetworkCandidates(supabase, userId);
 
-  const freshFromFriends = [...all]
+  const recentActivity = [...all]
     .sort((a, b) => new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime())
-    .slice(0, perSection);
+    .slice(0, RECENT_ACTIVITY_CAP);
+  const freshFromFriends = recentActivity.slice(0, perSection);
 
   const popularInNetwork = [...all]
     .filter((c) => c.socialSupportCount >= 2)
     .sort((a, b) => b.socialSupportCount - a.socialSupportCount)
     .slice(0, perSection);
 
-  const related = [...all]
-    .filter((c) => c.personalSupportCount > 0)
-    .sort((a, b) => b.personalSupportCount - a.personalSupportCount)
-    .slice(0, perSection);
-
   const moreFromRegion = all
     .filter((c) => c.sourceType === "place" && (!params.homeCity || c.location?.includes(params.homeCity)))
     .slice(0, perSection);
 
-  const usedIds = new Set(
-    [...freshFromFriends, ...popularInNetwork, ...related, ...moreFromRegion].map((c) => c.id),
-  );
+  const usedIds = new Set([...freshFromFriends, ...popularInNetwork, ...moreFromRegion].map((c) => c.id));
   const newForYou = await buildExplorationFallback(supabase, userId, {
     need: perSection,
     excludeIds: usedIds,
@@ -567,7 +532,12 @@ export async function getDiscoverySections(
     placesApiKey: params.placesApiKey,
   });
 
-  return { freshFromFriends, popularInNetwork, related, moreFromRegion, newForYou };
+  const { count: followCount } = await supabase
+    .from("user_follows")
+    .select("*", { count: "exact", head: true })
+    .eq("follower_id", userId);
+
+  return { freshFromFriends, popularInNetwork, moreFromRegion, newForYou, recentActivity, hasFollows: (followCount ?? 0) > 0 };
 }
 
 export function placeSearchResultToCandidate(place: PlaceSearchResult, city: string, recommendedBy: string[]): DiscoveryCandidate {

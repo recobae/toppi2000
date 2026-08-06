@@ -36,7 +36,49 @@ export async function getTopfContributorIds(
 }
 
 /**
- * Resolves what the profile page's own-view stats need: own total-activity
+ * The single "own broadened activity" count -- every active capture (swiped,
+ * imported, added via Für Dich/search): item_interactions (like+dislike) +
+ * top_list + watchlist + dont_watch + places + active recommendations.
+ * Deliberately an added sum, not a deduped set across item identities (the
+ * tables use different identity schemes -- TMDB item_id+media_type for
+ * movies, place_id for Orte, category_key+external_id for Mein-Topf).
+ * Single-user version of the per-friend loop inside getForMeStatus below;
+ * used both for a foreign profile's "X Bewertungen von {username}" line
+ * (app/u/[username]/page.tsx) and for the viewer's own "X Bewertungen von
+ * dir" stat, which now lives on /fuer-dich instead of the profile header.
+ */
+export async function getTotalActivityCount(supabase: SupabaseClient, userId: string): Promise<number> {
+  const [
+    { count: interactionsCount },
+    { count: topListCount },
+    { count: watchlistCount },
+    { count: dontWatchCount },
+    { count: placesCount },
+    { count: recommendationsCount },
+  ] = await Promise.all([
+    supabase.from("item_interactions").select("*", { count: "exact", head: true }).eq("user_id", userId),
+    supabase.from("top_list").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    supabase.from("watchlist").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    supabase.from("dont_watch").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    supabase.from("places").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    supabase
+      .from("recommendations")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("status", "active"),
+  ]);
+  return (
+    (interactionsCount ?? 0) +
+    (topListCount ?? 0) +
+    (watchlistCount ?? 0) +
+    (dontWatchCount ?? 0) +
+    (placesCount ?? 0) +
+    (recommendationsCount ?? 0)
+  );
+}
+
+/**
+ * Resolves what /fuer-dich's own-activity stat block needs: own total-activity
  * count (every active capture -- swiped, entered, imported, added via
  * Inspiration or search; see app/u/[username]/page.tsx's totalActivityCount)
  * and the same broadened sum across followed friends. `ownCount` is passed
