@@ -567,12 +567,14 @@ function OwnerRegionList({
 function VisitorRegionList({
   initialItems,
   ownerId,
+  ownerUsername,
   generalNote,
   viewMode,
   initialOwnInteractions,
 }: {
   initialItems: RegionPlaceItem[];
   ownerId: string;
+  ownerUsername: string;
   generalNote: string | null;
   /** Owned by RegionPageShell (the page header), not this component. */
   viewMode: ViewMode;
@@ -806,6 +808,7 @@ function VisitorRegionList({
           pending: pendingPlaceId === item.placeId,
           ownInteraction: getOwn(item.placeId, "place"),
           otherRaters: getOtherRaters(item.placeId, "place"),
+          ownerUsername,
           onLike: () => handleSave(item, "recommended"),
           onDislike: () => handleDislike(item),
           onUnknown: () => handleUnknown(item),
@@ -877,6 +880,7 @@ export function RegionItemsGrid({
     <VisitorRegionList
       initialItems={items}
       ownerId={ownerId}
+      ownerUsername={username}
       generalNote={generalNote}
       viewMode={viewMode}
       initialOwnInteractions={initialOwnInteractions}

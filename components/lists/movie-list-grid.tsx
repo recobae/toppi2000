@@ -519,6 +519,7 @@ function VisitorMovieList({
             pending: pendingKey === `${item.mediaType}-${item.itemId}`,
             ownInteraction: getOwn(String(item.itemId), item.mediaType),
             otherRaters: getOtherRaters(String(item.itemId), item.mediaType),
+            ownerUsername,
             onLike: () => handleLike(item),
             onDislike: () => handleDislike(item),
             onUnknown: () => handleUnknown(item),

@@ -6,7 +6,9 @@ import { DiscoverySection } from "@/components/discovery/discovery-section";
 import { PersonalDiscoverySection } from "@/components/discovery/personal-discovery-section";
 import { RegionPrompts } from "@/components/discovery/region-prompts";
 import { QuestionPrompts } from "@/components/discovery/question-prompts";
+import { NetworkActivityFeed } from "@/components/discovery/network-activity-feed";
 import { getDiscoverySections, getNetworkRegionPrompts } from "@/lib/discovery";
+import { getNetworkActivityFeed } from "@/lib/network-activity";
 import { getPersonalDiscoveryHighlight } from "@/lib/fuer-dich-personalization";
 import { getLastSeenFriendRatingsAt, markFriendRatingsSeen } from "@/lib/friend-ratings-seen";
 import { getForMeStatus, getTotalActivityCount } from "@/lib/for-me";
@@ -46,12 +48,13 @@ export default async function FuerDichPage() {
   const tmdbApiKey = process.env.TMDB_API_KEY;
   const placesApiKey = process.env.GOOGLE_PLACES_API_KEY;
 
-  const [sections, regionPrompts, highlight, lastSeenAt, ownActivityCount] = await Promise.all([
+  const [sections, regionPrompts, highlight, lastSeenAt, ownActivityCount, networkActivity] = await Promise.all([
     getDiscoverySections(supabase, user.id, { homeCity, tmdbApiKey, placesApiKey }),
     getNetworkRegionPrompts(supabase, user.id),
     getPersonalDiscoveryHighlight(supabase, user.id, { homeCity, tmdbApiKey, placesApiKey }),
     getLastSeenFriendRatingsAt(supabase, user.id),
     getTotalActivityCount(supabase, user.id),
+    getNetworkActivityFeed(supabase, user.id),
   ]);
   const questionPrompts = buildQuestionPrompts(homeCity);
   const forMeStatus = await getForMeStatus(supabase, user.id, ownActivityCount);
@@ -86,16 +89,28 @@ export default async function FuerDichPage() {
           <NotificationBell userId={user.id} />
         </div>
 
-        {/* Abschnitt 1: Neue Bewertungen von Freunden -- steht nur oben, wenn wirklich etwas Neues da ist; keine falsche "0 neue"-Überschrift. */}
-        {newFriendCount > 0 ? (
+        {/*
+          Abschnitt 1: "Gerade neu von deinem Netzwerk" -- Bewertungen von
+          Freunden (item-basiert, DiscoverySection) UND reine
+          Aktivitätsmeldungen wie "neue Liste erstellt"/"Ort hinzugefügt"
+          (lib/network-activity.ts, kein rateable Item) unter einer
+          gemeinsamen Überschrift, wie in der Anfrage beschrieben. Reihenfolge
+          der 3 Für-Dich-Zonen (§4): Netzwerkaktivität -> Personalisiertes
+          -> Weitere Inspiration.
+        */}
+        {(newFriendCount > 0 || networkActivity.length > 0) && (
+          <h2 className="text-lg font-semibold">Gerade neu von deinem Netzwerk</h2>
+        )}
+        {newFriendCount > 0 && (
           <DiscoverySection
-            emphasize
             title={`${newFriendCount} neue ${newFriendCount === 1 ? "Bewertung" : "Bewertungen"} von Freunden`}
             candidates={newFriendCandidates}
             userId={user.id}
           />
-        ) : (
-          sections.hasFollows && <h2 className="text-lg font-semibold">Nichts Neues von Freunden — entdecke weitere Ideen</h2>
+        )}
+        <NetworkActivityFeed events={networkActivity} />
+        {newFriendCount === 0 && networkActivity.length === 0 && sections.hasFollows && (
+          <h2 className="text-lg font-semibold">Nichts Neues von Freunden — entdecke weitere Ideen</h2>
         )}
 
         {/*

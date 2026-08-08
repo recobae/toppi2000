@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { motion } from "framer-motion";
 import type { MouseEvent, ReactNode } from "react";
 import { Check, HeartHandshake, HelpCircle, Pencil, Plus, Star, X } from "lucide-react";
 import { RATING_LABELS, ADD_LABEL, ADDED_LABEL } from "@/lib/copy";
@@ -57,6 +58,16 @@ export type ListItemRowActions =
       ownInteraction?: "like" | "dislike" | "neutral" | null;
       /** Foreign-list rows only: OTHER followed friends (never the viewer) who share the viewer's own stance -- backs "Auch von [Name] geliked/nicht gemocht", shown only once ownInteraction is set. */
       otherRaters?: OtherRatersBreakdown;
+      /**
+       * Foreign-list rows only: the profile whose list this row belongs to.
+       * An item's presence on someone's list IS their positive stance on it
+       * (only "Lohnt sich" ever adds to a list, see lib/discovery.ts's
+       * buildReason doc-comment) -- so once the viewer also rates it, this
+       * backs the Für-Dich-Umbau's Übereinstimmungs-/Diskrepanz-Hinweis
+       * ("Ihr seid euch einig" / "X empfiehlt es -- du bist anderer
+       * Meinung") without a second comparison query.
+       */
+      ownerUsername?: string;
     }
   | {
       /** Item already on one of the viewer's own lists. */
@@ -370,6 +381,26 @@ export function ListItemRow({
               </p>
             );
           })()}
+        {/*
+          Übereinstimmungs-/Diskrepanz-Hinweis (Für-Dich-Umbau §4): das
+          Item auf ownerUsername's Liste ist implizit deren "Lohnt sich" --
+          sobald der Betrachter auch bewertet hat, vergleichen wir direkt,
+          ohne eine zweite Abfrage.
+        */}
+        {actions.variant === "rate" && actions.ownerUsername && actions.ownInteraction === "like" && (
+          <motion.p
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="text-[11px] font-medium text-green-600"
+          >
+            Ihr seid euch einig – {actions.ownerUsername} und du finden: Das lohnt sich.
+          </motion.p>
+        )}
+        {actions.variant === "rate" && actions.ownerUsername && actions.ownInteraction === "dislike" && (
+          <p className="text-[11px] font-medium text-muted-foreground">
+            {actions.ownerUsername} empfiehlt es – du bist anderer Meinung.
+          </p>
+        )}
         {note && (
           <p className="text-[11px] italic text-muted-foreground line-clamp-2">
             „{truncateNote(note)}“
