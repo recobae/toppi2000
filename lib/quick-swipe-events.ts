@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MixGroup } from "@/lib/quick-swipe";
 import type { DiscoverySourceType } from "@/lib/discovery";
 
-export type QuickSwipeEventType = "like" | "dislike" | "battle_choice" | "detail_open";
+export type QuickSwipeEventType = "like" | "dislike" | "neutral" | "battle_choice" | "detail_open";
 
 /**
  * Best-effort instrumentation for the Quick-Swipe mixer -- like/dislike

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getTodayInteractionCount } from "@/lib/interactions";
 
-const MY_TASTE_PREFIX = "/my-taste";
+const MY_TASTE_PREFIX = "/lohnt-sich";
 const TOAST_DURATION_MS = 3500;
 
 function formatMessage(count: number): string {

@@ -5,7 +5,8 @@ import Image from "next/image";
 import { Heart, Ban, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { InteractionMediaType } from "@/lib/interactions";
-import { setInteractionWithCredits, removeInteractionWithCredits } from "@/lib/interaction-credits";
+import { removeInteractionWithCredits } from "@/lib/interaction-credits";
+import { applyItemRating, type RatingDecision } from "@/lib/rating-engine";
 
 type FilterCategory = "movies" | "places" | "other";
 
@@ -63,13 +64,14 @@ export default function MeineAktivitaetPage() {
       } = await supabase.auth.getUser();
       if (!user) return;
       const nextType = item.interactionType === "like" ? "dislike" : "like";
+      const nextDecision: RatingDecision = nextType === "like" ? "lohnt_sich" : "lohnt_sich_nicht";
       // No owner ids known here -- this only ever toggles the actor's own
       // stance, it never (re-)creates new like credits for anyone.
-      const { error } = await setInteractionWithCredits(
+      const { error } = await applyItemRating(
         supabase,
         user.id,
         { itemId: item.itemId, mediaType: item.mediaType },
-        nextType,
+        nextDecision,
       );
       if (!error) {
         setItems((prev) =>

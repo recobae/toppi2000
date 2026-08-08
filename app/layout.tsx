@@ -12,8 +12,8 @@ const defaultUrl = process.env.VERCEL_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: "Next.js and Supabase Starter Kit",
-  description: "The fastest way to build apps with Next.js and Supabase",
+  title: "Toppi",
+  description: "Toppi zeigt dir, was sich wirklich lohnt – bewertet von dir und den Menschen, denen du folgst.",
 };
 
 // viewport-fit=cover exposes env(safe-area-inset-*) so fixed/full-height

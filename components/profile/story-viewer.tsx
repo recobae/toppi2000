@@ -7,9 +7,9 @@ import { Trash2, X } from "lucide-react";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { ActionBar, type ListItemRowActions } from "@/components/items/list-item-row";
 import { createClient } from "@/lib/supabase/client";
-import { removeFromCategory, saveToCategory } from "@/lib/saved-items";
+import { removeFromCategory } from "@/lib/saved-items";
 import { removePlace } from "@/lib/place-items";
-import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
+import { applyItemRating, addItemToOwnList } from "@/lib/rating-engine";
 import type { StoryUpdate } from "@/app/api/story-updates/route";
 
 const SLIDE_DURATION_MS = 4000;
@@ -139,20 +139,22 @@ export function StoryViewer({
     setActionPending(true);
     const supabase = createClient();
     const item = { itemId: String(current.itemId), mediaType: current.mediaType };
-    const { error: interactionError } = await setInteractionWithCredits(supabase, viewerId, item, "like", [ownerId]);
+    const { error: interactionError } = await applyItemRating(supabase, viewerId, item, "lohnt_sich", [ownerId]);
     if (interactionError) {
       showToast("Konnte nicht gespeichert werden, versuch's nochmal");
       setActionPending(false);
       return;
     }
-    const { error } = await saveToCategory(
+    await addItemToOwnList(
       supabase,
-      "top_list",
       viewerId,
-      { itemId: current.itemId, mediaType: current.mediaType, title: current.title, imageUrl: current.imageUrl, year: null },
-      ownerId,
+      {
+        kind: "movie",
+        category: "top_list",
+        item: { itemId: current.itemId, mediaType: current.mediaType, title: current.title, imageUrl: current.imageUrl, year: null },
+      },
+      [ownerId],
     );
-    if (!error) await recordInspiredCredits(supabase, viewerId, [ownerId], item);
     setActionPending(false);
     setIndex((i) => i + 1);
   };
@@ -161,11 +163,11 @@ export function StoryViewer({
     if (!current || !current.itemId || !current.mediaType || !viewerId || !ownerId) return;
     setActionPending(true);
     const supabase = createClient();
-    const { error } = await setInteractionWithCredits(
+    const { error } = await applyItemRating(
       supabase,
       viewerId,
       { itemId: String(current.itemId), mediaType: current.mediaType },
-      "dislike",
+      "lohnt_sich_nicht",
       [ownerId],
     );
     setActionPending(false);
@@ -176,23 +178,29 @@ export function StoryViewer({
     setIndex((i) => i + 1);
   };
 
+  const handleStoryUnknown = async () => {
+    if (!current || !current.itemId || !current.mediaType || !viewerId) return;
+    setActionPending(true);
+    const supabase = createClient();
+    await applyItemRating(supabase, viewerId, { itemId: String(current.itemId), mediaType: current.mediaType }, "kenne_ich_nicht");
+    setActionPending(false);
+    setIndex((i) => i + 1);
+  };
+
   const handleStoryWatchlist = async () => {
     if (!current || !current.itemId || !current.mediaType || !viewerId || !ownerId) return;
     setActionPending(true);
     const supabase = createClient();
-    const { error } = await saveToCategory(
+    await addItemToOwnList(
       supabase,
-      "watchlist",
       viewerId,
-      { itemId: current.itemId, mediaType: current.mediaType, title: current.title, imageUrl: current.imageUrl, year: null },
-      ownerId,
+      {
+        kind: "movie",
+        category: "watchlist",
+        item: { itemId: current.itemId, mediaType: current.mediaType, title: current.title, imageUrl: current.imageUrl, year: null },
+      },
+      [ownerId],
     );
-    if (!error) {
-      await recordInspiredCredits(supabase, viewerId, [ownerId], {
-        itemId: String(current.itemId),
-        mediaType: current.mediaType,
-      });
-    }
     setActionPending(false);
     setIndex((i) => i + 1);
   };
@@ -202,6 +210,7 @@ export function StoryViewer({
     pending: actionPending,
     onLike: handleStoryLike,
     onDislike: handleStoryDislike,
+    onUnknown: handleStoryUnknown,
     onAdd: handleStoryWatchlist,
     addLabel: "Watchlist",
   };

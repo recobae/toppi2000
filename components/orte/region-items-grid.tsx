@@ -19,8 +19,7 @@ import {
   updateRegionNote,
   type PlaceStatus,
 } from "@/lib/place-items";
-import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
-import { recordDislike } from "@/lib/rating";
+import { applyItemRating, addItemToOwnList } from "@/lib/rating-engine";
 import { useOwnInteractions, type OwnInteractionEntry } from "@/lib/hooks/use-own-interactions";
 import { useOtherRaters } from "@/lib/hooks/use-other-raters";
 import { REGION_NOTE_MAX_LENGTH } from "@/lib/notes";
@@ -300,11 +299,18 @@ function PlaceSuggestionsStrip({ userId, regionName }: { userId: string; regionN
   const handleDislike = async (placeId: string) => {
     setDismissedIds((prev) => new Set(prev).add(placeId));
     const supabase = createClient();
-    const { error } = await recordDislike(supabase, userId, { itemId: placeId, mediaType: "place" });
+    const { error } = await applyItemRating(supabase, userId, { itemId: placeId, mediaType: "place" }, "lohnt_sich_nicht");
     if (error) {
       unDismiss(placeId);
       showToast("Konnte nicht gespeichert werden, versuch's nochmal");
     }
+  };
+
+  const handleUnknown = async (placeId: string) => {
+    setDismissedIds((prev) => new Set(prev).add(placeId));
+    const supabase = createClient();
+    const { error } = await applyItemRating(supabase, userId, { itemId: placeId, mediaType: "place" }, "kenne_ich_nicht");
+    if (error) unDismiss(placeId);
   };
 
   if (visibleSuggestions.length === 0 && !toastMessage) return null;
@@ -343,6 +349,7 @@ function PlaceSuggestionsStrip({ userId, regionName }: { userId: string; regionN
                   pending: pendingId === place.placeId,
                   onLike: () => handleAdd(place.placeId, "recommended"),
                   onDislike: () => handleDislike(place.placeId),
+                  onUnknown: () => handleUnknown(place.placeId),
                 }}
               />
             ))}
@@ -611,13 +618,7 @@ function VisitorRegionList({
 
     try {
       if (status === "recommended") {
-        await setInteractionWithCredits(
-          supabase,
-          user.id,
-          { itemId: item.placeId, mediaType: "place" },
-          "like",
-          [ownerId],
-        );
+        await applyItemRating(supabase, user.id, { itemId: item.placeId, mediaType: "place" }, "lohnt_sich", [ownerId]);
         markOwn(item.placeId, "place", "like");
       }
 
@@ -625,34 +626,33 @@ function VisitorRegionList({
       const geoData: { region: string | null } = await geoResponse.json();
       const region = geoData.region ?? "Sonstige Orte";
 
-      const { error } = await savePlaceToRegion(
+      const { error } = await addItemToOwnList(
         supabase,
         user.id,
-        region,
         {
-          placeId: item.placeId,
-          name: item.name,
-          address: item.address,
-          lat: item.lat,
-          lng: item.lng,
-          category: item.category,
-          photoUrl: item.photoUrl,
-          googleMapsUri: item.googleMapsUri,
-          rating: item.rating,
-          userRatingCount: item.userRatingCount,
-          priceLevel: item.priceLevel,
-          phoneNumber: item.phoneNumber,
-          websiteUri: item.websiteUri,
+          kind: "place",
+          regionName: region,
+          status,
+          place: {
+            placeId: item.placeId,
+            name: item.name,
+            address: item.address,
+            lat: item.lat,
+            lng: item.lng,
+            category: item.category,
+            photoUrl: item.photoUrl,
+            googleMapsUri: item.googleMapsUri,
+            rating: item.rating,
+            userRatingCount: item.userRatingCount,
+            priceLevel: item.priceLevel,
+            phoneNumber: item.phoneNumber,
+            websiteUri: item.websiteUri,
+          },
         },
-        ownerId,
-        status,
+        [ownerId],
       );
 
       if (!error) {
-        await recordInspiredCredits(supabase, user.id, [ownerId], {
-          itemId: item.placeId,
-          mediaType: "place",
-        });
         showToast(`Zu „${region}“ hinzugefügt`);
       }
     } finally {
@@ -663,12 +663,19 @@ function VisitorRegionList({
   const handleDislike = async (item: RegionPlaceItem) => {
     if (!user) return;
     const supabase = createClient();
-    const { error } = await recordDislike(supabase, user.id, { itemId: item.placeId, mediaType: "place" });
+    const { error } = await applyItemRating(supabase, user.id, { itemId: item.placeId, mediaType: "place" }, "lohnt_sich_nicht", [ownerId]);
     if (error) {
       showToast("Konnte nicht gespeichert werden, versuch's nochmal");
     } else {
       markOwn(item.placeId, "place", "dislike");
     }
+  };
+
+  const handleUnknown = async (item: RegionPlaceItem) => {
+    if (!user) return;
+    const supabase = createClient();
+    const { error } = await applyItemRating(supabase, user.id, { itemId: item.placeId, mediaType: "place" }, "kenne_ich_nicht");
+    if (!error) markOwn(item.placeId, "place", "neutral");
   };
 
   const availableCategories = [...new Set(items.map((item) => item.category))];
@@ -801,6 +808,7 @@ function VisitorRegionList({
           otherRaters: getOtherRaters(item.placeId, "place"),
           onLike: () => handleSave(item, "recommended"),
           onDislike: () => handleDislike(item),
+          onUnknown: () => handleUnknown(item),
         }}
       />
     );

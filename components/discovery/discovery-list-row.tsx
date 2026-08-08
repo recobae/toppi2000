@@ -3,9 +3,10 @@
 import { useState } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { Ban, Clapperboard, Heart, MapPin, MessageCircle, Sparkles, Star, Tag, Users } from "lucide-react";
+import { Check, Clapperboard, HelpCircle, MapPin, MessageCircle, Sparkles, Star, Tag, X } from "lucide-react";
 import { CandidateDetailModal } from "@/components/discovery/candidate-detail-modal";
 import type { DiscoveryCandidate } from "@/lib/discovery";
+import type { RatingDecision } from "@/lib/rating-engine";
 
 /**
  * Renders inside a parent `<AnimatePresence mode="popLayout">` (see
@@ -22,34 +23,24 @@ import type { DiscoveryCandidate } from "@/lib/discovery";
  * Karte auf Mobile in einem Blick scannbar ist (Struktur-Runde, Punkt 6).
  * Die gesamte Karte ist tappbar und öffnet die globale Detailansicht
  * (CandidateDetailModal, wiederverwendet, keine zweite Detail-Logik) --
- * Like/Nix-für-mich stoppen die Klick-Propagation, damit ein Bewerten nie
- * gleichzeitig die Detailansicht öffnet. Only two rating buttons exist
- * anywhere in the app now -- "Skip" as its own third state was removed
- * (Master-Audit round); "Nix für mich" carries the same 30-day resurfacing
- * behavior Skip used to.
+ * die drei Bewertungsbuttons stoppen die Klick-Propagation, damit ein
+ * Bewerten nie gleichzeitig die Detailansicht öffnet. Drei gleichwertige
+ * Bewertungen (Lohnt-sich-Umbau): ✅ Lohnt sich, ❌ Lohnt sich nicht, ❓ Kenne
+ * ich noch nicht -- "Kenne ich noch nicht" verändert keine Statistik.
  */
 export function DiscoveryListRow({
   candidate,
-  onLike,
-  onDislike,
+  onRate,
   pending,
 }: {
   candidate: DiscoveryCandidate;
-  onLike: () => void;
-  onDislike: () => void;
+  onRate: (decision: RatingDecision) => void;
   pending?: boolean;
 }) {
   const [showDetail, setShowDetail] = useState(false);
   const isPlace = candidate.sourceType === "place";
   const regionLabel = isPlace ? (candidate.ref.regionName ?? candidate.location) : null;
   const genre = candidate.ref.movieDetails?.genres?.[0];
-
-  const sourceLine =
-    candidate.sourceUsernames.length === 0
-      ? null
-      : candidate.sourceUsernames.length === 1
-        ? `Von ${candidate.sourceUsernames[0]} bewertet`
-        : `Von ${candidate.sourceUsernames[0]} +${candidate.sourceUsernames.length - 1} bewertet`;
 
   const openDetail = () => {
     if (pending) return;
@@ -109,14 +100,9 @@ export function DiscoveryListRow({
             </span>
           )}
 
-          {/* 4. Soziale Quelle */}
-          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
-            {sourceLine && (
-              <span className="inline-flex items-center gap-1">
-                {candidate.socialSupportCount >= 2 && <Users className="size-3 shrink-0" />}
-                {sourceLine}
-              </span>
-            )}
+          {/* 4. Relevanz-Grund -- aus echten Signalen gebaut (lib/discovery.ts#buildReason), prominenter als früher (Lohnt-sich-Umbau §3). */}
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] font-medium text-foreground">
+            <span>{candidate.reason}</span>
             {candidate.rating !== null && candidate.rating > 0 && (
               <span className="inline-flex items-center gap-0.5">
                 <Star className="size-3 fill-yellow-400 text-yellow-400" />
@@ -138,25 +124,37 @@ export function DiscoveryListRow({
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
-                onLike();
+                onRate("lohnt_sich");
               }}
               disabled={pending}
-              aria-label="Gefällt mir -- auf meine Liste"
+              aria-label="Lohnt sich"
               className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-green-600 hover:bg-green-600/10 transition-colors disabled:opacity-50"
             >
-              <Heart className="size-4" />
+              <Check className="size-4" />
             </button>
             <button
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
-                onDislike();
+                onRate("lohnt_sich_nicht");
               }}
               disabled={pending}
-              aria-label="Nix für mich"
+              aria-label="Lohnt sich nicht"
               className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
             >
-              <Ban className="size-4" />
+              <X className="size-4" />
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onRate("kenne_ich_nicht");
+              }}
+              disabled={pending}
+              aria-label="Kenne ich noch nicht"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-muted-foreground hover:bg-accent transition-colors disabled:opacity-50"
+            >
+              <HelpCircle className="size-4" />
             </button>
           </div>
         </div>

@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Check, HelpCircle, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { likeAndSaveCandidate } from "@/lib/discovery-like";
-import { dislikeCandidate } from "@/lib/discovery-dislike";
+import { rateCandidate, type RatingDecision } from "@/lib/rating-engine";
 import { recordSwipeCardAction } from "@/lib/swipe-activity";
 import { recordQuickSwipeEvent } from "@/lib/quick-swipe-events";
 import { QuickSwipeCard } from "@/components/swipe/quick-swipe-card";
@@ -25,22 +25,26 @@ function unitIds(unit: QuickSwipeUnit): string[] {
 }
 
 /**
- * My Taste's entire content: one focused unit (single card or Battle) at a
- * time, Gefällt mir / Nix für mich (or a Battle tap), immediately the next
- * unit. No filters, no categories, no notes, no list management, no social
- * feed elements -- those all belong in Für Dich or the Profil, never here
- * (Master-Audit round). Unlimited -- no daily card cap anymore, the deck
- * just keeps refilling until the mixer genuinely has nothing left. Tapping
- * a single card (not dragging) opens the shared global detail view; Battle
- * cards don't (tapping a side there already commits that rating, so a
- * third "open details" tap target would conflict with the core gesture).
+ * "Lohnt sich?"'s entire content: one focused unit (single card or Battle)
+ * at a time, ✅ Lohnt sich / ❌ Lohnt sich nicht / ❓ Kenne ich noch nicht (or
+ * a Battle tap), immediately the next unit. No filters, no categories, no
+ * notes, no list management, no social feed elements -- those all belong in
+ * Für Dich or the Profil, never here. Unlimited -- no daily card cap, the
+ * deck just keeps refilling until the mixer genuinely has nothing left.
+ * Tapping a single card (not dragging) opens the shared global detail view;
+ * Battle cards don't (tapping a side there already commits that rating, so
+ * a third "open details" tap target would conflict with the core gesture).
+ *
+ * Rating/Credit/Tracking writes never block the next card: `decide()` fires
+ * them in the background (no `await` at the call site) so the UI advances
+ * the instant the user taps or swipes, matching the Lohnt-sich-Umbau's
+ * "kein sichtbares Warten auf Hintergrundspeicherungen" requirement.
  */
 export function QuickSwipeDeck({ userId }: { userId: string }) {
   const [units, setUnits] = useState<QuickSwipeUnit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [exhausted, setExhausted] = useState(false);
-  const [pending, setPending] = useState(false);
   const [detailCandidate, setDetailCandidate] = useState<DiscoveryCandidate | null>(null);
   const seenIdsRef = useRef<Set<string>>(new Set());
 
@@ -88,53 +92,61 @@ export function QuickSwipeDeck({ userId }: { userId: string }) {
     setUnits((prev) => prev.slice(1));
   };
 
-  const decide = async (candidate: DiscoveryCandidate, action: "like" | "dislike", unitKind: "single" | "battle") => {
+  const decisionToEventType: Record<RatingDecision, "like" | "dislike" | "neutral"> = {
+    lohnt_sich: "like",
+    lohnt_sich_nicht: "dislike",
+    kenne_ich_nicht: "neutral",
+  };
+
+  /**
+   * Fire-and-forget: the rating write, the credit fan-out, and the tracking
+   * writes all happen in the background. Callers never `await` this --
+   * dismissCurrent() already ran by the time this settles, so the next card
+   * is on screen well before any of these Supabase round-trips complete.
+   */
+  const decide = (candidate: DiscoveryCandidate, decision: RatingDecision, unitKind: "single" | "battle") => {
     const supabase = createClient();
-    if (action === "like") {
-      await likeAndSaveCandidate(supabase, userId, candidate);
-    } else {
-      await dislikeCandidate(supabase, userId, candidate);
-    }
-    const [{ error: trackingError }] = await Promise.all([
+    rateCandidate(supabase, userId, candidate, decision).catch((err) =>
+      console.error("quick swipe rating failed", err),
+    );
+    Promise.all([
       recordSwipeCardAction(supabase, userId),
       recordQuickSwipeEvent(supabase, userId, {
-        eventType: action,
+        eventType: decisionToEventType[decision],
         unitKind,
         sourceType: candidate.sourceType,
         mixGroup: candidate.mixGroup as MixGroup | undefined,
       }),
-    ]);
-    if (trackingError) {
-      // Activity-log tracking is supplementary -- the actual rating above already succeeded.
-      console.error("quick swipe tracking failed", trackingError);
-    }
+    ]).catch((err) => console.error("quick swipe tracking failed", err));
   };
 
-  const handleSingleAction = async (candidate: DiscoveryCandidate, action: "like" | "dislike") => {
-    if (pending) return;
-    setPending(true);
-    await decide(candidate, action, "single");
+  // Guards against the same card being decided twice (e.g. a drag-release
+  // and a button tap landing in the same frame) -- a ref, not state, so it
+  // never delays the next card being shown.
+  const decidingIdRef = useRef<string | null>(null);
+
+  const handleSingleAction = (candidate: DiscoveryCandidate, decision: RatingDecision) => {
+    if (decidingIdRef.current === candidate.id) return;
+    decidingIdRef.current = candidate.id;
+    decide(candidate, decision, "single");
     dismissCurrent();
-    setPending(false);
   };
 
-  const handleBattleChoice = async (a: DiscoveryCandidate, b: DiscoveryCandidate, winner: "a" | "b") => {
-    if (pending) return;
-    setPending(true);
+  const handleBattleChoice = (a: DiscoveryCandidate, b: DiscoveryCandidate, winner: "a" | "b") => {
+    const key = `${a.id}|${b.id}`;
+    if (decidingIdRef.current === key) return;
+    decidingIdRef.current = key;
     const [chosen, other] = winner === "a" ? [a, b] : [b, a];
     const supabase = createClient();
-    await Promise.all([
-      decide(chosen, "like", "battle"),
-      decide(other, "dislike", "battle"),
-      recordQuickSwipeEvent(supabase, userId, {
-        eventType: "battle_choice",
-        unitKind: "battle",
-        sourceType: chosen.sourceType,
-        mixGroup: chosen.mixGroup as MixGroup | undefined,
-      }),
-    ]);
+    decide(chosen, "lohnt_sich", "battle");
+    decide(other, "lohnt_sich_nicht", "battle");
+    recordQuickSwipeEvent(supabase, userId, {
+      eventType: "battle_choice",
+      unitKind: "battle",
+      sourceType: chosen.sourceType,
+      mixGroup: chosen.mixGroup as MixGroup | undefined,
+    }).catch((err) => console.error("quick swipe tracking failed", err));
     dismissCurrent();
-    setPending(false);
   };
 
   const current = units[0];
@@ -152,8 +164,8 @@ export function QuickSwipeDeck({ userId }: { userId: string }) {
               <QuickSwipeCard
                 key={unitKey(current)}
                 candidate={current.candidate}
-                onLike={() => handleSingleAction(current.candidate, "like")}
-                onDislike={() => handleSingleAction(current.candidate, "dislike")}
+                onLike={() => handleSingleAction(current.candidate, "lohnt_sich")}
+                onDislike={() => handleSingleAction(current.candidate, "lohnt_sich_nicht")}
                 onOpenDetail={() => {
                   setDetailCandidate(current.candidate);
                   recordQuickSwipeEvent(createClient(), userId, {
@@ -163,7 +175,6 @@ export function QuickSwipeDeck({ userId }: { userId: string }) {
                     mixGroup: current.candidate.mixGroup as MixGroup | undefined,
                   });
                 }}
-                disabled={pending}
               />
             ) : (
               <BattleCard
@@ -171,7 +182,6 @@ export function QuickSwipeDeck({ userId }: { userId: string }) {
                 a={current.a}
                 b={current.b}
                 onChoose={(winner) => handleBattleChoice(current.a, current.b, winner)}
-                disabled={pending}
               />
             )
           ) : (
@@ -183,8 +193,37 @@ export function QuickSwipeDeck({ userId }: { userId: string }) {
         </div>
       </div>
 
+      {/* Drei gleichwertige, dauerhaft sichtbare Bewertungsaktionen (§2) --
+          ✅/❌ sind zusätzlich per Swipe auslösbar (siehe QuickSwipeCard),
+          ❓ nur per Button, da eine dritte Swipe-Richtung auf Mobile
+          fehleranfällig wäre. */}
       {current?.kind === "single" && (
-        <p className="text-xs text-muted-foreground shrink-0">← Nix für mich &nbsp;·&nbsp; Gefällt mir →</p>
+        <div className="flex items-center gap-4 shrink-0">
+          <button
+            type="button"
+            aria-label="Lohnt sich nicht"
+            onClick={() => handleSingleAction(current.candidate, "lohnt_sich_nicht")}
+            className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-destructive text-destructive bg-background shadow-sm active:scale-95 transition-transform"
+          >
+            <X className="size-6" />
+          </button>
+          <button
+            type="button"
+            aria-label="Kenne ich noch nicht"
+            onClick={() => handleSingleAction(current.candidate, "kenne_ich_nicht")}
+            className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-muted-foreground/40 text-muted-foreground bg-background shadow-sm active:scale-95 transition-transform"
+          >
+            <HelpCircle className="size-5" />
+          </button>
+          <button
+            type="button"
+            aria-label="Lohnt sich"
+            onClick={() => handleSingleAction(current.candidate, "lohnt_sich")}
+            className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-green-600 text-green-600 bg-background shadow-sm active:scale-95 transition-transform"
+          >
+            <Check className="size-6" />
+          </button>
+        </div>
       )}
       {current?.kind === "battle" && (
         <p className="text-xs text-muted-foreground shrink-0">Tippe die Seite, die dir mehr zusagt</p>

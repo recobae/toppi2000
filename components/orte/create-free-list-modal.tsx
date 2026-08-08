@@ -8,8 +8,8 @@ const TITLE_MAX_LENGTH = 80;
 /**
  * System-account-only: creates an empty, region-unbound place_regions row
  * (e.g. "Die besten Bars der Welt") that then behaves exactly like any
- * other city list -- items get added to it via the normal Ja/Merken flow
- * once it's selected in the city-chip bar.
+ * other city list -- items get added to it via the normal "Lohnt sich"-Flow
+ * (lib/rating-engine.ts) once it's selected in the city-chip bar.
  */
 export function CreateFreeListModal({
   onCreate,

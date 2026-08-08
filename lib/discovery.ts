@@ -24,6 +24,15 @@ export type DiscoveryCandidate = {
   /** Who this card is most directly attributed to -- null only for the anonymous exploration fallback. */
   sourceUserId: string | null;
   sourceUsernames: string[];
+  /**
+   * Every followed user who independently owns this exact item (parallel to
+   * sourceUsernames, same order/length) -- resolved once here at feed-build
+   * time so lib/rating-engine.ts#rateCandidate never needs an extra
+   * Supabase round-trip to find out who to credit for a "Lohnt sich".
+   * Empty for candidates with no known owner (exploration fallback, global
+   * trending, etc.).
+   */
+  sourceOwnerIds: string[];
   note: string | null;
   rating: number | null;
   /** Distinct followed friends who independently have this exact item. */
@@ -95,6 +104,16 @@ function explorationScore(id: string): number {
   return (hash % 1000) / 1000;
 }
 
+/**
+ * The one place that turns real signals (never invented ones -- §3 of the
+ * "Lohnt sich"-Umbau) into the human "why this card" line every card
+ * surface (Lohnt-sich?-Quick-Swipe, Für-Dich-Sections) shows via
+ * candidate.reason. A list entry only ever exists here because its owner
+ * rated the item "Lohnt sich" in the first place (that's the only way
+ * something lands on top_list/watchlist/places), so "hat es auf seiner
+ * Liste" and "hat es als Lohnt sich bewertet" are the same underlying fact,
+ * not two separate signals worth querying twice.
+ */
 function buildReason(params: {
   socialSupportCount: number;
   sourceUsernames: string[];
@@ -103,15 +122,15 @@ function buildReason(params: {
   isExploration: boolean;
 }): string {
   const { socialSupportCount, sourceUsernames, personalAffinity, freshness, isExploration } = params;
-  if (isExploration) return "Neu für dich zu entdecken";
+  if (isExploration) return "Neue Inspiration für Dich";
   if (socialSupportCount >= 2) {
-    return `${socialSupportCount} aus deinem Netzwerk empfehlen das`;
+    return `Weil ${socialSupportCount} Freunde ihn empfehlen`;
   }
   if (sourceUsernames.length === 1) {
-    return freshness > 0.6 ? `Gerade neu von ${sourceUsernames[0]}` : `Empfohlen von ${sourceUsernames[0]}`;
+    return freshness > 0.6 ? `Neu auf der Liste von ${sourceUsernames[0]}` : `Weil ${sourceUsernames[0]} ihn auf seiner Liste hat`;
   }
-  if (personalAffinity > 0.6) return "Passt zu deinem Geschmack";
-  return "Neu für dich zu entdecken";
+  if (personalAffinity > 0.6) return "Weil du Ähnliches als lohnenswert bewertet hast";
+  return "Neue Inspiration für Dich";
 }
 
 type OwnProfile = {
@@ -292,6 +311,7 @@ async function gatherNetworkCandidates(supabase: SupabaseClient, userId: string)
         sourceType: withNote.media_type,
         sourceUserId: withNote.user_id,
         sourceUsernames: usernames,
+        sourceOwnerIds: [...group.userIds],
         note: withNote.note,
         rating: null,
         socialSupportCount,
@@ -338,6 +358,7 @@ async function gatherNetworkCandidates(supabase: SupabaseClient, userId: string)
         sourceType: "place",
         sourceUserId: withNote.user_id,
         sourceUsernames: usernames,
+        sourceOwnerIds: [...group.userIds],
         note: withNote.note,
         rating: withNote.rating,
         socialSupportCount,
@@ -391,6 +412,7 @@ async function gatherNetworkCandidates(supabase: SupabaseClient, userId: string)
         sourceType: "topf",
         sourceUserId: withNote.user_id,
         sourceUsernames: usernames,
+        sourceOwnerIds: [...group.userIds],
         note: withNote.note,
         rating: null,
         socialSupportCount,
@@ -550,6 +572,10 @@ export function placeSearchResultToCandidate(place: PlaceSearchResult, city: str
     sourceType: "place",
     sourceUserId: null,
     sourceUsernames: recommendedBy,
+    // City-drilldown candidates only carry recommender names, not ids
+    // (getCityPlaceRecommendations doesn't resolve them) -- rating one of
+    // these correctly writes no owner credit rather than guessing wrong.
+    sourceOwnerIds: [],
     note: null,
     rating: place.rating,
     socialSupportCount: recommendedBy.length,
@@ -632,6 +658,7 @@ async function buildExplorationFallback(
         sourceType: item.mediaType,
         sourceUserId: null,
         sourceUsernames: [],
+        sourceOwnerIds: [],
         note: null,
         rating: item.movieDetails.voteAverage,
         socialSupportCount: 0,
@@ -639,7 +666,7 @@ async function buildExplorationFallback(
         lastActivityAt: new Date().toISOString(),
         promptMatchScore: 0.3,
         finalScore: 0,
-        reason: "Neu für dich zu entdecken",
+        reason: "Neue Inspiration für Dich",
         ref: { mediaType: item.mediaType, tmdbId: item.id },
       });
     }
@@ -665,6 +692,7 @@ async function buildExplorationFallback(
         sourceType: "place",
         sourceUserId: null,
         sourceUsernames: [],
+        sourceOwnerIds: [],
         note: null,
         rating: place.rating,
         socialSupportCount: 0,
@@ -701,6 +729,7 @@ async function buildExplorationFallback(
         sourceType: item.mediaType,
         sourceUserId: null,
         sourceUsernames: [],
+        sourceOwnerIds: [],
         note: null,
         rating: item.movieDetails.voteAverage,
         socialSupportCount: 0,

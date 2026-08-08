@@ -21,6 +21,7 @@ function movieCandidate(item: SearchResult, reason: string): DiscoveryCandidate 
     sourceType: item.mediaType,
     sourceUserId: null,
     sourceUsernames: [],
+    sourceOwnerIds: [],
     note: null,
     rating: item.movieDetails.voteAverage,
     socialSupportCount: 0,

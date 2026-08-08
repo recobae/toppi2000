@@ -28,8 +28,9 @@ export type ListOverviewRowData = {
 /**
  * The "kuratierte Listen" grid (Filme & Serien + every Orte-region) --
  * shared between a foreign profile visit (app/u/[username]/page.tsx) and
- * the owner's own My Taste tab (app/my-taste/page.tsx), which is where this
- * grid moved to for the owner (the profile itself stays lists-free now).
+ * the owner's own My-Taste-Tab (app/my-taste/page.tsx, umbenannt zu
+ * "Lohnt sich?" -- app/lohnt-sich/page.tsx), which is where this grid moved
+ * to for the owner (the profile itself stays lists-free now).
  * `showTierProgress` mirrors the old `isOwner` ternary: only the owner ever
  * sees "42/60 bis Experte" progress text, a visitor just sees the tier badge.
  */

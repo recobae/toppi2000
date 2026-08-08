@@ -57,9 +57,12 @@ export async function ensureUsername(
 }
 
 /**
- * Used after login: ensures a username exists, then sends the user straight
- * into the swipe deck -- the app's zero-effort landing view -- unless
- * `next` points somewhere more specific (e.g. a shared list link).
+ * Used after login: ensures a username exists, then sends the user to Für
+ * Dich -- the same canonical landing tab app/page.tsx already uses for
+ * returning logged-in visitors (Lohnt-sich-Umbau: previously routed to
+ * /swipe→/my-taste instead, a second, different "zero-effort" destination
+ * that disagreed with the homepage) -- unless `next` points somewhere more
+ * specific (e.g. a shared list link).
  */
 export async function resolvePostAuthPath(
   supabase: SupabaseClient,
@@ -67,15 +70,15 @@ export async function resolvePostAuthPath(
   next: string,
 ): Promise<string> {
   await ensureUsername(supabase, userId);
-  if (next === DEFAULT_POST_AUTH_PATH) return "/swipe";
+  if (next === DEFAULT_POST_AUTH_PATH) return "/fuer-dich";
   return next;
 }
 
 /**
  * Used after signup/email-confirmation and the OAuth callback: ensures a
- * username exists, then sends the user straight into the swipe deck --
- * the app's zero-effort landing view -- unless `next` points somewhere
- * more specific (e.g. a shared list they signed up from).
+ * username exists, then sends the user to Für Dich -- the same canonical
+ * landing tab used everywhere else post-login -- unless `next` points
+ * somewhere more specific (e.g. a shared list they signed up from).
  *
  * On a genuinely brand-new (non-system) profile, this is also the one-time
  * hook for the signup side effects: auto-following the curated content
@@ -114,5 +117,5 @@ export async function resolveSignupRedirectPath(
     }
   }
 
-  return "/swipe";
+  return "/fuer-dich";
 }

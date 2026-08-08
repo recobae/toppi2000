@@ -149,8 +149,11 @@ export async function getTrendingMovies(
 ): Promise<SearchResult[]> {
   const [excludedKeys, response] = await Promise.all([
     getExcludedMovieKeys(supabase, userId),
+    // Global, nicht personalisiert -- über alle Nutzer identisch, deshalb 15
+    // Min. cachebar (Perf §7: weniger externe API-Aufrufe unter Last).
     fetch(`${TMDB_BASE_URL}/trending/all/week?api_key=${apiKey}`, {
       headers: { Accept: "application/json" },
+      next: { revalidate: 900 },
     }),
   ]);
   if (!response.ok) return [];
@@ -180,7 +183,7 @@ export async function getClassicMovies(
       `${TMDB_BASE_URL}/discover/movie?api_key=${apiKey}&sort_by=vote_average.desc` +
         `&vote_average.gte=${CLASSIC_MIN_VOTE_AVERAGE}&vote_count.gte=${CLASSIC_MIN_VOTE_COUNT}` +
         `&primary_release_date.lte=${cutoffYear}-12-31&include_adult=false`,
-      { headers: { Accept: "application/json" } },
+      { headers: { Accept: "application/json" }, next: { revalidate: 900 } },
     ),
   ]);
   if (!response.ok) return [];
@@ -204,6 +207,7 @@ export async function getUpcomingMovies(
     getExcludedMovieKeys(supabase, userId),
     fetch(`${TMDB_BASE_URL}/movie/upcoming?api_key=${apiKey}&region=DE`, {
       headers: { Accept: "application/json" },
+      next: { revalidate: 900 },
     }),
   ]);
   if (!response.ok) return [];

@@ -140,20 +140,21 @@ export function QuickSwipeCard({
         style={{ opacity: likeOpacity }}
         className="absolute top-6 left-6 rotate-[-12deg] rounded-md border-4 border-green-500 px-3 py-1 text-lg font-bold text-green-500"
       >
-        GEFÄLLT MIR
+        LOHNT SICH
       </motion.div>
       <motion.div
         style={{ opacity: nopeOpacity }}
         className="absolute top-6 right-6 rotate-[12deg] rounded-md border-4 border-red-500 px-3 py-1 text-lg font-bold text-red-500"
       >
-        NIX FÜR MICH
+        LOHNT SICH NICHT
       </motion.div>
 
       <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1.5 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 pt-16 text-white">
-        <div className="flex items-center gap-1.5">
-          <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium">{candidate.category}</span>
-          <span className="text-[11px] text-white/70">{candidate.reason}</span>
-        </div>
+        <span className="w-fit rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium">{candidate.category}</span>
+        {/* Relevance-Grund: prominent statt Fußnote (Lohnt-sich-Umbau §3) --
+            aus echten Signalen gebaut (lib/discovery.ts#buildReason), nie
+            erfunden. */}
+        <p className="text-sm font-semibold leading-snug text-white/95">{candidate.reason}</p>
         <h2 className="text-lg font-semibold leading-tight truncate">{candidate.title}</h2>
         <div className="flex items-center gap-2 text-xs text-white/80">
           {candidate.location && (

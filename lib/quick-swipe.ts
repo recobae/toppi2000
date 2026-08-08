@@ -78,6 +78,7 @@ function movieToCandidate(item: SearchResult, reason: string, mixGroup: ItemMixG
     sourceType: item.mediaType,
     sourceUserId: null,
     sourceUsernames: [],
+    sourceOwnerIds: [],
     note: null,
     rating: item.movieDetails.voteAverage,
     socialSupportCount: 0,
@@ -373,7 +374,14 @@ export async function getQuickSwipeQueue(
     placesApiKey?: string;
   },
 ): Promise<{ units: QuickSwipeUnit[]; mixDebug: QuickSwipeMixDebug }> {
-  const context = await getTasteContext(supabase, userId, params.tmdbApiKey);
+  // Perf (Lohnt-sich-Umbau §7): taste-context + both exclusion queries are
+  // mutually independent -- previously 3 sequential Supabase round-trips
+  // before any group even started, now 1.
+  const [context, excludedMovieKeys, excludedPlaceIds] = await Promise.all([
+    getTasteContext(supabase, userId, params.tmdbApiKey),
+    params.tmdbApiKey ? getExcludedMovieKeys(supabase, userId) : Promise.resolve(new Set<string>()),
+    params.placesApiKey ? getExcludedPlaceIds(supabase, userId) : Promise.resolve(new Set<string>()),
+  ]);
 
   const targets: Record<ItemMixGroup, number> = {
     high_quality: Math.round(params.limit * MIX_WEIGHTS.high_quality),
@@ -393,11 +401,9 @@ export async function getQuickSwipeQueue(
     exploration: [],
   };
 
-  const excludedMovieKeys = params.tmdbApiKey ? await getExcludedMovieKeys(supabase, userId) : new Set<string>();
-  const excludedPlaceIds = params.placesApiKey ? await getExcludedPlaceIds(supabase, userId) : new Set<string>();
-
   // --- high_quality: trending + classics + genre-matched (if the user has taste history) ---
-  if (params.tmdbApiKey) {
+  async function fetchHighQuality(): Promise<DiscoveryCandidate[]> {
+    if (!params.tmdbApiKey) return [];
     const apiKey = params.tmdbApiKey;
     const perSource = Math.ceil(fetchN(targets.high_quality) / (context.topGenreIds.length > 0 ? 3 : 2));
     const [trending, classics, genreMatched] = await Promise.all([
@@ -405,24 +411,26 @@ export async function getQuickSwipeQueue(
       getClassicMovies(supabase, userId, apiKey, perSource),
       getGenreMatchedMovies(excludedMovieKeys, apiKey, context.topGenreIds, perSource),
     ]);
-    for (const item of trending) pools.high_quality.push(movieToCandidate(item, "Aktueller Hit", "high_quality"));
-    for (const item of classics) pools.high_quality.push(movieToCandidate(item, "Beliebter Klassiker", "high_quality"));
     const genreLabel = context.topGenreLabels[0];
-    for (const item of genreMatched) {
-      pools.high_quality.push(
+    return [
+      ...trending.map((item) => movieToCandidate(item, "Aktueller Hit", "high_quality")),
+      ...classics.map((item) => movieToCandidate(item, "Beliebter Klassiker", "high_quality")),
+      ...genreMatched.map((item) =>
         movieToCandidate(item, genreLabel ? `Ähnlich zu deinen ${genreLabel}n` : "Passt zu deinem Geschmack", "high_quality"),
-      );
-    }
+      ),
+    ];
   }
 
   // --- topical: upcoming releases ---
-  if (params.tmdbApiKey) {
+  async function fetchTopical(): Promise<DiscoveryCandidate[]> {
+    if (!params.tmdbApiKey) return [];
     const upcoming = await getUpcomingMovies(supabase, userId, params.tmdbApiKey, fetchN(targets.topical));
-    for (const item of upcoming) pools.topical.push(movieToCandidate(item, "Bald im Kino", "topical"));
+    return upcoming.map((item) => movieToCandidate(item, "Bald im Kino", "topical"));
   }
 
   // --- home_city: home-city generic places + the user's own extra saved regions (e.g. a holiday region beyond home_city) ---
-  if (params.placesApiKey) {
+  async function fetchHomeCity(): Promise<DiscoveryCandidate[]> {
+    if (!params.placesApiKey) return [];
     const apiKey = params.placesApiKey;
     const cities = [
       ...(params.homeCity ? [{ name: params.homeCity, personal: null as "restaurant" | "region" | null }] : []),
@@ -433,82 +441,101 @@ export async function getQuickSwipeQueue(
           personal: (region.restaurantHeavy ? "restaurant" : "region") as "restaurant" | "region",
         })),
     ];
-    if (cities.length > 0) {
-      const perCity = Math.ceil(fetchN(targets.home_city) / cities.length);
-      const results = await Promise.all(
-        cities.map(async (city) => ({
-          city,
-          generic: (await getCityPlaceRecommendations(supabase, userId, city.name, apiKey, perCity)).generic,
-        })),
-      );
-      for (const { city, generic } of results) {
-        const reason =
-          city.personal === "restaurant"
-            ? `Ähnliches Restaurant in ${city.name}`
-            : city.personal === "region"
-              ? `Weitere Ideen für ${city.name}`
-              : undefined;
-        for (const place of generic) pools.home_city.push(placeToCandidate(place, city.name, "home_city", reason));
-      }
-    }
+    if (cities.length === 0) return [];
+    const perCity = Math.ceil(fetchN(targets.home_city) / cities.length);
+    const results = await Promise.all(
+      cities.map(async (city) => ({
+        city,
+        generic: (await getCityPlaceRecommendations(supabase, userId, city.name, apiKey, perCity)).generic,
+      })),
+    );
+    return results.flatMap(({ city, generic }) => {
+      const reason =
+        city.personal === "restaurant"
+          ? `Ähnliches Restaurant in ${city.name}`
+          : city.personal === "region"
+            ? `Weitere Ideen für ${city.name}`
+            : undefined;
+      return generic.map((place) => placeToCandidate(place, city.name, "home_city", reason));
+    });
   }
 
-  // --- long_tail: niche movies + under-the-radar places ---
-  if (params.tmdbApiKey) {
-    const longTailMovies = await getLongTailMovies(excludedMovieKeys, params.tmdbApiKey, Math.ceil(fetchN(targets.long_tail) / 2));
-    for (const item of longTailMovies) pools.long_tail.push(movieToCandidate(item, "Geheimtipp", "long_tail"));
-  }
-  const longTailCity = params.homeCity ?? context.topRegions[0]?.name ?? null;
-  if (params.placesApiKey && longTailCity) {
-    const alreadyUsed = new Set(pools.home_city.map((c) => c.ref.placeId).filter((id): id is string => !!id));
-    const longTailPlaces = await getLongTailPlaces(
-      excludedPlaceIds,
-      alreadyUsed,
-      longTailCity,
-      params.placesApiKey,
-      Math.ceil(fetchN(targets.long_tail) / 2),
-    );
-    for (const place of longTailPlaces) pools.long_tail.push(placeToCandidate(place, longTailCity, "long_tail", "Geheimtipp"));
-  }
+  // high_quality/topical/home_city have no interdependencies -- run them
+  // concurrently instead of 3 sequential await-blocks (Perf §7).
+  const [highQuality, topical, homeCity] = await Promise.all([fetchHighQuality(), fetchTopical(), fetchHomeCity()]);
+  pools.high_quality = highQuality;
+  pools.topical = topical;
+  pools.home_city = homeCity;
 
-  // --- exploration: deliberately outside the user's existing profile ---
-  if (params.tmdbApiKey) {
-    const { items, genreLabel } = await getExplorationMovies(
-      excludedMovieKeys,
-      params.tmdbApiKey,
-      context.topGenreIds,
-      Math.ceil(fetchN(targets.exploration) / 2),
-    );
-    for (const item of items) {
-      pools.exploration.push(
-        movieToCandidate(item, genreLabel ? `Etwas anderes: ${genreLabel}` : "Neu für dich zu entdecken", "exploration"),
-      );
+  // --- long_tail: niche movies + under-the-radar places (places-half dedupes against home_city, so it can't start earlier) ---
+  async function fetchLongTail(): Promise<DiscoveryCandidate[]> {
+    const results: DiscoveryCandidate[] = [];
+    const longTailCity = params.homeCity ?? context.topRegions[0]?.name ?? null;
+    const [longTailMovies, longTailPlaces] = await Promise.all([
+      params.tmdbApiKey
+        ? getLongTailMovies(excludedMovieKeys, params.tmdbApiKey, Math.ceil(fetchN(targets.long_tail) / 2))
+        : Promise.resolve([]),
+      params.placesApiKey && longTailCity
+        ? getLongTailPlaces(
+            excludedPlaceIds,
+            new Set(pools.home_city.map((c) => c.ref.placeId).filter((id): id is string => !!id)),
+            longTailCity,
+            params.placesApiKey,
+            Math.ceil(fetchN(targets.long_tail) / 2),
+          )
+        : Promise.resolve([]),
+    ]);
+    for (const item of longTailMovies) results.push(movieToCandidate(item, "Geheimtipp", "long_tail"));
+    if (longTailCity) {
+      for (const place of longTailPlaces) results.push(placeToCandidate(place, longTailCity, "long_tail", "Geheimtipp"));
     }
+    return results;
   }
-  const explorationCity = params.homeCity ?? context.topRegions[0]?.name ?? null;
-  if (params.placesApiKey && explorationCity) {
-    const alreadyUsed = new Set(
-      [...pools.home_city, ...pools.long_tail].map((c) => c.ref.placeId).filter((id): id is string => !!id),
-    );
-    const { results, category } = await getExplorationPlaces(
-      excludedPlaceIds,
-      alreadyUsed,
-      explorationCity,
-      params.placesApiKey,
-      context.seenPlaceCategories,
-      Math.ceil(fetchN(targets.exploration) / 2),
-    );
-    for (const place of results) {
-      pools.exploration.push(
-        placeToCandidate(
-          place,
-          explorationCity,
+  pools.long_tail = await fetchLongTail();
+
+  // --- exploration: deliberately outside the user's existing profile (places-half dedupes against home_city + long_tail) ---
+  async function fetchExploration(): Promise<DiscoveryCandidate[]> {
+    const results: DiscoveryCandidate[] = [];
+    const explorationCity = params.homeCity ?? context.topRegions[0]?.name ?? null;
+    const [movieResult, placeResult] = await Promise.all([
+      params.tmdbApiKey
+        ? getExplorationMovies(excludedMovieKeys, params.tmdbApiKey, context.topGenreIds, Math.ceil(fetchN(targets.exploration) / 2))
+        : Promise.resolve({ items: [], genreLabel: null }),
+      params.placesApiKey && explorationCity
+        ? getExplorationPlaces(
+            excludedPlaceIds,
+            new Set([...pools.home_city, ...pools.long_tail].map((c) => c.ref.placeId).filter((id): id is string => !!id)),
+            explorationCity,
+            params.placesApiKey,
+            context.seenPlaceCategories,
+            Math.ceil(fetchN(targets.exploration) / 2),
+          )
+        : Promise.resolve({ results: [], category: null }),
+    ]);
+    for (const item of movieResult.items) {
+      results.push(
+        movieToCandidate(
+          item,
+          movieResult.genreLabel ? `Etwas anderes: ${movieResult.genreLabel}` : "Neue Inspiration für Dich",
           "exploration",
-          category ? `Neue Kategorie für dich: ${PLACE_CATEGORY_LABELS[category]}` : "Neu für dich zu entdecken",
         ),
       );
     }
+    if (explorationCity) {
+      for (const place of placeResult.results) {
+        results.push(
+          placeToCandidate(
+            place,
+            explorationCity,
+            "exploration",
+            placeResult.category ? `Neue Kategorie für dich: ${PLACE_CATEGORY_LABELS[placeResult.category]}` : "Neue Inspiration für Dich",
+          ),
+        );
+      }
+    }
+    return results;
   }
+  pools.exploration = await fetchExploration();
 
   // --- dedupe across groups + this session's already-seen ids ---
   const seen = new Set<string>();

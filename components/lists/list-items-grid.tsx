@@ -14,8 +14,7 @@ import {
   setFavorite,
   updateNote,
 } from "@/lib/saved-items";
-import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
-import { recordDislike } from "@/lib/rating";
+import { applyItemRating, addItemToOwnList } from "@/lib/rating-engine";
 import { postWatchlistTransitionStoryEvent, type WatchlistTransition } from "@/lib/story-events";
 import { CATEGORY_LABELS, type SavedCategory } from "@/lib/categories";
 import { NOTE_PLACEHOLDERS } from "@/lib/notes";
@@ -121,7 +120,16 @@ export function MovieSuggestionsStrip({ userId }: { userId: string }) {
     const key = `${result.mediaType}-${result.id}`;
     setPendingKey(key);
     const supabase = createClient();
-    await recordDislike(supabase, userId, { itemId: String(result.id), mediaType: result.mediaType });
+    await applyItemRating(supabase, userId, { itemId: String(result.id), mediaType: result.mediaType }, "lohnt_sich_nicht");
+    removeSuggestion(result);
+    setPendingKey(null);
+  };
+
+  const handleUnknown = async (result: SearchResult) => {
+    const key = `${result.mediaType}-${result.id}`;
+    setPendingKey(key);
+    const supabase = createClient();
+    await applyItemRating(supabase, userId, { itemId: String(result.id), mediaType: result.mediaType }, "kenne_ich_nicht");
     removeSuggestion(result);
     setPendingKey(null);
   };
@@ -151,6 +159,7 @@ export function MovieSuggestionsStrip({ userId }: { userId: string }) {
                 pending: pendingKey === key,
                 onLike: () => handleAdd(result, "top_list"),
                 onDislike: () => handleDislike(result),
+                onUnknown: () => handleUnknown(result),
                 onAdd: () => handleAdd(result, "watchlist"),
                 addLabel: "Watchlist",
               }}
@@ -217,7 +226,7 @@ function OwnerCategoryList({
           year: item.year,
         });
       } else {
-        await recordDislike(supabase, userId, { itemId: String(item.itemId), mediaType: item.mediaType });
+        await applyItemRating(supabase, userId, { itemId: String(item.itemId), mediaType: item.mediaType }, "lohnt_sich_nicht");
       }
       await postWatchlistTransitionStoryEvent(supabase, userId, transition, {
         itemId: item.itemId,
@@ -375,26 +384,19 @@ function VisitorCategoryList({
     const key = `${item.mediaType}-${item.itemId}`;
     setPendingKey(key);
     const supabase = createClient();
-    await setInteractionWithCredits(
+    await applyItemRating(supabase, user.id, { itemId: String(item.itemId), mediaType: item.mediaType }, "lohnt_sich", [ownerId]);
+    markOwn(String(item.itemId), item.mediaType, "like");
+    const { error } = await addItemToOwnList(
       supabase,
       user.id,
-      { itemId: String(item.itemId), mediaType: item.mediaType },
-      "like",
+      {
+        kind: "movie",
+        category: "top_list",
+        item: { itemId: item.itemId, mediaType: item.mediaType, title: item.title, imageUrl: item.imageUrl, year: item.year },
+      },
       [ownerId],
     );
-    markOwn(String(item.itemId), item.mediaType, "like");
-    const { error } = await saveToCategory(
-      supabase,
-      "top_list",
-      user.id,
-      { itemId: item.itemId, mediaType: item.mediaType, title: item.title, imageUrl: item.imageUrl, year: item.year },
-      ownerId,
-    );
     if (!error) {
-      await recordInspiredCredits(supabase, user.id, [ownerId], {
-        itemId: String(item.itemId),
-        mediaType: item.mediaType,
-      });
       showToast(`Zu ${CATEGORY_LABELS.top_list} hinzugefügt`);
     }
     setPendingKey(null);
@@ -405,7 +407,13 @@ function VisitorCategoryList({
     const key = `${item.mediaType}-${item.itemId}`;
     setPendingKey(key);
     const supabase = createClient();
-    const { error } = await recordDislike(supabase, user.id, { itemId: String(item.itemId), mediaType: item.mediaType });
+    const { error } = await applyItemRating(
+      supabase,
+      user.id,
+      { itemId: String(item.itemId), mediaType: item.mediaType },
+      "lohnt_sich_nicht",
+      [ownerId],
+    );
     if (error) {
       showToast("Konnte nicht gespeichert werden, versuch's nochmal");
     } else {
@@ -414,23 +422,37 @@ function VisitorCategoryList({
     setPendingKey(null);
   };
 
+  const handleUnknown = async (item: CategoryListItem) => {
+    if (!user) return;
+    const key = `${item.mediaType}-${item.itemId}`;
+    setPendingKey(key);
+    const supabase = createClient();
+    const { error } = await applyItemRating(
+      supabase,
+      user.id,
+      { itemId: String(item.itemId), mediaType: item.mediaType },
+      "kenne_ich_nicht",
+    );
+    if (!error) markOwn(String(item.itemId), item.mediaType, "neutral");
+    setPendingKey(null);
+  };
+
   const handleWatchlist = async (item: CategoryListItem) => {
     if (!user) return;
     const key = `${item.mediaType}-${item.itemId}`;
     setPendingKey(key);
     const supabase = createClient();
-    const { error } = await saveToCategory(
+    const { error } = await addItemToOwnList(
       supabase,
-      "watchlist",
       user.id,
-      { itemId: item.itemId, mediaType: item.mediaType, title: item.title, imageUrl: item.imageUrl, year: item.year },
-      ownerId,
+      {
+        kind: "movie",
+        category: "watchlist",
+        item: { itemId: item.itemId, mediaType: item.mediaType, title: item.title, imageUrl: item.imageUrl, year: item.year },
+      },
+      [ownerId],
     );
     if (!error) {
-      await recordInspiredCredits(supabase, user.id, [ownerId], {
-        itemId: String(item.itemId),
-        mediaType: item.mediaType,
-      });
       showToast(`Zu ${CATEGORY_LABELS.watchlist} hinzugefügt`);
     }
     setPendingKey(null);
@@ -473,6 +495,7 @@ function VisitorCategoryList({
             otherRaters: getOtherRaters(String(item.itemId), item.mediaType),
             onLike: () => handleLike(item),
             onDislike: () => handleDislike(item),
+            onUnknown: () => handleUnknown(item),
             onAdd: () => handleWatchlist(item),
             addLabel: "Watchlist",
           }}

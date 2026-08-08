@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
-import { likeAndSaveCandidate } from "@/lib/discovery-like";
-import { dislikeCandidate } from "@/lib/discovery-dislike";
+import { rateCandidate, type RatingDecision } from "@/lib/rating-engine";
 import { DiscoveryListRow } from "@/components/discovery/discovery-list-row";
 import type { DiscoveryCandidate } from "@/lib/discovery";
 
@@ -32,15 +31,11 @@ export function DiscoverySection({
 
   if (items.length === 0) return null;
 
-  const handleAction = async (candidate: DiscoveryCandidate, action: "like" | "dislike") => {
+  const handleAction = async (candidate: DiscoveryCandidate, decision: RatingDecision) => {
     if (pendingId) return;
     setPendingId(candidate.id);
     const supabase = createClient();
-    if (action === "like") {
-      await likeAndSaveCandidate(supabase, userId, candidate);
-    } else {
-      await dislikeCandidate(supabase, userId, candidate);
-    }
+    await rateCandidate(supabase, userId, candidate, decision);
     setItems((prev) => prev.filter((item) => item.id !== candidate.id));
     setPendingId(null);
   };
@@ -53,8 +48,7 @@ export function DiscoverySection({
           <DiscoveryListRow
             key={candidate.id}
             candidate={candidate}
-            onLike={() => handleAction(candidate, "like")}
-            onDislike={() => handleAction(candidate, "dislike")}
+            onRate={(decision) => handleAction(candidate, decision)}
             pending={pendingId === candidate.id}
           />
         ))}

@@ -3,16 +3,18 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles, Star, User } from "lucide-react";
+import { Sparkles, ThumbsUp, User } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 const HIDDEN_PREFIXES = ["/auth", "/onboarding"];
 
 /**
  * The app's one primary navigation surface (Instagram/TikTok-style): three
- * tabs -- Für Dich (Discovery), My Taste (own taste/activity/lists), Profil
- * (social identity). Everything else in the app is reached FROM one of
- * these three, never the other way around.
+ * tabs -- Für Dich (sozialer/personalisierter Feed), Lohnt sich?
+ * (Quick-Swipe-Bewertung), Profil (soziale Identität) -- direkte Umsetzung
+ * des Produktprinzips "Toppi zeigt dir, was sich wirklich lohnt". Everything
+ * else in the app is reached FROM one of these three, never the other way
+ * around.
  */
 export function BottomNav() {
   const pathname = usePathname();
@@ -79,7 +81,7 @@ export function BottomNav() {
   const profileHref = `/u/${username}`;
   const tabs = [
     { href: "/fuer-dich", label: "Für Dich", icon: Sparkles, active: pathname.startsWith("/fuer-dich") },
-    { href: "/my-taste", label: "My Taste", icon: Star, active: pathname.startsWith("/my-taste") },
+    { href: "/lohnt-sich", label: "Lohnt sich?", icon: ThumbsUp, active: pathname.startsWith("/lohnt-sich") },
     {
       href: profileHref,
       label: "Profil",

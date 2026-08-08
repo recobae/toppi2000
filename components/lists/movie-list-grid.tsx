@@ -15,7 +15,7 @@ import {
   setFavorite,
   updateNote,
 } from "@/lib/saved-items";
-import { setInteractionWithCredits, recordInspiredCredits } from "@/lib/interaction-credits";
+import { applyItemRating, addItemToOwnList } from "@/lib/rating-engine";
 import { postWatchlistTransitionStoryEvent, type WatchlistTransition } from "@/lib/story-events";
 import { CATEGORY_LABELS } from "@/lib/categories";
 import { NOTE_PLACEHOLDERS } from "@/lib/notes";
@@ -242,12 +242,7 @@ function OwnerMovieList({
           year: item.year,
         });
       } else {
-        await setInteractionWithCredits(
-          supabase,
-          userId,
-          { itemId: String(item.itemId), mediaType: item.mediaType },
-          "dislike",
-        );
+        await applyItemRating(supabase, userId, { itemId: String(item.itemId), mediaType: item.mediaType }, "lohnt_sich_nicht");
       }
       await postWatchlistTransitionStoryEvent(supabase, userId, transition, {
         itemId: item.itemId,
@@ -400,26 +395,19 @@ function VisitorMovieList({
     const key = `${item.mediaType}-${item.itemId}`;
     setPendingKey(key);
     const supabase = createClient();
-    await setInteractionWithCredits(
+    await applyItemRating(supabase, user.id, { itemId: String(item.itemId), mediaType: item.mediaType }, "lohnt_sich", [ownerId]);
+    markOwn(String(item.itemId), item.mediaType, "like");
+    const { error } = await addItemToOwnList(
       supabase,
       user.id,
-      { itemId: String(item.itemId), mediaType: item.mediaType },
-      "like",
+      {
+        kind: "movie",
+        category: "top_list",
+        item: { itemId: item.itemId, mediaType: item.mediaType, title: item.title, imageUrl: item.imageUrl, year: item.year },
+      },
       [ownerId],
     );
-    markOwn(String(item.itemId), item.mediaType, "like");
-    const { error } = await saveToCategory(
-      supabase,
-      "top_list",
-      user.id,
-      { itemId: item.itemId, mediaType: item.mediaType, title: item.title, imageUrl: item.imageUrl, year: item.year },
-      ownerId,
-    );
     if (!error) {
-      await recordInspiredCredits(supabase, user.id, [ownerId], {
-        itemId: String(item.itemId),
-        mediaType: item.mediaType,
-      });
       showToast(`Zu ${CATEGORY_LABELS.top_list} hinzugefügt`);
     }
     setPendingKey(null);
@@ -430,11 +418,11 @@ function VisitorMovieList({
     const key = `${item.mediaType}-${item.itemId}`;
     setPendingKey(key);
     const supabase = createClient();
-    const { error } = await setInteractionWithCredits(
+    const { error } = await applyItemRating(
       supabase,
       user.id,
       { itemId: String(item.itemId), mediaType: item.mediaType },
-      "dislike",
+      "lohnt_sich_nicht",
       [ownerId],
     );
     if (error) {
@@ -450,20 +438,29 @@ function VisitorMovieList({
     const key = `${item.mediaType}-${item.itemId}`;
     setPendingKey(key);
     const supabase = createClient();
-    const { error } = await saveToCategory(
+    const { error } = await addItemToOwnList(
       supabase,
-      "watchlist",
       user.id,
-      { itemId: item.itemId, mediaType: item.mediaType, title: item.title, imageUrl: item.imageUrl, year: item.year },
-      ownerId,
+      {
+        kind: "movie",
+        category: "watchlist",
+        item: { itemId: item.itemId, mediaType: item.mediaType, title: item.title, imageUrl: item.imageUrl, year: item.year },
+      },
+      [ownerId],
     );
     if (!error) {
-      await recordInspiredCredits(supabase, user.id, [ownerId], {
-        itemId: String(item.itemId),
-        mediaType: item.mediaType,
-      });
       showToast(`Zu ${CATEGORY_LABELS.watchlist} hinzugefügt`);
     }
+    setPendingKey(null);
+  };
+
+  const handleUnknown = async (item: MovieListItem) => {
+    if (!user) return;
+    const key = `${item.mediaType}-${item.itemId}`;
+    setPendingKey(key);
+    const supabase = createClient();
+    const { error } = await applyItemRating(supabase, user.id, { itemId: String(item.itemId), mediaType: item.mediaType }, "kenne_ich_nicht");
+    if (!error) markOwn(String(item.itemId), item.mediaType, "neutral");
     setPendingKey(null);
   };
 
@@ -524,6 +521,7 @@ function VisitorMovieList({
             otherRaters: getOtherRaters(String(item.itemId), item.mediaType),
             onLike: () => handleLike(item),
             onDislike: () => handleDislike(item),
+            onUnknown: () => handleUnknown(item),
             onAdd: () => handleWatchlist(item),
             addLabel: "Watchlist",
           }}

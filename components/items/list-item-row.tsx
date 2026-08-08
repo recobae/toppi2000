@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import type { MouseEvent, ReactNode } from "react";
-import { Ban, Check, Heart, HeartHandshake, Pencil, Plus, Star, X } from "lucide-react";
+import { Check, HeartHandshake, HelpCircle, Pencil, Plus, Star, X } from "lucide-react";
+import { RATING_LABELS, ADD_LABEL, ADDED_LABEL } from "@/lib/copy";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MovieMetaBadges, SocialProofIcons } from "@/components/movie-info";
@@ -45,12 +46,15 @@ export type ListItemRowActions =
       variant: "rate";
       onLike: () => void;
       onDislike: () => void;
-      /** Optional -- omit both to render just Gefällt mir/Nix für mich with no third button (Orte-Listen no longer offer a "+ Merken" quick-add). */
+      /** Kenne ich noch nicht -- eigener neutraler Zustand, verändert keine Statistik (Lohnt-sich-Umbau §2). Optional nur für Übergangs-Call-Sites, die noch nicht migriert sind. */
+      onUnknown?: () => void;
+      /** Optional -- omit to render just the three rating actions with no add button (Orte-Listen no longer offer a "+ Merken" quick-add). */
       onAdd?: () => void;
       addLabel?: string;
       pending?: boolean;
       /** Foreign-list rows only: the viewer's own existing stance on this item, so the buttons reflect it instead of always looking unrated. */
-      ownInteraction?: "like" | "dislike" | null;
+      /** "neutral" ("Kenne ich noch nicht") renders neither button as active -- it's not a like/dislike signal. */
+      ownInteraction?: "like" | "dislike" | "neutral" | null;
       /** Foreign-list rows only: OTHER followed friends (never the viewer) who share the viewer's own stance -- backs "Auch von [Name] geliked/nicht gemocht", shown only once ownInteraction is set. */
       otherRaters?: OtherRatersBreakdown;
     }
@@ -126,7 +130,7 @@ export function ActionBar({
       <div className="mt-auto pt-2 flex items-center gap-1.5">
         <button
           type="button"
-          aria-label={likedByMe ? "Gefällt mir (bereits gesetzt)" : "Gefällt mir"}
+          aria-label={likedByMe ? `${RATING_LABELS.lohnt_sich} (bereits gesetzt)` : RATING_LABELS.lohnt_sich}
           disabled={actions.pending}
           onClick={stop(actions.onLike)}
           className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors disabled:opacity-50 ${
@@ -135,11 +139,11 @@ export function ActionBar({
               : "border-input text-green-600 hover:bg-green-600/10"
           }`}
         >
-          <Heart className={`size-4 ${likedByMe ? "fill-current" : ""}`} />
+          <Check className="size-4" />
         </button>
         <button
           type="button"
-          aria-label={dislikedByMe ? "Nix für mich (bereits gesetzt)" : "Nix für mich"}
+          aria-label={dislikedByMe ? `${RATING_LABELS.lohnt_sich_nicht} (bereits gesetzt)` : RATING_LABELS.lohnt_sich_nicht}
           disabled={actions.pending}
           onClick={stop(actions.onDislike)}
           className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors disabled:opacity-50 ${
@@ -148,8 +152,19 @@ export function ActionBar({
               : "border-input text-destructive hover:bg-destructive/10"
           }`}
         >
-          <Ban className={`size-4 ${dislikedByMe ? "fill-current" : ""}`} />
+          <X className="size-4" />
         </button>
+        {actions.onUnknown && (
+          <button
+            type="button"
+            aria-label={RATING_LABELS.kenne_ich_nicht}
+            disabled={actions.pending}
+            onClick={stop(actions.onUnknown)}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-muted-foreground hover:bg-accent transition-colors disabled:opacity-50"
+          >
+            <HelpCircle className="size-4" />
+          </button>
+        )}
         {actions.onAdd && actions.addLabel && (
           <button
             type="button"
@@ -187,21 +202,21 @@ export function ActionBar({
           <>
             <button
               type="button"
-              aria-label="Zu Gefällt mir"
+              aria-label={`Zu „${RATING_LABELS.lohnt_sich}“`}
               disabled={actions.statusTransition.pending}
               onClick={stop(actions.statusTransition.onLike)}
               className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-green-600 hover:bg-green-600/10 transition-colors disabled:opacity-50"
             >
-              <Heart className="size-4" />
+              <Check className="size-4" />
             </button>
             <button
               type="button"
-              aria-label="Zu Gefällt mir nicht"
+              aria-label={`Zu „${RATING_LABELS.lohnt_sich_nicht}“`}
               disabled={actions.statusTransition.pending}
               onClick={stop(actions.statusTransition.onDislike)}
               className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
             >
-              <Ban className="size-4" />
+              <X className="size-4" />
             </button>
           </>
         )}
@@ -241,7 +256,7 @@ export function ActionBar({
           }`}
         >
           {actions.isSaved ? <Check className="size-4" /> : <Plus className="size-4" />}
-          {actions.isSaved ? "Gespeichert" : "Hinzufügen"}
+          {actions.isSaved ? ADDED_LABEL : ADD_LABEL}
         </button>
       </div>
     );

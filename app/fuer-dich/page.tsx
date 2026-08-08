@@ -136,7 +136,7 @@ export default async function FuerDichPage() {
             <DiscoverySection title="Gerade neu von Freunden" candidates={freshFromFriends} userId={user.id} />
             <DiscoverySection title="Beliebt im Netzwerk" candidates={popularInNetwork} userId={user.id} />
             <DiscoverySection title="Mehr aus deiner Region" candidates={moreFromRegion} userId={user.id} />
-            <DiscoverySection title="Neu für dich" candidates={newForYou} userId={user.id} />
+            <DiscoverySection title="Weitere Inspiration" candidates={newForYou} userId={user.id} />
           </>
         )}
       </div>

@@ -1,15 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { startOfTodayInTimeZone } from "@/lib/timezone";
 
-// The single, generic source of truth for "I like/dislike this item" --
-// independent of whether it's on any list. Supersedes the older "likes" and
-// "item_ratings" tables, which the app no longer reads or writes at all
-// (their historical rows just sit unused in the DB). "Skip" is a
-// deliberately separate concept (lib/item-skips.ts, its own table) -- it
-// makes no taste statement, so it must never appear here; taste-match,
-// progress badges and everything else that reads item_interactions can
-// assume every row is a real opinion.
-export type InteractionType = "like" | "dislike";
+// The single, generic source of truth for "what does this user think of this
+// item" -- independent of whether it's on any list. Supersedes the older
+// "likes" and "item_ratings" tables, which the app no longer reads or writes
+// at all (their historical rows just sit unused in the DB). Three states
+// exist (see lib/rating-engine.ts's RatingDecision for the product-facing
+// names): "like" ("Lohnt sich"), "dislike" ("Lohnt sich nicht"), and
+// "neutral" ("Kenne ich noch nicht" -- explicitly neither positive nor
+// negative, never counted in Likes/Credits aggregation). "Skip" is a
+// deliberately separate, purely technical concept (lib/item-skips.ts, its
+// own table) -- it makes no taste statement on its own, so it must never
+// appear here.
+export type InteractionType = "like" | "dislike" | "neutral";
 export type InteractionMediaType = "movie" | "tv" | "place";
 
 export type Interaction = {
@@ -55,10 +58,10 @@ export async function recordInteraction(
  * conflict, so a dislike from weeks ago that resurfaces and gets liked
  * today updates its existing row rather than inserting a new one --
  * `created_at` would miss that, `updated_at` (bumped by a DB trigger on
- * every insert/update, see the accompanying migration) doesn't. Counts
- * only like/dislike, matching the two ratings that exist anywhere in the
- * app now -- never Skip/Battle/detail-view opens/list views/notes, none of
- * which write here.
+ * every insert/update, see the accompanying migration) doesn't. Counts all
+ * three rating states (like/dislike/neutral) -- "Kenne ich noch nicht" is a
+ * real, deliberate rating action even though it carries no statistic --
+ * never Battle/detail-view opens/list views/notes, none of which write here.
  */
 export async function getTodayInteractionCount(supabase: SupabaseClient, userId: string): Promise<number> {
   const startOfToday = startOfTodayInTimeZone("Europe/Berlin");
@@ -69,7 +72,7 @@ export async function getTodayInteractionCount(supabase: SupabaseClient, userId:
     // named-column count select would fail here.
     .select("*", { count: "exact", head: true })
     .eq("user_id", userId)
-    .in("interaction_type", ["like", "dislike"])
+    .in("interaction_type", ["like", "dislike", "neutral"])
     .gte("updated_at", startOfToday.toISOString());
   return count ?? 0;
 }

@@ -39,10 +39,10 @@ export default async function OnboardingPage() {
 
   // Direct/repeat visit after the flow already ran once (or a system
   // account, which never gets routed here in the first place but is
-  // guarded again here for safety) -- bounce straight into the deck
-  // instead of re-showing the picker.
+  // guarded again here for safety) -- bounce straight to the canonical
+  // landing tab instead of re-showing the picker.
   if (profile.onboarding_completed) {
-    redirect("/swipe");
+    redirect("/fuer-dich");
   }
 
   const { error } = await supabase
@@ -89,7 +89,7 @@ export default async function OnboardingPage() {
         )}
 
         <Button asChild size="lg" variant="outline" className="w-full">
-          <Link href="/swipe">Überspringen</Link>
+          <Link href="/fuer-dich">Überspringen</Link>
         </Button>
       </div>
     </main>

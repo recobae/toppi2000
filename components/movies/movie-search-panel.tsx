@@ -11,8 +11,7 @@ import { GuestSignupModal } from "@/components/guest-signup-modal";
 import { PersonSelector } from "@/components/search/person-selector";
 import { NoteModal } from "@/components/lists/note-modal";
 import { saveToCategory, updateNote } from "@/lib/saved-items";
-import { recordInteraction } from "@/lib/interactions";
-import { recordDislike } from "@/lib/rating";
+import { applyItemRating, addItemToOwnList } from "@/lib/rating-engine";
 import { CATEGORY_LABELS } from "@/lib/categories";
 import { NOTE_PLACEHOLDERS } from "@/lib/notes";
 import type { PersonSummary, SearchResult } from "@/lib/tmdb";
@@ -129,13 +128,13 @@ export function MovieSearchPanel() {
     setPendingKey(key);
     const supabase = createClient();
     const posterUrl = result.posterPath ? `${POSTER_BASE_URL}${result.posterPath}` : null;
-    await recordInteraction(supabase, user.id, { itemId: String(result.id), mediaType: result.mediaType, interactionType: "like" });
-    const { error } = await saveToCategory(supabase, "top_list", user.id, {
-      itemId: result.id,
-      mediaType: result.mediaType,
-      title: result.title,
-      imageUrl: posterUrl,
-      year: result.year,
+    // Search results have no known owner -- a plain "Lohnt sich" with no
+    // credits, same as before this migrated onto the shared rating engine.
+    await applyItemRating(supabase, user.id, { itemId: String(result.id), mediaType: result.mediaType }, "lohnt_sich");
+    const { error } = await addItemToOwnList(supabase, user.id, {
+      kind: "movie",
+      category: "top_list",
+      item: { itemId: result.id, mediaType: result.mediaType, title: result.title, imageUrl: posterUrl, year: result.year },
     });
     if (!error) {
       showToast(`Zu ${CATEGORY_LABELS.top_list} hinzugefügt`);
@@ -149,11 +148,22 @@ export function MovieSearchPanel() {
     const key = `${result.mediaType}-${result.id}`;
     setPendingKey(key);
     const supabase = createClient();
-    const { error } = await recordDislike(supabase, user.id, {
-      itemId: String(result.id),
-      mediaType: result.mediaType,
-    });
+    const { error } = await applyItemRating(
+      supabase,
+      user.id,
+      { itemId: String(result.id), mediaType: result.mediaType },
+      "lohnt_sich_nicht",
+    );
     showToast(error ? "Konnte nicht gespeichert werden, versuch's nochmal" : "Notiert.");
+    setPendingKey(null);
+  };
+
+  const handleUnknown = async (result: SearchResult) => {
+    if (!user) return;
+    const key = `${result.mediaType}-${result.id}`;
+    setPendingKey(key);
+    const supabase = createClient();
+    await applyItemRating(supabase, user.id, { itemId: String(result.id), mediaType: result.mediaType }, "kenne_ich_nicht");
     setPendingKey(null);
   };
 
@@ -196,6 +206,7 @@ export function MovieSearchPanel() {
           pending: pendingKey === key,
           onLike: () => handleLike(result),
           onDislike: () => handleDislike(result),
+          onUnknown: () => handleUnknown(result),
           onAdd: () => handleWatchlist(result),
           addLabel: "Watchlist",
         }}

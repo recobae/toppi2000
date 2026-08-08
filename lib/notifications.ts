@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { inspiredNotificationText } from "@/lib/copy";
 
 // The one in-app reciprocity/return-trigger channel: no push infra exists
 // in this project, so "notification" here always means "shows up next time
@@ -86,8 +87,6 @@ export async function markAllNotificationsRead(supabase: SupabaseClient, userId:
 export function notificationText(row: NotificationRow): string {
   const actor = row.actorUsername ?? "Jemand";
   if (row.type === "follow") return `${actor} folgt dir jetzt`;
-  if (row.type === "adopted") {
-    return row.title ? `${actor} hat „${row.title}“ von dir übernommen` : `${actor} hat etwas von dir übernommen`;
-  }
+  if (row.type === "adopted") return inspiredNotificationText(actor, row.title);
   return `${actor} hat etwas gemacht`;
 }

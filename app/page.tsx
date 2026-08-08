@@ -11,7 +11,9 @@ export default async function Home() {
 
   if (userId) {
     // Zero-effort landing: straight into the central discovery stream, no
-    // decision screen -- My Taste (/swipe) is still reachable from there.
+    // decision screen -- "Lohnt sich?" (/lohnt-sich) is one of the three
+    // main tabs from there, and lib/auth-redirect.ts now sends post-login/
+    // signup traffic here too, so this is the one canonical landing tab.
     await ensureUsername(supabase, userId);
     redirect("/fuer-dich");
   }
