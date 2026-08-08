@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, HelpCircle, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { rateCandidate, type RatingDecision } from "@/lib/rating-engine";
 import { recordSwipeCardAction } from "@/lib/swipe-activity";
 import { recordQuickSwipeEvent } from "@/lib/quick-swipe-events";
 import { QuickSwipeCard } from "@/components/swipe/quick-swipe-card";
+import { RatingIconButton } from "@/components/ui/rating-icon-button";
 import { BattleCard } from "@/components/swipe/battle-card";
 import { CandidateDetailModal } from "@/components/discovery/candidate-detail-modal";
 import type { QuickSwipeUnit, MixGroup } from "@/lib/quick-swipe";
@@ -199,30 +199,21 @@ export function QuickSwipeDeck({ userId }: { userId: string }) {
           fehleranfällig wäre. */}
       {current?.kind === "single" && (
         <div className="flex items-center gap-4 shrink-0">
-          <button
-            type="button"
-            aria-label="Lohnt sich nicht"
+          <RatingIconButton
+            decision="lohnt_sich_nicht"
+            size="lg"
             onClick={() => handleSingleAction(current.candidate, "lohnt_sich_nicht")}
-            className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-destructive text-destructive bg-background shadow-sm active:scale-95 transition-transform"
-          >
-            <X className="size-6" />
-          </button>
-          <button
-            type="button"
-            aria-label="Kenne ich noch nicht"
+          />
+          <RatingIconButton
+            decision="kenne_ich_nicht"
+            size="lg"
             onClick={() => handleSingleAction(current.candidate, "kenne_ich_nicht")}
-            className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-muted-foreground/40 text-muted-foreground bg-background shadow-sm active:scale-95 transition-transform"
-          >
-            <HelpCircle className="size-5" />
-          </button>
-          <button
-            type="button"
-            aria-label="Lohnt sich"
+          />
+          <RatingIconButton
+            decision="lohnt_sich"
+            size="lg"
             onClick={() => handleSingleAction(current.candidate, "lohnt_sich")}
-            className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-green-600 text-green-600 bg-background shadow-sm active:scale-95 transition-transform"
-          >
-            <Check className="size-6" />
-          </button>
+          />
         </div>
       )}
       {current?.kind === "battle" && (

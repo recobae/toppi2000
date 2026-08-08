@@ -12,6 +12,7 @@ export function FollowButton({
   targetUsername,
   initialIsLoggedIn,
   initialIsFollowing,
+  iconOnly,
 }: {
   targetUserId: string;
   targetUsername: string;
@@ -24,6 +25,13 @@ export function FollowButton({
    */
   initialIsLoggedIn?: boolean;
   initialIsFollowing?: boolean;
+  /**
+   * Kompakter Icon-Button statt der vollen "Inspirierend"-Pille -- gleiches
+   * Prop-Muster wie ShareListButton's `iconOnly` (components/lists/
+   * share-list-button.tsx). Für den bereits-folgend-Zustand ändert sich
+   * nichts, der ist schon immer icon-only (MoreHorizontal).
+   */
+  iconOnly?: boolean;
 }) {
   const router = useRouter();
   const hasInitialState = initialIsLoggedIn !== undefined;
@@ -167,6 +175,37 @@ export function FollowButton({
               </div>
             </div>
           </div>
+        )}
+      </div>
+    );
+  }
+
+  if (iconOnly) {
+    return (
+      <div className="relative inline-flex items-center">
+        <button
+          type="button"
+          aria-label={`${targetUsername} inspirieren lassen`}
+          title="Inspirierend folgen"
+          disabled={isSubmitting}
+          onClick={handleFollow}
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+        >
+          <Sparkles className="size-4" />
+        </button>
+
+        {errorMessage && (
+          <span className="absolute top-full mt-1 whitespace-nowrap rounded bg-destructive text-destructive-foreground text-[10px] px-1.5 py-0.5 z-10">
+            {errorMessage}
+          </span>
+        )}
+
+        {showGuestModal && (
+          <GuestSignupModal
+            message={`Melde dich an, um dich von ${targetUsername} inspirieren zu lassen und immer auf dem Laufenden zu bleiben.`}
+            next={`/u/${targetUsername}`}
+            onClose={() => setShowGuestModal(false)}
+          />
         )}
       </div>
     );

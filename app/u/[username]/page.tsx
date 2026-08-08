@@ -1,16 +1,10 @@
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
-import Link from "next/link";
 import type { Metadata } from "next";
-import { Settings } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { ForeignProfileHero } from "@/components/profile/foreign-profile-hero";
-import { OwnProfileHero } from "@/components/profile/own-profile-hero";
-import { ProfileAvatar } from "@/components/profile/profile-avatar";
+import { ProfileHeader } from "@/components/profile/profile-header";
+import { ProfileStats } from "@/components/profile/profile-stats";
 import { ListOverviewSection } from "@/components/profile/list-overview-section";
-import { GuestProfileCta } from "@/components/profile/guest-profile-cta";
-import { FollowButton } from "@/components/profile/follow-button";
-import { ShareListButton } from "@/components/lists/share-list-button";
 import { ThanksStat } from "@/components/profile/progress-badges";
 import { getTopfContributorIds } from "@/lib/for-me";
 import { getInspiredCount, getInspiredCountBatch } from "@/lib/interaction-credits";
@@ -291,110 +285,45 @@ export default async function ProfilePage({
     <main className="min-h-screen flex flex-col items-center">
       <div className="flex-1 w-full flex flex-col items-center gap-4 max-w-2xl p-5 pt-6">
         {/*
-          Scrollt normal mit dem restlichen Content -- nicht mehr sticky/
-          fixed. Kein Logo mehr hier (Struktur-Runde) -- Avatar links,
-          Settings + Teilen rechts, keine reservierte mittlere Spalte.
+          Ein Header für eigenes UND fremdes Profil (Profil-Umbau, Punkt 3):
+          Avatar -- Username -- kompakte Icon-Buttons in einer Zeile, direkt
+          gefolgt von Freundes-Leiste, dann Statistiken (nur Fremdansicht),
+          dann Listen -- exakt die geforderte Reihenfolge, für beide
+          Ansichten identisch strukturiert statt zwei getrennter Layouts.
         */}
-        {isOwner && (
-          <div className="w-full flex items-center justify-between gap-2">
-            <ProfileAvatar username={profile.username} imageUrl={avatarUrl} size="sm" />
-            <span className="flex items-center gap-2 shrink-0">
-              <Link
-                href="/settings"
-                aria-label="Einstellungen"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-background/80 shadow-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Settings className="size-5" />
-              </Link>
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-background/80 shadow-sm">
-                <ShareListButton
-                  shareTitle={`Schau dir ${profile.username}s Filmgeschmack an`}
-                  url={profileUrl}
-                  iconOnly
-                />
-              </span>
-            </span>
-          </div>
-        )}
-        {/*
-          Eigenansicht/Fremdansicht-Weiche: in der Eigenansicht ersetzt "For
-          Me" den Avatar komplett (gleiche Position/Dominanz wie zuvor das
-          Profilbild) -- die Fremdansicht behält den unveränderten Avatar
-          samt Song-Trigger.
-        */}
-        {isOwner ? (
-          <OwnProfileHero
-            userId={profile.id}
-            username={profile.username}
-            avatarUrl={avatarUrl}
-            followingProfiles={followingProfiles}
-            contributorIds={ownContributorIds}
-          />
-        ) : (
-          <ForeignProfileHero
-            username={profile.username}
-            avatarUrl={avatarUrl}
-            hasActiveStory={hasActiveStory}
-            isGuest={isGuest}
-            favoriteSong={favoriteSong}
-            targetUserId={profile.id}
-            hasUnseenSong={unseenSong}
+        <ProfileHeader
+          isOwnProfile={isOwner}
+          username={profile.username}
+          avatarUrl={avatarUrl}
+          profileUrl={profileUrl}
+          isGuest={isGuest}
+          targetUserId={profile.id}
+          initialIsFollowing={!!existingFollowRow}
+          favoriteSong={favoriteSong}
+          hasUnseenSong={unseenSong}
+          hasActiveStory={hasActiveStory}
+        />
+
+        <FollowingBar
+          currentUserId={profile.id}
+          followingProfiles={followingProfiles}
+          contributorIds={isOwner ? ownContributorIds : foreignContributorIds}
+          showAddButton={isOwner}
+        />
+
+        {!isOwner && viewer && (
+          <ProfileStats
+            totalActivityCount={totalActivityCount}
+            inspiredCount={viewerInspiredCount}
+            viewerId={viewer.id}
+            ownerId={profile.id}
+            ownerUsername={profile.username}
           />
         )}
-
-        {/*
-          Fremdansicht, logisch sortiert (Folgeänderungen round, Punkt 8):
-          2. Name -- 3. Follow/Entfolgen -- 4. Teilen -- 5. Bewertungsstatistik
-          -- 6. Follower-Leiste -- 7. "von Dir inspiriert". Ein einziger
-          FollowButton statt zwei getrennter Code-Pfade an zwei Stellen --
-          die Komponente rendert intern schon beides (Icon vs. voller Button)
-          je nach initialIsFollowing.
-        */}
-        {!isOwner && (
-          <>
-            <h1 className="text-xl font-semibold text-center truncate w-full">{profile.username}</h1>
-
-            <div className="flex items-center gap-2">
-              {!isGuest && (
-                <FollowButton
-                  targetUserId={profile.id}
-                  targetUsername={profile.username}
-                  initialIsLoggedIn
-                  initialIsFollowing={!!existingFollowRow}
-                />
-              )}
-              {isGuest && <GuestProfileCta variant="button" />}
-              <ShareListButton
-                shareTitle={`Schau dir ${profile.username}s Filmgeschmack an`}
-                url={profileUrl}
-                iconOnly
-              />
-            </div>
-
-            {/*
-              Bewertungsstatistik des Profilinhabers -- die einzige der
-              beiden auf Fremdprofilen erlaubten Statistiken zusammen mit
-              "von Dir inspiriert" unten (Punkt 6); Taste Match/Match-% und
-              sonstige Zusatzstatistiken (z.B. ThanksStat) sind hier bewusst
-              nicht mehr sichtbar.
-            */}
-            <p className="text-sm font-medium text-center">
-              {profile.username} hat {totalActivityCount} {totalActivityCount === 1 ? "Bewertung" : "Bewertungen"} abgegeben
-            </p>
-
-            <FollowingBar
-              currentUserId={profile.id}
-              followingProfiles={followingProfiles}
-              contributorIds={foreignContributorIds}
-              showAddButton={false}
-            />
-
-            {viewer && (
-              <p className="text-sm font-medium text-center text-primary">
-                {viewerInspiredCount}-mal von Dir inspiriert
-              </p>
-            )}
-          </>
+        {!isOwner && !viewer && (
+          <p className="text-sm font-medium text-center text-blue-600">
+            Schon {totalActivityCount} {totalActivityCount === 1 ? "Bewertung" : "Bewertungen"} abgegeben
+          </p>
         )}
 
         {isOwner && <ThanksStat count={thanksGivenCount ?? 0} />}
@@ -405,6 +334,7 @@ export default async function ProfilePage({
           mehr. Gleiche Komponente wie in der Fremdansicht, nur mit
           isOwner=true fürs "Neue Liste erstellen"-Picker.
         */}
+        <h2 className="w-full text-sm font-medium text-muted-foreground">Das lohnt sich:</h2>
         <ListOverviewSection rows={listOverview.rows} isGuest={isGuest} isOwner={isOwner} />
       </div>
     </main>

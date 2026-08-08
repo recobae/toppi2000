@@ -9,7 +9,7 @@ import { useSongPlayback } from "@/components/profile/song-playback-context";
  * while scrolling, mirrors the same play/pause state as the big hero
  * avatar via SongPlaybackContext (same toggle(), same underlying <audio>).
  * Only rendered when a favorite song actually exists (see
- * ForeignProfileHero) -- no empty/inactive placeholder otherwise.
+ * ProfileHeader) -- no empty/inactive placeholder otherwise.
  */
 export function SongMiniIcon({
   username,

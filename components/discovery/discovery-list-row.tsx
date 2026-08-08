@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { Check, Clapperboard, HelpCircle, MapPin, MessageCircle, Sparkles, Star, Tag, X } from "lucide-react";
+import { Clapperboard, MapPin, MessageCircle, Sparkles, Star, Tag } from "lucide-react";
 import { CandidateDetailModal } from "@/components/discovery/candidate-detail-modal";
+import { RatingIconButton } from "@/components/ui/rating-icon-button";
 import type { DiscoveryCandidate } from "@/lib/discovery";
 import type { RatingDecision } from "@/lib/rating-engine";
 
@@ -61,7 +62,7 @@ export function DiscoveryListRow({
           if (event.key === "Enter" || event.key === " ") openDetail();
         }}
         aria-label={`${candidate.title} -- Details öffnen`}
-        className="flex gap-3 rounded-xl border p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+        className="flex gap-3 rounded-xl border p-3 shadow-card hover:shadow-raised transition-shadow cursor-pointer"
       >
         <div className="relative size-16 shrink-0 rounded-md overflow-hidden bg-muted flex items-center justify-center text-muted-foreground">
           {candidate.imageUrl ? (
@@ -118,44 +119,32 @@ export function DiscoveryListRow({
             </p>
           )}
 
-          {/* 5. Aktionen -- gleiche Icons/Farben wie ActionBar (components/items/list-item-row.tsx) im Rest der App. */}
+          {/* 5. Aktionen -- exakt dieselbe Komponente wie überall sonst im Projekt (components/ui/rating-icon-button.tsx). */}
           <div className="flex items-center gap-1.5 pt-1">
-            <button
-              type="button"
+            <RatingIconButton
+              decision="lohnt_sich"
+              disabled={pending}
               onClick={(event) => {
                 event.stopPropagation();
                 onRate("lohnt_sich");
               }}
+            />
+            <RatingIconButton
+              decision="lohnt_sich_nicht"
               disabled={pending}
-              aria-label="Lohnt sich"
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-green-600 hover:bg-green-600/10 transition-colors disabled:opacity-50"
-            >
-              <Check className="size-4" />
-            </button>
-            <button
-              type="button"
               onClick={(event) => {
                 event.stopPropagation();
                 onRate("lohnt_sich_nicht");
               }}
+            />
+            <RatingIconButton
+              decision="kenne_ich_nicht"
               disabled={pending}
-              aria-label="Lohnt sich nicht"
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
-            >
-              <X className="size-4" />
-            </button>
-            <button
-              type="button"
               onClick={(event) => {
                 event.stopPropagation();
                 onRate("kenne_ich_nicht");
               }}
-              disabled={pending}
-              aria-label="Kenne ich noch nicht"
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-muted-foreground hover:bg-accent transition-colors disabled:opacity-50"
-            >
-              <HelpCircle className="size-4" />
-            </button>
+            />
           </div>
         </div>
       </motion.div>

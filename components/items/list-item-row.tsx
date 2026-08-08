@@ -3,8 +3,9 @@
 import Image from "next/image";
 import { motion } from "framer-motion";
 import type { MouseEvent, ReactNode } from "react";
-import { Check, HeartHandshake, HelpCircle, Pencil, Plus, Star, X } from "lucide-react";
-import { RATING_LABELS, ADD_LABEL, ADDED_LABEL } from "@/lib/copy";
+import { Check, HeartHandshake, Pencil, Plus, Star, X } from "lucide-react";
+import { ADD_LABEL, ADDED_LABEL } from "@/lib/copy";
+import { RatingIconButton } from "@/components/ui/rating-icon-button";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MovieMetaBadges, SocialProofIcons } from "@/components/movie-info";
@@ -139,42 +140,24 @@ export function ActionBar({
     const dislikedByMe = actions.ownInteraction === "dislike";
     return (
       <div className="mt-auto pt-2 flex items-center gap-1.5">
-        <button
-          type="button"
-          aria-label={likedByMe ? `${RATING_LABELS.lohnt_sich} (bereits gesetzt)` : RATING_LABELS.lohnt_sich}
+        <RatingIconButton
+          decision="lohnt_sich"
+          active={likedByMe}
           disabled={actions.pending}
           onClick={stop(actions.onLike)}
-          className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors disabled:opacity-50 ${
-            likedByMe
-              ? "border-green-600 bg-green-600/10 text-green-600"
-              : "border-input text-green-600 hover:bg-green-600/10"
-          }`}
-        >
-          <Check className="size-4" />
-        </button>
-        <button
-          type="button"
-          aria-label={dislikedByMe ? `${RATING_LABELS.lohnt_sich_nicht} (bereits gesetzt)` : RATING_LABELS.lohnt_sich_nicht}
+        />
+        <RatingIconButton
+          decision="lohnt_sich_nicht"
+          active={dislikedByMe}
           disabled={actions.pending}
           onClick={stop(actions.onDislike)}
-          className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors disabled:opacity-50 ${
-            dislikedByMe
-              ? "border-destructive bg-destructive/10 text-destructive"
-              : "border-input text-destructive hover:bg-destructive/10"
-          }`}
-        >
-          <X className="size-4" />
-        </button>
+        />
         {actions.onUnknown && (
-          <button
-            type="button"
-            aria-label={RATING_LABELS.kenne_ich_nicht}
+          <RatingIconButton
+            decision="kenne_ich_nicht"
             disabled={actions.pending}
             onClick={stop(actions.onUnknown)}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-muted-foreground hover:bg-accent transition-colors disabled:opacity-50"
-          >
-            <HelpCircle className="size-4" />
-          </button>
+          />
         )}
         {actions.onAdd && actions.addLabel && (
           <button
@@ -211,24 +194,16 @@ export function ActionBar({
         )}
         {actions.statusTransition && (
           <>
-            <button
-              type="button"
-              aria-label={`Zu „${RATING_LABELS.lohnt_sich}“`}
+            <RatingIconButton
+              decision="lohnt_sich"
               disabled={actions.statusTransition.pending}
               onClick={stop(actions.statusTransition.onLike)}
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-green-600 hover:bg-green-600/10 transition-colors disabled:opacity-50"
-            >
-              <Check className="size-4" />
-            </button>
-            <button
-              type="button"
-              aria-label={`Zu „${RATING_LABELS.lohnt_sich_nicht}“`}
+            />
+            <RatingIconButton
+              decision="lohnt_sich_nicht"
               disabled={actions.statusTransition.pending}
               onClick={stop(actions.statusTransition.onDislike)}
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-input text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
-            >
-              <X className="size-4" />
-            </button>
+            />
           </>
         )}
         <Button

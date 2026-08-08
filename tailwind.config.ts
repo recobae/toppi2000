@@ -57,6 +57,12 @@ export default {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      boxShadow: {
+        /** Standard-Karten-/Zeilenschatten -- die bisher überall hand-getippte shadow-sm-Variante, jetzt als benanntes Token. */
+        card: "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        /** Angehobener Zustand (Hover/aktive Karten) -- bisher ad-hoc shadow-md-Aufrufe. */
+        raised: "0 4px 12px -2px rgb(0 0 0 / 0.08)",
+      },
     },
   },
   plugins: [require("tailwindcss-animate")],

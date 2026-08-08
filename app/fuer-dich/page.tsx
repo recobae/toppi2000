@@ -6,7 +6,7 @@ import { DiscoverySection } from "@/components/discovery/discovery-section";
 import { PersonalDiscoverySection } from "@/components/discovery/personal-discovery-section";
 import { RegionPrompts } from "@/components/discovery/region-prompts";
 import { QuestionPrompts } from "@/components/discovery/question-prompts";
-import { NetworkActivityFeed } from "@/components/discovery/network-activity-feed";
+import { NetworkFeedList } from "@/components/discovery/network-feed-list";
 import { getDiscoverySections, getNetworkRegionPrompts } from "@/lib/discovery";
 import { getNetworkActivityFeed } from "@/lib/network-activity";
 import { getPersonalDiscoveryHighlight } from "@/lib/fuer-dich-personalization";
@@ -90,25 +90,18 @@ export default async function FuerDichPage() {
         </div>
 
         {/*
-          Abschnitt 1: "Gerade neu von deinem Netzwerk" -- Bewertungen von
-          Freunden (item-basiert, DiscoverySection) UND reine
-          Aktivitätsmeldungen wie "neue Liste erstellt"/"Ort hinzugefügt"
-          (lib/network-activity.ts, kein rateable Item) unter einer
-          gemeinsamen Überschrift, wie in der Anfrage beschrieben. Reihenfolge
-          der 3 Für-Dich-Zonen (§4): Netzwerkaktivität -> Personalisiertes
-          -> Weitere Inspiration.
+          Abschnitt 1: "Neueste Bewertungen" -- Bewertungen von Freunden
+          (item-basiert) UND reine Aktivitätsmeldungen wie "neue Liste
+          erstellt"/"Ort hinzugefügt" (lib/network-activity.ts, kein
+          rateable Item) als EINE zeitlich sortierte, kompakte Liste
+          (Profil-Umbau §7, NetworkFeedList) statt zwei getrennter
+          Kartenformate. Reihenfolge der 3 Für-Dich-Zonen (§4):
+          Netzwerkaktivität -> Personalisiertes -> Weitere Inspiration.
         */}
         {(newFriendCount > 0 || networkActivity.length > 0) && (
-          <h2 className="text-lg font-semibold">Gerade neu von deinem Netzwerk</h2>
+          <h2 className="text-lg font-semibold">Neueste Bewertungen</h2>
         )}
-        {newFriendCount > 0 && (
-          <DiscoverySection
-            title={`${newFriendCount} neue ${newFriendCount === 1 ? "Bewertung" : "Bewertungen"} von Freunden`}
-            candidates={newFriendCandidates}
-            userId={user.id}
-          />
-        )}
-        <NetworkActivityFeed events={networkActivity} />
+        <NetworkFeedList candidates={newFriendCandidates} events={networkActivity} userId={user.id} />
         {newFriendCount === 0 && networkActivity.length === 0 && sections.hasFollows && (
           <h2 className="text-lg font-semibold">Nichts Neues von Freunden — entdecke weitere Ideen</h2>
         )}

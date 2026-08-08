@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Square } from "lucide-react";
+import Image from "next/image";
+import { Play, Square } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { STORY_RING_CLASS, STORY_RING_CLASS_INACTIVE } from "@/components/profile/story-ring-styles";
@@ -62,6 +63,7 @@ export function ProfileSongAvatar({
     <ProfileSongAvatarInner
       username={username}
       avatar={avatar}
+      artworkUrl={favoriteSong.artworkUrl}
       targetUserId={targetUserId}
       isUnseen={isUnseen}
       setIsUnseen={setIsUnseen}
@@ -72,12 +74,14 @@ export function ProfileSongAvatar({
 function ProfileSongAvatarInner({
   username,
   avatar,
+  artworkUrl,
   targetUserId,
   isUnseen,
   setIsUnseen,
 }: {
   username: string;
   avatar: React.ReactNode;
+  artworkUrl: string | null;
   targetUserId: string;
   isUnseen: boolean;
   setIsUnseen: (value: boolean) => void;
@@ -130,11 +134,26 @@ function ProfileSongAvatarInner({
       className={`relative ${ringClass}`}
     >
       {avatar}
-      {isPlaying && (
-        <span className="absolute bottom-0 right-0 flex size-6 items-center justify-center rounded-full bg-foreground text-background shadow-sm">
-          <Square className="size-2.5 fill-current" />
+      {/*
+        Songcover als kleines Badge -- dauerhaft sichtbar (nicht nur beim
+        Abspielen), damit Besucher überhaupt erkennen, dass es einen Song
+        gibt, bevor sie tippen. artworkUrl kommt aus profiles.
+        favorite_song_artwork_url (iTunes-Suche), war schon als Prop
+        vorhanden, wurde bisher nirgends gerendert. Fällt auf das reine
+        Play/Stop-Icon zurück, wenn kein Artwork gespeichert ist.
+      */}
+      <span className="absolute bottom-0 right-0 flex size-6 items-center justify-center overflow-hidden rounded-full bg-foreground text-background shadow-sm">
+        {artworkUrl && (
+          <Image src={artworkUrl} alt="" fill sizes="24px" className="object-cover" />
+        )}
+        <span className={`relative flex items-center justify-center ${artworkUrl ? "bg-black/40 size-full" : ""}`}>
+          {isPlaying ? (
+            <Square className="size-2.5 fill-current" />
+          ) : (
+            <Play className="size-2.5 fill-current" />
+          )}
         </span>
-      )}
+      </span>
     </button>
   );
 }
